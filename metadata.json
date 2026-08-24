@@ -1,0 +1,6 @@
+{
+  "name": "Richie Rich Pan House",
+  "description": "Multi-store 24x7 retail management system for Richie Rich Pan House with PIN-secured Admin and POS interfaces, multi-counter support across Bopal, Gota, Sindhubhavan & SG Highway stores, real-time inventory tracking with rupee (₹) pricing, automated low-stock alerts, customer ordering portal, and AES-encrypted backup recovery.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
