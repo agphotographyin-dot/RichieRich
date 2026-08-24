@@ -6,9 +6,7 @@ import {
   ShoppingBag,
   Bell,
   Scan,
-  AlertTriangle,
-  Radio,
-  Sparkles,
+  LogOut,
   LayoutDashboard,
   Package,
   TrendingUp,
@@ -16,29 +14,32 @@ import {
   Gift,
   HardDrive,
   Users,
+  User,
 } from 'lucide-react';
-import { Role, PushNotification, AdminTab } from '../../types';
+import { Role, PushNotification, AdminTab, Customer } from '../../types';
 
 interface HeaderProps {
   currentRole: Role;
-  onSelectRole: (role: Role) => void;
   activeAdminTab?: AdminTab;
   onSelectAdminTab?: (tab: AdminTab) => void;
   notifications: PushNotification[];
   onOpenNotifications: () => void;
   onOpenScanner?: () => void;
   lowStockCount?: number;
+  onLogout?: () => void;
+  currentCustomer?: Customer | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   currentRole,
-  onSelectRole,
   activeAdminTab = 'dashboard',
   onSelectAdminTab,
   notifications,
   onOpenNotifications,
   onOpenScanner,
   lowStockCount = 0,
+  onLogout,
+  currentCustomer,
 }) => {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -77,58 +78,41 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Role Switcher Selector */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
-            <button
-              onClick={() => onSelectRole('admin')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                currentRole === 'admin'
-                  ? 'bg-[#1E293B] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-            >
-              <Shield className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">1. Admin</span>
-              <span className="md:hidden">Admin</span>
-            </button>
+          {/* Current Portal Active Badge */}
+          <div className="flex items-center">
+            {currentRole === 'admin' && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 text-white border border-slate-700 shadow-xs">
+                <Shield className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold tracking-tight">Admin Portal</span>
+                <span className="text-[10px] font-mono text-slate-400 hidden md:inline">(/admin)</span>
+              </div>
+            )}
 
-            <button
-              onClick={() => onSelectRole('pos')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                currentRole === 'pos'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-            >
-              <CreditCard className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">2. Point of Sale</span>
-              <span className="md:hidden">POS</span>
-            </button>
+            {currentRole === 'pos' && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-700 text-white border border-emerald-600 shadow-xs">
+                <CreditCard className="w-4 h-4 text-emerald-200" />
+                <span className="text-xs font-bold tracking-tight">POS Terminal</span>
+                <span className="text-[10px] font-mono text-emerald-200 hidden md:inline">(/pos)</span>
+              </div>
+            )}
 
-            <button
-              onClick={() => onSelectRole('customer')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                currentRole === 'customer'
-                  ? 'bg-purple-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-            >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">3. End Customer</span>
-              <span className="md:hidden">Order</span>
-            </button>
+            {currentRole === 'customer' && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-700 text-white border border-purple-600 shadow-xs">
+                <ShoppingBag className="w-4 h-4 text-purple-200" />
+                <span className="text-xs font-bold tracking-tight">Customer Portal</span>
+                {currentCustomer && (
+                  <span className="text-[10px] font-mono bg-purple-900/60 px-2 py-0.5 rounded-md text-purple-100 hidden sm:inline">
+                    📱 {currentCustomer.phone}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Quick Action Badges & Buttons */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Live Sync Pill */}
-            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-600">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Live Sync: Active</span>
-            </div>
-
-            {/* Low Stock Warning Pill */}
-            {lowStockCount > 0 && (
+            {/* Low Stock Warning Pill for Admin/POS */}
+            {currentRole !== 'customer' && lowStockCount > 0 && (
               <div
                 title={`${lowStockCount} items below threshold`}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 border border-red-200 text-red-600 text-xs font-bold cursor-pointer hover:bg-red-100 transition-colors"
@@ -140,15 +124,15 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             )}
 
-            {/* Barcode Scanner Modal Button */}
-            {onOpenScanner && (
+            {/* Barcode Scanner Modal Button (Admin only) */}
+            {currentRole === 'admin' && onOpenScanner && (
               <button
                 onClick={onOpenScanner}
                 title="Open Barcode Scanner"
                 className="px-3 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
               >
                 <Scan className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden md:inline">Open Scanner</span>
+                <span className="hidden md:inline">Scanner</span>
               </button>
             )}
 
@@ -166,10 +150,17 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* User Avatar Pill */}
-            <div className="w-8 h-8 rounded-full bg-amber-500 border-2 border-slate-100 shadow-xs flex items-center justify-center text-slate-950 text-xs font-bold">
-              RR
-            </div>
+            {/* Logout / Exit Session Button */}
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                title="Log Out of this Portal"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-red-50 hover:text-red-700 hover:border-red-200 text-slate-700 border border-slate-200 text-xs font-bold transition-all cursor-pointer shadow-xs"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -201,4 +192,3 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
-

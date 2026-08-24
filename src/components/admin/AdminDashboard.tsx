@@ -40,7 +40,6 @@ interface AdminDashboardProps {
   onOpenScanner?: () => void;
   onOpenAddItem?: () => void;
   onNavigateTab: (tab: AdminTab) => void;
-  onSelectRole?: (role: Role) => void;
   stats?: StoreFinancialStats;
 }
 
@@ -51,7 +50,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenScanner,
   onOpenAddItem,
   onNavigateTab,
-  onSelectRole,
   stats: propStats,
 }) => {
   const stats = propStats || storage.getFinancialStats();
@@ -168,16 +166,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <Download className="w-3.5 h-3.5 text-slate-500" />
             <span>Export CSV</span>
           </button>
-
-          {onSelectRole && (
-            <button
-              onClick={() => onSelectRole('pos')}
-              className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-            >
-              <Zap className="w-3.5 h-3.5" />
-              <span>POS Terminal</span>
-            </button>
-          )}
         </div>
       </div>
 

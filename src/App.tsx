@@ -11,10 +11,15 @@ import {
   AdminTab,
 } from './types';
 import { storage } from './services/storage';
+import { authService } from './services/auth';
 import { Header } from './components/common/Header';
 import { BarcodeScannerModal } from './components/common/BarcodeScannerModal';
 import { NotificationDrawer } from './components/common/NotificationDrawer';
-import { AdminPinLockModal } from './components/admin/AdminPinLockModal';
+
+// Authentication Login Screens
+import { AdminLogin } from './components/auth/AdminLogin';
+import { POSLogin } from './components/auth/POSLogin';
+import { CustomerLogin } from './components/auth/CustomerLogin';
 
 // Admin views
 import { AdminDashboard } from './components/admin/AdminDashboard';
@@ -32,13 +37,28 @@ import { POSTerminal } from './components/pos/POSTerminal';
 // Customer view
 import { CustomerApp } from './components/customer/CustomerApp';
 
+// Client-side Router Helper
+import { parseCurrentRoute, updateRoute } from './utils/router';
+
 export const App: React.FC = () => {
-  // Navigation Role & Admin Tab state
-  const [currentRole, setCurrentRole] = useState<UserRole>('admin');
-  const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>('dashboard');
-  const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(true);
-  const [isAdminPinModalOpen, setIsAdminPinModalOpen] = useState(false);
-  const [pendingRole, setPendingRole] = useState<UserRole | null>(null);
+  // Navigation Role & Admin Tab state initialized from the current URL
+  const initialRoute = parseCurrentRoute();
+  const [currentRole, setCurrentRole] = useState<UserRole>(initialRoute.role);
+  const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>(initialRoute.adminTab);
+
+  // Per-Portal Authentication States
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(
+    authService.isAdminAuthenticated()
+  );
+  const [isPOSAuthenticated, setIsPOSAuthenticated] = useState<boolean>(
+    authService.isPOSAuthenticated()
+  );
+  const [isCustomerAuthenticated, setIsCustomerAuthenticated] = useState<boolean>(
+    authService.isCustomerAuthenticated()
+  );
+  const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(
+    authService.getCurrentCustomer()
+  );
 
   // Application Data States (Synced reactive via storage service)
   const [inventory, setInventory] = useState<InventoryItem[]>(storage.getInventory());
@@ -53,6 +73,31 @@ export const App: React.FC = () => {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] = useState(false);
+
+  // Sync URL on initial mount
+  useEffect(() => {
+    const route = parseCurrentRoute();
+    setCurrentRole(route.role);
+    setActiveAdminTab(route.adminTab);
+    updateRoute(route.role, route.adminTab, true);
+  }, []);
+
+  // Listen for browser Back/Forward navigation (popstate & hashchange)
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const route = parseCurrentRoute();
+      setCurrentRole(route.role);
+      setActiveAdminTab(route.adminTab);
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
 
   // Subscribe to real-time sync bus and storage updates
   useEffect(() => {
@@ -71,14 +116,12 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Handle barcode scanned from camera or manual entry
+  // Barcode scan handling
   const handleBarcodeDetected = (code: string) => {
-    // Check if barcode already exists in inventory
     const found = storage.findItemByBarcode(code);
 
     if (found) {
       if (currentRole === 'pos') {
-        // POS mode: notify scanned item
         storage.addNotification({
           title: `Item Scanned: ${found.name}`,
           message: `SKU: ${found.sku} • Stock: ${found.stockQuantity} ${found.unit} available`,
@@ -87,7 +130,6 @@ export const App: React.FC = () => {
           read: false,
         });
       } else {
-        // Admin mode: Prompt for quick restock or open inventory
         const addAmount = prompt(
           `Scanned "${found.name}" (SKU: ${found.sku}). Current stock: ${found.stockQuantity} ${found.unit}.\n\nEnter stock quantity to add (e.g. +10):`,
           '10'
@@ -98,7 +140,6 @@ export const App: React.FC = () => {
         }
       }
     } else {
-      // New Barcode detected -> prompt to register new item
       if (confirm(`New barcode detected: "${code}". Would you like to register a new Pan House inventory item with this barcode?`)) {
         setIsAddItemOpen(true);
       }
@@ -107,115 +148,162 @@ export const App: React.FC = () => {
 
   const lowStockCount = inventory.filter((i) => i.stockQuantity <= i.lowStockThreshold).length;
 
-  const handleRoleSelect = (role: UserRole) => {
-    if (role === 'admin' && !isAdminUnlocked) {
-      setPendingRole('admin');
-      setIsAdminPinModalOpen(true);
-    } else {
-      setCurrentRole(role);
+  const handleAdminTabSelect = (tab: AdminTab) => {
+    setActiveAdminTab(tab);
+    if (currentRole === 'admin') {
+      updateRoute('admin', tab);
     }
   };
 
-  const handleAdminAuthSuccess = () => {
-    setIsAdminUnlocked(true);
-    setIsAdminPinModalOpen(false);
-    if (pendingRole) {
-      setCurrentRole(pendingRole);
-      setPendingRole(null);
-    } else {
-      setCurrentRole('admin');
-    }
+  // Auth Handler: Admin
+  const handleAdminLoginSuccess = () => {
+    setIsAdminAuthenticated(true);
+  };
+
+  const handleAdminLogout = () => {
+    authService.logoutAdmin();
+    setIsAdminAuthenticated(false);
+  };
+
+  // Auth Handler: POS
+  const handlePOSLoginSuccess = () => {
+    setIsPOSAuthenticated(true);
+  };
+
+  const handlePOSLogout = () => {
+    authService.logoutPOS();
+    setIsPOSAuthenticated(false);
+  };
+
+  // Auth Handler: Customer
+  const handleCustomerLoginSuccess = (customer: Customer) => {
+    setCurrentCustomer(customer);
+    setIsCustomerAuthenticated(true);
+  };
+
+  const handleCustomerLogout = () => {
+    authService.logoutCustomer();
+    setCurrentCustomer(null);
+    setIsCustomerAuthenticated(false);
+  };
+
+  // Get active logout handler for current portal
+  const getActiveLogoutHandler = () => {
+    if (currentRole === 'admin' && isAdminAuthenticated) return handleAdminLogout;
+    if (currentRole === 'pos' && isPOSAuthenticated) return handlePOSLogout;
+    if (currentRole === 'customer' && isCustomerAuthenticated) return handleCustomerLogout;
+    return undefined;
   };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
-      {/* Universal Navigation Header */}
+      {/* Universal Portal Header without role toggles */}
       <Header
         currentRole={currentRole}
-        onSelectRole={handleRoleSelect}
         activeAdminTab={activeAdminTab}
-        onSelectAdminTab={setActiveAdminTab}
+        onSelectAdminTab={handleAdminTabSelect}
         notifications={notifications}
         onOpenNotifications={() => setIsNotificationDrawerOpen(true)}
         onOpenScanner={() => setIsScannerOpen(true)}
         lowStockCount={lowStockCount}
+        onLogout={getActiveLogoutHandler()}
+        currentCustomer={currentCustomer}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* ================================================================= */}
-        {/* INTERFACE 1: ADMIN INTERFACE */}
+        {/* INTERFACE 1: ADMIN MANAGEMENT PORTAL (URL: /admin) */}
         {/* ================================================================= */}
         {currentRole === 'admin' && (
-          <div className="space-y-6">
-            {activeAdminTab === 'dashboard' && (
-              <AdminDashboard
-                inventory={inventory}
-                orders={orders}
-                customers={customers}
-                onOpenScanner={() => setIsScannerOpen(true)}
-                onOpenAddItem={() => setIsAddItemOpen(true)}
-                onNavigateTab={setActiveAdminTab}
-                onSelectRole={setCurrentRole}
-              />
-            )}
+          <>
+            {!isAdminAuthenticated ? (
+              <AdminLogin onLoginSuccess={handleAdminLoginSuccess} />
+            ) : (
+              <div className="space-y-6 animate-in fade-in duration-150">
+                {activeAdminTab === 'dashboard' && (
+                  <AdminDashboard
+                    inventory={inventory}
+                    orders={orders}
+                    customers={customers}
+                    onOpenScanner={() => setIsScannerOpen(true)}
+                    onOpenAddItem={() => setIsAddItemOpen(true)}
+                    onNavigateTab={handleAdminTabSelect}
+                  />
+                )}
 
-            {activeAdminTab === 'inventory' && (
-              <AdminInventory
-                inventory={inventory}
-                categories={categories}
-                onOpenScanner={() => setIsScannerOpen(true)}
-                onOpenAddItem={() => setIsAddItemOpen(true)}
-              />
-            )}
+                {activeAdminTab === 'inventory' && (
+                  <AdminInventory
+                    inventory={inventory}
+                    categories={categories}
+                    onOpenScanner={() => setIsScannerOpen(true)}
+                    onOpenAddItem={() => setIsAddItemOpen(true)}
+                  />
+                )}
 
-            {activeAdminTab === 'staff_counters' && (
-              <AdminStaffCounters
-                onLaunchPOSAs={() => {
-                  setCurrentRole('pos');
-                }}
-              />
-            )}
+                {activeAdminTab === 'staff_counters' && (
+                  <AdminStaffCounters />
+                )}
 
-            {activeAdminTab === 'analytics' && (
-              <AdminAnalytics inventory={inventory} orders={orders} />
-            )}
+                {activeAdminTab === 'analytics' && (
+                  <AdminAnalytics inventory={inventory} orders={orders} />
+                )}
 
-            {activeAdminTab === 'orders' && <AdminOrders orders={orders} />}
+                {activeAdminTab === 'orders' && <AdminOrders orders={orders} />}
 
-            {activeAdminTab === 'loyalty_promos' && (
-              <AdminLoyaltyPromos customers={customers} promotions={promotions} />
-            )}
+                {activeAdminTab === 'loyalty_promos' && (
+                  <AdminLoyaltyPromos customers={customers} promotions={promotions} />
+                )}
 
-            {activeAdminTab === 'backups' && (
-              <AdminBackupsSecurity backups={backups} />
+                {activeAdminTab === 'backups' && (
+                  <AdminBackupsSecurity backups={backups} />
+                )}
+              </div>
             )}
-          </div>
+          </>
         )}
 
         {/* ================================================================= */}
-        {/* INTERFACE 2: POINT OF SALE (POS) PERSON INTERFACE */}
+        {/* INTERFACE 2: POINT OF SALE (POS) TERMINAL (URL: /pos) */}
         {/* ================================================================= */}
         {currentRole === 'pos' && (
-          <POSTerminal
-            inventory={inventory}
-            categories={categories}
-            customers={customers}
-            onOpenScanner={() => setIsScannerOpen(true)}
-          />
+          <>
+            {!isPOSAuthenticated ? (
+              <POSLogin onLoginSuccess={handlePOSLoginSuccess} />
+            ) : (
+              <div className="animate-in fade-in duration-150">
+                <POSTerminal
+                  inventory={inventory}
+                  categories={categories}
+                  customers={customers}
+                  onOpenScanner={() => setIsScannerOpen(true)}
+                />
+              </div>
+            )}
+          </>
         )}
 
         {/* ================================================================= */}
-        {/* INTERFACE 3: END CUSTOMER ORDERING PORTAL */}
+        {/* INTERFACE 3: END CUSTOMER ORDERING PORTAL (URL: /customer) */}
         {/* ================================================================= */}
         {currentRole === 'customer' && (
-          <CustomerApp
-            inventory={inventory}
-            categories={categories}
-            customers={customers}
-            orders={orders}
-            promotions={promotions}
-          />
+          <>
+            {!isCustomerAuthenticated ? (
+              <CustomerLogin onLoginSuccess={handleCustomerLoginSuccess} />
+            ) : (
+              <div className="animate-in fade-in duration-150">
+                <CustomerApp
+                  inventory={inventory}
+                  categories={categories}
+                  customers={customers}
+                  orders={orders}
+                  promotions={promotions}
+                  authenticatedCustomer={currentCustomer}
+                  onLogout={handleCustomerLogout}
+                />
+              </div>
+            )}
+          </>
         )}
       </main>
 
@@ -238,15 +326,6 @@ export const App: React.FC = () => {
         notifications={notifications}
         onMarkAllAsRead={() => storage.markAllNotificationsAsRead()}
         onClearAll={() => storage.clearNotifications()}
-      />
-
-      <AdminPinLockModal
-        isOpen={isAdminPinModalOpen}
-        onSuccess={handleAdminAuthSuccess}
-        onCancel={() => {
-          setIsAdminPinModalOpen(false);
-          setPendingRole(null);
-        }}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShoppingBag,
   Sparkles,
@@ -42,6 +42,8 @@ interface CustomerAppProps {
   customers: Customer[];
   orders: Order[];
   promotions: Promotion[];
+  authenticatedCustomer?: Customer | null;
+  onLogout?: () => void;
 }
 
 export const CustomerApp: React.FC<CustomerAppProps> = ({
@@ -50,6 +52,8 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({
   customers,
   orders,
   promotions,
+  authenticatedCustomer,
+  onLogout,
 }) => {
   const stores = storage.getStores();
 
@@ -57,19 +61,28 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({
   const [selectedStoreId, setSelectedStoreId] = useState<string>('gota');
   const activeStore = stores.find((s) => s.id === selectedStoreId) || stores[0];
 
-  // Active customer profile
+  // Active customer profile synced with authenticated customer
   const [activeCustomer, setActiveCustomer] = useState<Customer>(
-    customers[0] || {
-      id: 'cust-guest',
-      name: 'Rajesh Sharma',
-      phone: '9820199882',
-      loyaltyPoints: 420,
-      tier: 'Platinum Royal',
-      totalSpent: 4200,
-      totalOrders: 18,
-      joinDate: '2026-01-10',
-    }
+    authenticatedCustomer ||
+      customers[0] || {
+        id: 'cust-guest',
+        name: 'Rajesh Sharma',
+        phone: '9820199882',
+        loyaltyPoints: 420,
+        tier: 'Platinum Royal',
+        totalSpent: 4200,
+        totalOrders: 18,
+        joinDate: '2026-01-10',
+      }
   );
+
+  useEffect(() => {
+    if (authenticatedCustomer) {
+      setActiveCustomer(authenticatedCustomer);
+      setCustomerPhoneInput(authenticatedCustomer.phone);
+      setCustomerNameInput(authenticatedCustomer.name);
+    }
+  }, [authenticatedCustomer]);
 
   const [activeTab, setActiveTab] = useState<'menu' | 'track_orders' | 'loyalty_offers'>('menu');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
