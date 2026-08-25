@@ -8,6 +8,7 @@ export type WarehouseSubRole =
 export type WarehouseTab =
   | 'dashboard'
   | 'inventory'
+  | 'store_stock'
   | 'transfers'
   | 'purchases'
   | 'locations'

@@ -64,7 +64,7 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
     id: 'sup-01',
     code: 'SUP-BAN-01',
     name: 'Banaras Royal Betel Farms & Mills',
-    category: 'Fresh Betel Leaves & Kattha',
+    category: 'Paan',
     contactPerson: 'Pandit Radheshyam Mishra',
     phone: '+91 94152 77810',
     email: 'orders@banarasbetelfarms.com',
@@ -91,7 +91,7 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
     id: 'sup-02',
     code: 'SUP-SUP-02',
     name: 'Shree Krishna Supari & Areca Nut Traders',
-    category: 'Areca Nuts, Supari & Churna',
+    category: 'Paan',
     contactPerson: 'Suresh Sheth',
     phone: '+91 98450 66201',
     email: 'sales@krishnasupari.in',
@@ -118,7 +118,7 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
     id: 'sup-03',
     code: 'SUP-VRK-03',
     name: 'Kohinoor Silver & Gold Leaf (Vark) Crafts',
-    category: 'Silver & Gold Vark',
+    category: 'Essentials',
     contactPerson: 'Mohammad Tariq',
     phone: '+91 98290 12849',
     email: 'contact@kohinoorvark.com',
@@ -145,7 +145,7 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
     id: 'sup-04',
     code: 'SUP-MUK-04',
     name: 'Navkar Royal Mukhwas & Dry Fruits Hub',
-    category: 'Mukhwas, Fennel & Cardamom',
+    category: 'Essentials',
     contactPerson: 'Jitendra Shah',
     phone: '+91 98250 99401',
     email: 'info@navkarmukhwas.com',
@@ -172,7 +172,7 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
     id: 'sup-05',
     code: 'SUP-BEV-05',
     name: 'Monin & Gourmet Beverage Imports India',
-    category: 'Syrups, Crushes & Coffee Beans',
+    category: 'Cafe',
     contactPerson: 'Rajiv Mehra',
     phone: '+91 99201 88402',
     email: 'delhi@gourmetbeverages.in',
@@ -1731,6 +1731,63 @@ export const warehouseStorage = {
     });
 
     return newAdj;
+  },
+
+  // Direct single-store stock adjustment helper (Reconciliation/Store Count Correction)
+  adjustStoreStock(
+    itemId: string,
+    storeId: string,
+    newQuantity: number,
+    reason: string = 'Physical Store Stock Audit',
+    performedBy: string = 'Warehouse Auditor'
+  ): boolean {
+    const inventory = storage.getInventory();
+    const item = inventory.find((i) => i.id === itemId);
+    if (!item) return false;
+
+    if (!item.storeAllocations) {
+      item.storeAllocations = {};
+    }
+
+    const previousStoreStock = item.storeAllocations[storeId] || 0;
+    const diff = newQuantity - previousStoreStock;
+    if (diff === 0) return true;
+
+    item.storeAllocations[storeId] = Math.max(0, newQuantity);
+
+    const store = storage.getStoreById(storeId);
+    const storeName = store ? store.name : storeId;
+    const adjRef = `ADJ-STR-${Date.now().toString().slice(-5)}`;
+
+    this.addAuditRecord({
+      referenceNumber: adjRef,
+      itemId: item.id,
+      sku: item.sku,
+      itemName: item.name,
+      movementType: diff < 0 ? 'damage_scrap' : 'physical_adjustment',
+      fromLocation: storeName,
+      toLocation: diff < 0 ? 'Store Count Discrepancy / Spoilage' : 'Physical Store Count Audit',
+      quantity: diff,
+      unit: item.unit,
+      balanceAfter: item.storeAllocations[storeId],
+      unitCost: item.costPrice,
+      totalCostImpact: diff * item.costPrice,
+      performedBy,
+      userRole: 'Store Manager',
+      notes: `${reason} • Store: ${storeName} • Prev: ${previousStoreStock} ➔ New: ${newQuantity} ${item.unit}`,
+    });
+
+    storage.saveInventory(inventory);
+
+    storage.addNotification({
+      title: `Store Stock Adjusted: ${item.name}`,
+      message: `${storeName} count updated from ${previousStoreStock} to ${newQuantity} ${item.unit} (${reason}).`,
+      type: 'order_update',
+      targetRole: 'admin',
+      read: false,
+    });
+
+    return true;
   },
 
   // =========================================================================

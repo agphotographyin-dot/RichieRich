@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Plus, Trash2, Truck, Building2, Store, ArrowRight, ShieldCheck } from 'lucide-react';
-import { Warehouse, BatchRecord, TransferItem } from '../../../types/warehouse';
+import { Warehouse, BatchRecord, TransferItem, StockTransfer } from '../../../types/warehouse';
 import { InventoryItem, StoreLocation } from '../../../types';
 import { warehouseStorage } from '../../../services/warehouseStorage';
 import { ItemAutocompleteInput } from '../../common/ItemAutocompleteInput';
@@ -12,6 +12,7 @@ interface CreateTransferModalProps {
   stores: StoreLocation[];
   inventory: InventoryItem[];
   batches: BatchRecord[];
+  initialData?: Partial<StockTransfer> | null;
   onSuccess: () => void;
 }
 
@@ -22,6 +23,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
   stores,
   inventory,
   batches,
+  initialData,
   onSuccess,
 }) => {
   if (!isOpen) return null;
@@ -31,13 +33,17 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
     name: 'Richie Rich Central Master Warehouse (Ahmedabad Hub)',
   };
 
-  const [transferType, setTransferType] = useState<'warehouse_to_store' | 'store_to_warehouse_return'>('warehouse_to_store');
-  const [destStoreId, setDestStoreId] = useState(stores[0]?.id || 'bopal');
+  const [transferType, setTransferType] = useState<'warehouse_to_store' | 'store_to_warehouse_return'>(
+    initialData?.type === 'store_to_warehouse_return' ? 'store_to_warehouse_return' : 'warehouse_to_store'
+  );
+  const [destStoreId, setDestStoreId] = useState(
+    initialData?.destinationId || stores[0]?.id || 'bopal'
+  );
   const [vehicleNo, setVehicleNo] = useState(`GJ-01-RR-${Math.floor(1000 + Math.random() * 9000)}`);
   const [driverName, setDriverName] = useState('Ramesh Rathod');
   const [driverPhone, setDriverPhone] = useState('+91 98250 88771');
   const [carrierName, setCarrierName] = useState('Richie Rich Express Van');
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState(initialData?.notes || '');
 
   const [items, setItems] = useState<
     Array<{
@@ -50,18 +56,32 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
       unit: string;
       unitCost: number;
     }>
-  >([
-    {
-      itemId: inventory[0]?.id || 'item-101',
-      name: inventory[0]?.name || 'Royal Maghai Meetha Paan',
-      sku: inventory[0]?.sku || 'PAN-MAG-01',
-      category: inventory[0]?.category || 'Paan',
-      batchNumber: batches[0]?.batchNumber || 'BATCH-AMD-01',
-      quantity: 20,
-      unit: inventory[0]?.unit || 'pieces',
-      unitCost: inventory[0]?.costPrice || 20,
-    },
-  ]);
+  >(() => {
+    if (initialData?.items && initialData.items.length > 0) {
+      return initialData.items.map((it) => ({
+        itemId: it.itemId,
+        name: it.name,
+        sku: it.sku,
+        category: (it as any).category || 'Paan',
+        batchNumber: it.batchNumber || batches[0]?.batchNumber || 'BATCH-AMD-01',
+        quantity: it.dispatchedQty || it.requestedQty || 10,
+        unit: it.unit || 'pieces',
+        unitCost: it.unitCost || 20,
+      }));
+    }
+    return [
+      {
+        itemId: inventory[0]?.id || 'item-101',
+        name: inventory[0]?.name || 'Royal Maghai Meetha Paan',
+        sku: inventory[0]?.sku || 'PAN-MAG-01',
+        category: inventory[0]?.category || 'Paan',
+        batchNumber: batches[0]?.batchNumber || 'BATCH-AMD-01',
+        quantity: 20,
+        unit: inventory[0]?.unit || 'pieces',
+        unitCost: inventory[0]?.costPrice || 20,
+      },
+    ];
+  });
 
   const handleAddItem = () => {
     const defaultItem = inventory[0] || {

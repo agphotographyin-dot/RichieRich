@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { WarehouseHeader } from './WarehouseHeader';
 import { WarehouseDashboardView } from './views/WarehouseDashboardView';
 import { WarehouseInventoryView } from './views/WarehouseInventoryView';
+import { WarehouseStoreStockView } from './views/WarehouseStoreStockView';
 import { WarehouseTransfersView } from './views/WarehouseTransfersView';
 import { WarehousePurchasesView } from './views/WarehousePurchasesView';
 import { WarehouseLocationsView } from './views/WarehouseLocationsView';
@@ -70,6 +71,7 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
   const [isPOModalOpen, setIsPOModalOpen] = useState(false);
   const [isInwardModalOpen, setIsInwardModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferInitialData, setTransferInitialData] = useState<Partial<StockTransfer> | null>(null);
   const [isIndentModalOpen, setIsIndentModalOpen] = useState(false);
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -182,7 +184,24 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           warehouses={warehouses}
           searchQuery={searchQuery}
           onOpenInwardBill={() => setIsInwardModalOpen(true)}
-          onOpenTransfer={() => setIsTransferModalOpen(true)}
+          onOpenTransfer={() => {
+            setTransferInitialData(null);
+            setIsTransferModalOpen(true);
+          }}
+        />
+      )}
+
+      {activeTab === 'store_stock' && (
+        <WarehouseStoreStockView
+          stores={stores}
+          inventory={inventory}
+          warehouses={warehouses}
+          searchQuery={searchQuery}
+          onOpenTransferModal={(initial) => {
+            setTransferInitialData(initial || null);
+            setIsTransferModalOpen(true);
+          }}
+          onOpenIndentModal={() => setIsIndentModalOpen(true)}
         />
       )}
 
@@ -224,6 +243,7 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           inventory={inventory}
           onOpenAddWarehouse={() => setIsAddWarehouseModalOpen(true)}
           onOpenTransfer={() => setIsTransferModalOpen(true)}
+          onNavigateTab={handleSelectTab}
         />
       )}
 
@@ -277,11 +297,15 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
 
       <CreateTransferModal
         isOpen={isTransferModalOpen}
-        onClose={() => setIsTransferModalOpen(false)}
+        onClose={() => {
+          setIsTransferModalOpen(false);
+          setTransferInitialData(null);
+        }}
         warehouses={warehouses}
         stores={stores}
         inventory={inventory}
         batches={batches}
+        initialData={transferInitialData}
         onSuccess={loadData}
       />
 

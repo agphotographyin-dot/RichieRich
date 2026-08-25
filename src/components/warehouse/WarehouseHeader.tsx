@@ -19,6 +19,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Sparkles,
+  Store,
 } from 'lucide-react';
 import { WarehouseTab, WarehouseSubRole } from '../../types/warehouse';
 
@@ -60,6 +61,7 @@ export const WarehouseHeader: React.FC<WarehouseHeaderProps> = ({
   const tabs: { id: WarehouseTab; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
     { id: 'dashboard', label: 'Overview Dashboard', icon: LayoutDashboard },
     { id: 'inventory', label: 'Central Stock & Batches', icon: Boxes, badge: lowStockCount || undefined },
+    { id: 'store_stock', label: 'Individual Store Stock', icon: Store },
     { id: 'transfers', label: 'Transfers & In-Transit', icon: Truck, badge: inTransitCount || undefined },
     { id: 'purchases', label: 'Purchases & Suppliers', icon: FileSpreadsheet, badge: overdueBillsCount || undefined },
     { id: 'locations', label: 'Warehouses & Stores', icon: Building2 },

@@ -16,7 +16,7 @@ export const AddSupplierModal: React.FC<AddSupplierModalProps> = ({
   if (!isOpen) return null;
 
   const [name, setName] = useState('');
-  const [category, setCategory] = useState('Fresh Betel Leaves');
+  const [category, setCategory] = useState<'Paan' | 'Cafe' | 'Essentials'>('Paan');
   const [contactPerson, setContactPerson] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -85,15 +85,12 @@ export const AddSupplierModal: React.FC<AddSupplierModalProps> = ({
               </label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                onChange={(e) => setCategory(e.target.value as 'Paan' | 'Cafe' | 'Essentials')}
                 className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
               >
-                <option value="Fresh Betel Leaves">Fresh Betel Leaves</option>
-                <option value="Luxury Ingredients">Luxury Ingredients</option>
-                <option value="Pure Silver & Gold Vark">Pure Silver & Gold Vark</option>
-                <option value="Premium Areca Nut">Premium Areca Nut</option>
-                <option value="Packaging & Gift Boxes">Packaging & Gift Boxes</option>
-                <option value="Syrups & Gulkand">Syrups & Gulkand</option>
+                <option value="Paan">Paan</option>
+                <option value="Cafe">Cafe</option>
+                <option value="Essentials">Essentials</option>
               </select>
             </div>
 

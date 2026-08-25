@@ -14,7 +14,7 @@ import {
   Sparkles,
   CheckCircle2,
 } from 'lucide-react';
-import { Warehouse } from '../../../types/warehouse';
+import { Warehouse, WarehouseTab } from '../../../types/warehouse';
 import { StoreLocation, InventoryItem } from '../../../types';
 import { CURRENCY } from '../../../services/storage';
 
@@ -24,6 +24,7 @@ interface WarehouseLocationsViewProps {
   inventory: InventoryItem[];
   onOpenAddWarehouse?: () => void;
   onOpenTransfer: () => void;
+  onNavigateTab?: (tab: WarehouseTab) => void;
 }
 
 export const WarehouseLocationsView: React.FC<WarehouseLocationsViewProps> = ({
@@ -31,6 +32,7 @@ export const WarehouseLocationsView: React.FC<WarehouseLocationsViewProps> = ({
   stores,
   inventory,
   onOpenTransfer,
+  onNavigateTab,
 }) => {
   const centralWh = warehouses[0] || {
     id: 'wh-central-amd',
@@ -250,14 +252,26 @@ export const WarehouseLocationsView: React.FC<WarehouseLocationsViewProps> = ({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={onOpenTransfer}
-                  className="w-full py-2 bg-slate-50 hover:bg-emerald-50 text-emerald-700 rounded-xl font-bold text-xs border border-emerald-100 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Truck className="w-3.5 h-3.5" />
-                  <span>Transfer Stock from Central Hub</span>
-                </button>
+                <div className="space-y-1.5 pt-1">
+                  {onNavigateTab && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigateTab('store_stock')}
+                      className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl font-bold text-xs border border-emerald-200/80 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Store className="w-3.5 h-3.5" />
+                      <span>Check Individual Stock</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={onOpenTransfer}
+                    className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl font-semibold text-xs border border-slate-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Truck className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Replenish from Central Hub</span>
+                  </button>
+                </div>
               </div>
             );
           })}

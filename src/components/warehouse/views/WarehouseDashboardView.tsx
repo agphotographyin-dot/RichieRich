@@ -327,10 +327,10 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
                 </div>
               </div>
               <button
-                onClick={() => onNavigateTab('locations')}
-                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                onClick={() => onNavigateTab('store_stock')}
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 cursor-pointer"
               >
-                <span>Store Details</span>
+                <span>Individual Store Stocks</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
