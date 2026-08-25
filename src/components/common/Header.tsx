@@ -15,6 +15,7 @@ import {
   HardDrive,
   Users,
   Home,
+  Building2,
 } from 'lucide-react';
 import { Role, PushNotification, AdminTab, Customer } from '../../types';
 
@@ -118,6 +119,14 @@ export const Header: React.FC<HeaderProps> = ({
                     📱 {currentCustomer.phone}
                   </span>
                 )}
+              </div>
+            )}
+
+            {currentRole === 'warehouse' && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-indigo-900 text-white border border-indigo-700 shadow-xs">
+                <Building2 className="w-4 h-4 text-indigo-400" />
+                <span className="text-xs font-bold tracking-tight">Warehouse & Inventory Hub</span>
+                <span className="text-[10px] font-mono text-indigo-300 hidden md:inline">(/warehouse)</span>
               </div>
             )}
           </div>

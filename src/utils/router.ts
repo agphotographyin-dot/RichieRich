@@ -1,22 +1,28 @@
-import { Role, AdminTab } from '../types';
+import { Role, AdminTab, WarehouseTab } from '../types';
 
 export interface RouteState {
   role: Role;
   adminTab: AdminTab;
+  warehouseTab?: WarehouseTab;
 }
 
 export function parseCurrentRoute(): RouteState {
   if (typeof window === 'undefined') {
-    return { role: 'landing', adminTab: 'dashboard' };
+    return { role: 'landing', adminTab: 'dashboard', warehouseTab: 'dashboard' };
   }
 
   const pathname = window.location.pathname.toLowerCase();
   const hash = window.location.hash.toLowerCase();
   const searchParams = new URLSearchParams(window.location.search);
   const tabQuery = searchParams.get('tab') as AdminTab | null;
+  const whTabQuery = searchParams.get('wh_tab') as WarehouseTab | null;
 
-  // 1. Check Hash first (supports static hosting /#/pos etc)
+  // 1. Check Hash first (supports static hosting /#/pos /#/warehouse etc)
   const cleanHash = hash.replace(/^#\/?/, '');
+  if (cleanHash.startsWith('warehouse') || cleanHash.startsWith('inventory-wh')) {
+    const hashTab = cleanHash.split('/')[1] as WarehouseTab | undefined;
+    return { role: 'warehouse', adminTab: 'dashboard', warehouseTab: hashTab || whTabQuery || 'dashboard' };
+  }
   if (cleanHash.startsWith('pos') || cleanHash.startsWith('point-of-sale')) {
     return { role: 'pos', adminTab: 'dashboard' };
   }
@@ -35,6 +41,14 @@ export function parseCurrentRoute(): RouteState {
   }
 
   // 2. Check Standard Pathname
+  if (pathname.includes('/warehouse')) {
+    let whTab: WarehouseTab = 'dashboard';
+    if (whTabQuery && ['dashboard', 'inventory', 'transfers', 'purchases', 'locations', 'adjustments', 'audit_trail', 'reports'].includes(whTabQuery)) {
+      whTab = whTabQuery;
+    }
+    return { role: 'warehouse', adminTab: 'dashboard', warehouseTab: whTab };
+  }
+
   if (pathname.includes('/pos') || pathname.includes('/point-of-sale')) {
     return { role: 'pos', adminTab: 'dashboard' };
   }
@@ -59,20 +73,22 @@ export function parseCurrentRoute(): RouteState {
 
   // 3. Query Parameter ?role=
   const roleQuery = searchParams.get('role') as Role | null;
-  if (roleQuery && ['admin', 'pos', 'customer', 'landing'].includes(roleQuery)) {
-    return { role: roleQuery, adminTab: tabQuery || 'dashboard' };
+  if (roleQuery && ['admin', 'pos', 'customer', 'landing', 'warehouse'].includes(roleQuery)) {
+    return { role: roleQuery, adminTab: tabQuery || 'dashboard', warehouseTab: whTabQuery || 'dashboard' };
   }
 
-  // Default Root is the Landing Page with the two login choices: Admin Dashboard & POS Dashboard
-  return { role: 'landing', adminTab: 'dashboard' };
+  // Default Root is the Landing Page
+  return { role: 'landing', adminTab: 'dashboard', warehouseTab: 'dashboard' };
 }
 
-export function updateRoute(role: Role, adminTab?: AdminTab, replace = false) {
+export function updateRoute(role: Role, adminTab?: AdminTab, replace = false, warehouseTab?: WarehouseTab) {
   if (typeof window === 'undefined') return;
 
   let targetUrl = '/';
   if (role === 'landing') {
     targetUrl = '/';
+  } else if (role === 'warehouse') {
+    targetUrl = warehouseTab && warehouseTab !== 'dashboard' ? `/warehouse?wh_tab=${warehouseTab}` : '/warehouse';
   } else if (role === 'pos') {
     targetUrl = '/pos';
   } else if (role === 'customer') {
@@ -84,17 +100,18 @@ export function updateRoute(role: Role, adminTab?: AdminTab, replace = false) {
   const currentPathWithSearch = window.location.pathname + window.location.search;
   if (currentPathWithSearch !== targetUrl) {
     if (replace) {
-      window.history.replaceState({ role, adminTab }, '', targetUrl);
+      window.history.replaceState({ role, adminTab, warehouseTab }, '', targetUrl);
     } else {
-      window.history.pushState({ role, adminTab }, '', targetUrl);
+      window.history.pushState({ role, adminTab, warehouseTab }, '', targetUrl);
     }
   }
 }
 
-export function getFullUrlForRole(role: Role, tab?: AdminTab): string {
+export function getFullUrlForRole(role: Role, tab?: AdminTab, whTab?: WarehouseTab): string {
   if (typeof window === 'undefined') return '';
   const origin = window.location.origin;
   if (role === 'landing') return `${origin}/`;
+  if (role === 'warehouse') return whTab && whTab !== 'dashboard' ? `${origin}/warehouse?wh_tab=${whTab}` : `${origin}/warehouse`;
   if (role === 'pos') return `${origin}/pos`;
   if (role === 'customer') return `${origin}/customer`;
   return tab && tab !== 'dashboard' ? `${origin}/admin?tab=${tab}` : `${origin}/admin`;

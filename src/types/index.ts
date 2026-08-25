@@ -1,6 +1,8 @@
-export type Role = 'landing' | 'admin' | 'pos' | 'customer';
+export type Role = 'landing' | 'admin' | 'pos' | 'customer' | 'warehouse';
 export type UserRole = Role;
 export type AdminTab = 'dashboard' | 'inventory' | 'staff_counters' | 'analytics' | 'orders' | 'loyalty_promos' | 'backups';
+
+export * from './warehouse';
 
 export interface CounterInfo {
   id: number;

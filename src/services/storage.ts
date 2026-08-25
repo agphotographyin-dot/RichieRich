@@ -869,6 +869,10 @@ export class StorageService {
     };
   }
 
+  notifySubscribers() {
+    this.notify();
+  }
+
   private notify() {
     this.listeners.forEach((cb) => cb());
     if (syncChannel) {

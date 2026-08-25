@@ -23,6 +23,7 @@ import { LandingPortal } from './components/auth/LandingPortal';
 import { AdminLogin } from './components/auth/AdminLogin';
 import { POSLogin } from './components/auth/POSLogin';
 import { CustomerLogin } from './components/auth/CustomerLogin';
+import { WarehouseLogin } from './components/auth/WarehouseLogin';
 
 // Admin views
 import { AdminDashboard } from './components/admin/AdminDashboard';
@@ -40,6 +41,9 @@ import { POSTerminal } from './components/pos/POSTerminal';
 // Customer view
 import { CustomerApp } from './components/customer/CustomerApp';
 
+// Warehouse view
+import { WarehousePortal } from './components/warehouse/WarehousePortal';
+
 // Client-side Router Helper
 import { parseCurrentRoute, updateRoute } from './utils/router';
 
@@ -55,6 +59,9 @@ export const App: React.FC = () => {
   );
   const [isPOSAuthenticated, setIsPOSAuthenticated] = useState<boolean>(
     authService.isPOSAuthenticated()
+  );
+  const [isWarehouseAuthenticated, setIsWarehouseAuthenticated] = useState<boolean>(
+    authService.isWarehouseAuthenticated()
   );
   const [isCustomerAuthenticated, setIsCustomerAuthenticated] = useState<boolean>(
     authService.isCustomerAuthenticated()
@@ -183,6 +190,16 @@ export const App: React.FC = () => {
     setIsPOSAuthenticated(false);
   };
 
+  // Auth Handler: Warehouse
+  const handleWarehouseLoginSuccess = () => {
+    setIsWarehouseAuthenticated(true);
+  };
+
+  const handleWarehouseLogout = () => {
+    authService.logoutWarehouse();
+    setIsWarehouseAuthenticated(false);
+  };
+
   // Auth Handler: Customer
   const handleCustomerLoginSuccess = (customer: Customer) => {
     setCurrentCustomer(customer);
@@ -199,6 +216,7 @@ export const App: React.FC = () => {
   const getActiveLogoutHandler = () => {
     if (currentRole === 'admin' && isAdminAuthenticated) return handleAdminLogout;
     if (currentRole === 'pos' && isPOSAuthenticated) return handlePOSLogout;
+    if (currentRole === 'warehouse' && isWarehouseAuthenticated) return handleWarehouseLogout;
     if (currentRole === 'customer' && isCustomerAuthenticated) return handleCustomerLogout;
     return undefined;
   };
@@ -223,16 +241,18 @@ export const App: React.FC = () => {
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* ================================================================= */}
         {/* LANDING PAGE: 2 LOGIN OPTIONS (Admin Dashboard & POS Dashboard)   */}
-        {/* Separate Customer Page Link                                       */}
+        {/* + Warehouse Hub and Separate Customer Page Link                   */}
         {/* ================================================================= */}
         {currentRole === 'landing' && (
           <div className="animate-in fade-in duration-200">
             <LandingPortal
               onSelectAdmin={() => navigateToRole('admin')}
               onSelectPOS={() => navigateToRole('pos')}
+              onSelectWarehouse={() => navigateToRole('warehouse')}
               onSelectCustomer={() => navigateToRole('customer')}
               isAdminAuthenticated={isAdminAuthenticated}
               isPOSAuthenticated={isPOSAuthenticated}
+              isWarehouseAuthenticated={isWarehouseAuthenticated}
             />
           </div>
         )}
@@ -315,7 +335,25 @@ export const App: React.FC = () => {
         )}
 
         {/* ================================================================= */}
-        {/* INTERFACE 3: SEPARATE CUSTOMER ORDERING PORTAL (URL: /customer)   */}
+        {/* INTERFACE 3: WAREHOUSE & INVENTORY HUB (URL: /warehouse)          */}
+        {/* ================================================================= */}
+        {currentRole === 'warehouse' && (
+          <>
+            {!isWarehouseAuthenticated ? (
+              <WarehouseLogin
+                onLoginSuccess={handleWarehouseLoginSuccess}
+                onBackToLanding={() => navigateToRole('landing')}
+              />
+            ) : (
+              <div className="animate-in fade-in duration-150">
+                <WarehousePortal />
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ================================================================= */}
+        {/* INTERFACE 4: SEPARATE CUSTOMER ORDERING PORTAL (URL: /customer)   */}
         {/* ================================================================= */}
         {currentRole === 'customer' && (
           <>

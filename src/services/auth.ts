@@ -4,6 +4,7 @@ import { storage } from './storage';
 const ADMIN_STORAGE_KEY = 'rr_auth_admin';
 const POS_STORAGE_KEY = 'rr_auth_pos';
 const CUSTOMER_STORAGE_KEY = 'rr_auth_customer';
+const WAREHOUSE_STORAGE_KEY = 'rr_auth_warehouse';
 
 export interface AdminAuthState {
   isAuthenticated: boolean;
@@ -22,6 +23,13 @@ export interface CustomerAuthState {
   customerId: string;
   phone: string;
   customerName: string;
+}
+
+export interface WarehouseAuthState {
+  isAuthenticated: boolean;
+  username: string;
+  subRole: string;
+  loginTime: string;
 }
 
 export const authService = {
@@ -204,5 +212,55 @@ export const authService = {
 
   logoutCustomer(): void {
     localStorage.removeItem(CUSTOMER_STORAGE_KEY);
+  },
+
+  // =========================================================================
+  // 4. WAREHOUSE & INVENTORY AUTHENTICATION (User ID: ADMIN, Password: RRwarehouse or RRadmin)
+  // =========================================================================
+  isWarehouseAuthenticated(): boolean {
+    try {
+      const data = localStorage.getItem(WAREHOUSE_STORAGE_KEY);
+      if (!data) return false;
+      const parsed: WarehouseAuthState = JSON.parse(data);
+      return parsed.isAuthenticated === true;
+    } catch {
+      return false;
+    }
+  },
+
+  getWarehouseAuthState(): WarehouseAuthState | null {
+    try {
+      const data = localStorage.getItem(WAREHOUSE_STORAGE_KEY);
+      if (!data) return null;
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
+  },
+
+  loginWarehouse(userId: string, password: string, subRole: string = 'admin'): { success: boolean; error?: string } {
+    const cleanUserId = userId.trim().toUpperCase();
+    const cleanPassword = password.trim();
+
+    if (cleanUserId !== 'ADMIN' && cleanUserId !== 'WAREHOUSE' && cleanUserId !== 'WHADMIN') {
+      return { success: false, error: 'Invalid User ID. Please enter ADMIN or WAREHOUSE.' };
+    }
+
+    if (cleanPassword !== 'RRwarehouse' && cleanPassword !== 'RRadmin' && cleanPassword !== 'admin123') {
+      return { success: false, error: 'Invalid Password. Please enter the correct Warehouse password (RRwarehouse).' };
+    }
+
+    const state: WarehouseAuthState = {
+      isAuthenticated: true,
+      username: cleanUserId,
+      subRole,
+      loginTime: new Date().toISOString(),
+    };
+    localStorage.setItem(WAREHOUSE_STORAGE_KEY, JSON.stringify(state));
+    return { success: true };
+  },
+
+  logoutWarehouse(): void {
+    localStorage.removeItem(WAREHOUSE_STORAGE_KEY);
   },
 };
