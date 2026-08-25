@@ -53,6 +53,7 @@ interface WarehouseDashboardViewProps {
   onOpenTransfer: () => void;
   onOpenIndent: () => void;
   onOpenAdjustment: () => void;
+  onOpenPipelineTester?: () => void;
 }
 
 export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
@@ -71,6 +72,7 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
   onOpenTransfer,
   onOpenIndent,
   onOpenAdjustment,
+  onOpenPipelineTester,
 }) => {
   const [valuationMode, setValuationMode] = useState<'fifo' | 'avg'>('fifo');
 
@@ -78,8 +80,85 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
   const criticalStockItems = inventory.filter((i) => i.stockQuantity <= i.lowStockThreshold);
   const activeInTransitTransfers = transfers.filter((t) => t.status === 'dispatched_in_transit');
 
+  // Compute all in-store low stock items
+  const storeLowStockAlerts: Array<{
+    itemId: string;
+    itemName: string;
+    sku: string;
+    unit: string;
+    storeId: string;
+    storeName: string;
+    currentQty: number;
+    threshold: number;
+  }> = [];
+
+  inventory.forEach((item) => {
+    if (!item.storeAllocations) return;
+    const storeMinThreshold = Math.max(2, Math.round((item.lowStockThreshold || 10) * 0.4));
+    Object.entries(item.storeAllocations).forEach(([storeId, qty]) => {
+      const numQty = Number(qty) || 0;
+      if (numQty <= storeMinThreshold) {
+        const stObj = stores.find((s) => s.id === storeId);
+        storeLowStockAlerts.push({
+          itemId: item.id,
+          itemName: item.name,
+          sku: item.sku,
+          unit: item.unit,
+          storeId,
+          storeName: stObj ? stObj.shortName || stObj.name : storeId.toUpperCase(),
+          currentQty: numQty,
+          threshold: storeMinThreshold,
+        });
+      }
+    });
+  });
+
   return (
     <div className="space-y-6">
+      {/* In-Store Low Stock Notification Alert Banner */}
+      {storeLowStockAlerts.length > 0 && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/15 border border-amber-300/80 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs shrink-0 animate-bounce">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-sm text-slate-900">
+                  {storeLowStockAlerts.length} In-Store Low Stock Alert{storeLowStockAlerts.length > 1 ? 's' : ''} Triggered
+                </h4>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                  ACTION REQUIRED
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                {storeLowStockAlerts.slice(0, 2).map((a, i) => (
+                  <span key={i} className="mr-2 font-medium">
+                    • <strong>{a.storeName}</strong>: {a.itemName} ({a.currentQty} {a.unit} remaining, Min: {a.threshold})
+                  </span>
+                ))}
+                {storeLowStockAlerts.length > 2 && `and ${storeLowStockAlerts.length - 2} more...`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
+            <button
+              onClick={onOpenTransfer}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <Truck className="w-3.5 h-3.5" />
+              <span>Dispatch Transfer</span>
+            </button>
+            <button
+              onClick={() => onNavigateTab('store_stock')}
+              className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              View Store Stocks
+            </button>
+          </div>
+        </div>
+      )}
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Inventory Valuation */}
@@ -188,18 +267,18 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <button
           onClick={onOpenNewPO}
-          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-indigo-500 hover:shadow-md transition-all text-left group"
+          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-indigo-500 hover:shadow-md transition-all text-left group cursor-pointer"
         >
           <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
             <FileSpreadsheet className="w-5 h-5" />
           </div>
           <div className="text-xs font-bold text-slate-900">Create Purchase Order</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Issue PO to betel/vark supplier</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">Issue PO to supplier</div>
         </button>
 
         <button
           onClick={onOpenInwardBill}
-          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-emerald-500 hover:shadow-md transition-all text-left group"
+          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-emerald-500 hover:shadow-md transition-all text-left group cursor-pointer"
         >
           <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
             <PackagePlus className="w-5 h-5" />
@@ -210,7 +289,7 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
 
         <button
           onClick={onOpenTransfer}
-          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-amber-500 hover:shadow-md transition-all text-left group"
+          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-amber-500 hover:shadow-md transition-all text-left group cursor-pointer"
         >
           <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
             <Truck className="w-5 h-5" />
@@ -221,7 +300,7 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
 
         <button
           onClick={onOpenIndent}
-          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-cyan-500 hover:shadow-md transition-all text-left group"
+          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-cyan-500 hover:shadow-md transition-all text-left group cursor-pointer"
         >
           <div className="w-9 h-9 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
             <ArrowDownLeft className="w-5 h-5" />
@@ -232,7 +311,7 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
 
         <button
           onClick={onOpenAdjustment}
-          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-rose-500 hover:shadow-md transition-all text-left group"
+          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-rose-500 hover:shadow-md transition-all text-left group cursor-pointer"
         >
           <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
             <AlertTriangle className="w-5 h-5" />

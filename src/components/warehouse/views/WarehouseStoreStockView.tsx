@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Store,
   Boxes,
@@ -26,10 +26,13 @@ import {
   X,
   FileSpreadsheet,
   Check,
+  Edit3,
+  Save,
+  PhoneCall,
 } from 'lucide-react';
 import { StoreLocation, InventoryItem } from '../../../types';
 import { Warehouse, StockTransfer } from '../../../types/warehouse';
-import { CURRENCY } from '../../../services/storage';
+import { CURRENCY, storage } from '../../../services/storage';
 import { warehouseStorage } from '../../../services/warehouseStorage';
 
 interface WarehouseStoreStockViewProps {
@@ -67,7 +70,31 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
   const [adjustAuditor, setAdjustAuditor] = useState<string>('Store & Warehouse Auditor');
   const [adjustSuccessMsg, setAdjustSuccessMsg] = useState<string>('');
 
+  // Store Contact Number Edit State
+  const [isEditingContact, setIsEditingContact] = useState<boolean>(false);
+  const [contactPhone, setContactPhone] = useState<string>('');
+  const [contactSaveFeedback, setContactSaveFeedback] = useState<string>('');
+
   const currentStore = stores.find((s) => s.id === selectedStoreId) || stores[0];
+
+  useEffect(() => {
+    if (currentStore) {
+      setContactPhone(currentStore.phone || '');
+      setIsEditingContact(false);
+      setContactSaveFeedback('');
+    }
+  }, [currentStore?.id]);
+
+  const handleSaveContact = () => {
+    if (!currentStore) return;
+    const trimmed = contactPhone.trim();
+    if (!trimmed) return;
+
+    storage.updateStore(currentStore.id, { phone: trimmed });
+    setIsEditingContact(false);
+    setContactSaveFeedback('Contact number updated successfully!');
+    setTimeout(() => setContactSaveFeedback(''), 3000);
+  };
   const centralWh = warehouses[0] || {
     name: 'Richie Rich Central Master Warehouse (Ahmedabad Hub)',
     code: 'WH-AMD-01',
@@ -393,16 +420,65 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
                 <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">
                   {currentStore.name}
                 </h2>
-                <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-slate-300">
-                  <span className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span>{currentStore.address}</span>
-                  </span>
-                  <span className="text-slate-500">•</span>
-                  <span className="flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
-                    <span>{currentStore.phone}</span>
-                  </span>
+                
+                {/* Store Contact Details & Edit Option (Address Removed) */}
+                <div className="flex flex-wrap items-center gap-y-2 gap-x-3 text-xs">
+                  {!isEditingContact ? (
+                    <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-xl border border-white/15">
+                      <PhoneCall className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span className="font-mono text-slate-200">
+                        {currentStore.phone || 'No phone number added'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setContactPhone(currentStore.phone || '');
+                          setIsEditingContact(true);
+                        }}
+                        className="ml-1 text-[11px] text-amber-300 hover:text-amber-200 font-semibold flex items-center gap-1 hover:underline cursor-pointer"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                        <span>Edit Contact</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 bg-slate-900/90 p-1.5 rounded-xl border border-amber-500/50 shadow-inner">
+                      <Phone className="w-3.5 h-3.5 text-amber-400 shrink-0 ml-1.5" />
+                      <input
+                        type="text"
+                        value={contactPhone}
+                        onChange={(e) => setContactPhone(e.target.value)}
+                        placeholder="Enter Store Contact (+91 ...)"
+                        className="bg-slate-800 text-white font-mono text-xs px-2.5 py-1 rounded-lg border border-slate-700 focus:outline-none focus:border-amber-400 w-48 sm:w-56"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveContact}
+                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <Save className="w-3 h-3" />
+                        <span>Save</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setContactPhone(currentStore.phone || '');
+                          setIsEditingContact(false);
+                        }}
+                        className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-xs transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+
+                  {contactSaveFeedback && (
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-400 font-semibold animate-fade-in">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>{contactSaveFeedback}</span>
+                    </span>
+                  )}
                 </div>
               </div>
 

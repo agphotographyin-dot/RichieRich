@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, Truck, Building2, Store, ArrowRight, ShieldCheck } from 'lucide-react';
+import { X, Plus, Trash2, Truck, Building2, Store, ArrowRight, ShieldCheck, KeyRound, RefreshCw } from 'lucide-react';
 import { Warehouse, BatchRecord, TransferItem, StockTransfer } from '../../../types/warehouse';
 import { InventoryItem, StoreLocation } from '../../../types';
 import { warehouseStorage } from '../../../services/warehouseStorage';
@@ -43,6 +43,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
   const [driverName, setDriverName] = useState('Ramesh Rathod');
   const [driverPhone, setDriverPhone] = useState('+91 98250 88771');
   const [carrierName, setCarrierName] = useState('Richie Rich Express Van');
+  const [otpCode, setOtpCode] = useState(() => initialData?.otpOrPin || Math.floor(1000 + Math.random() * 9000).toString());
   const [notes, setNotes] = useState(initialData?.notes || '');
 
   const [items, setItems] = useState<
@@ -173,6 +174,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
       vehicleNumber: vehicleNo,
       carrierName,
       driverContact: driverPhone ? `${driverName} (${driverPhone})` : driverName,
+      otpOrPin: otpCode,
       dispatchedBy: 'Warehouse Dispatch Officer',
       notes,
     });
@@ -263,7 +265,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
           </div>
 
           {/* Vehicle & Logistics Details */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
             <div>
               <label className="text-[10px] text-slate-500 font-semibold block">Vehicle Number</label>
               <input
@@ -290,6 +292,31 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
                 value={driverPhone}
                 onChange={(e) => setDriverPhone(e.target.value)}
                 className="w-full p-1.5 bg-white border border-slate-200 rounded-lg font-mono text-xs text-slate-900"
+              />
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] text-amber-700 font-bold flex items-center gap-1">
+                  <KeyRound className="w-3 h-3 text-amber-600" />
+                  <span>Delivery OTP / PIN</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setOtpCode(Math.floor(1000 + Math.random() * 9000).toString())}
+                  title="Generate new PIN"
+                  className="text-[10px] text-amber-600 hover:text-amber-800 flex items-center gap-0.5"
+                >
+                  <RefreshCw className="w-2.5 h-2.5" />
+                </button>
+              </div>
+              <input
+                type="text"
+                required
+                maxLength={6}
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value)}
+                className="w-full p-1.5 bg-amber-50 border border-amber-300 rounded-lg font-mono font-bold text-center text-xs text-amber-900 tracking-widest"
+                placeholder="4-digit OTP"
               />
             </div>
           </div>

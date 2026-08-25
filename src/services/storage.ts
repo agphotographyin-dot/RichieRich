@@ -912,12 +912,29 @@ export class StorageService {
 
     // Check and seed/merge inventory
     const existingInventory = localStorage.getItem(STORAGE_KEYS.INVENTORY);
+    const cleanedFlag = localStorage.getItem('rr_wh_cleaned_dummy_v1');
+
     if (!existingInventory) {
-      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
+      const zeroStockInit = INITIAL_INVENTORY.map((item) => ({
+        ...item,
+        stockQuantity: 0,
+        storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
+      }));
+      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(zeroStockInit));
     } else {
       try {
         const parsed: InventoryItem[] = JSON.parse(existingInventory);
         let hasChanges = false;
+
+        // One-time cleanup of all dummy stock quantities
+        if (!cleanedFlag) {
+          parsed.forEach((item) => {
+            item.stockQuantity = 0;
+            item.storeAllocations = { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 };
+          });
+          hasChanges = true;
+          localStorage.setItem('rr_wh_cleaned_dummy_v1', 'true');
+        }
 
         // Upgrade existing inventory items with 3 canonical categories and GST tax rates
         parsed.forEach((item) => {
@@ -933,14 +950,15 @@ export class StorageService {
           }
         });
 
-        // Ensure new catalog items are merged if missing
+        // Ensure catalog items exist
         INITIAL_INVENTORY.forEach((initItem) => {
           const found = parsed.find((i) => i.id === initItem.id || i.sku === initItem.sku);
           if (!found) {
-            parsed.push(initItem);
-            hasChanges = true;
-          } else if (!found.storeAllocations) {
-            found.storeAllocations = initItem.storeAllocations;
+            parsed.push({
+              ...initItem,
+              stockQuantity: 0,
+              storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
+            });
             hasChanges = true;
           }
         });
@@ -1017,6 +1035,25 @@ export class StorageService {
   getStoreById(storeId: string): StoreLocation | undefined {
     const stores = this.getStores();
     return stores.find((s) => s.id === storeId);
+  }
+
+  updateStore(storeId: string, updates: Partial<StoreLocation>): StoreLocation | null {
+    const stores = this.getStores();
+    const store = stores.find((s) => s.id === storeId);
+    if (!store) return null;
+
+    Object.assign(store, updates);
+    this.saveStores(stores);
+
+    this.addNotification({
+      title: `🏪 Store Details Updated`,
+      message: `Updated details for ${store.name} (${store.shortName}).`,
+      type: 'order_update',
+      targetRole: 'admin',
+      read: false,
+    });
+
+    return store;
   }
 
   addCounter(
@@ -1297,24 +1334,60 @@ export class StorageService {
 
     // Check if we need to emit new notifications
     const notifications = this.getNotifications();
+    const stores = this.getStores();
+
+    // 1. Central Master Warehouse Low Stock Alerts
     lowStockItems.forEach((item) => {
       const alreadyAlertedRecently = notifications.some(
         (n) =>
           n.type === 'low_stock' &&
+          n.title.includes(`Central Warehouse`) &&
           n.title.includes(item.name) &&
-          Date.now() - new Date(n.timestamp).getTime() < 1000 * 60 * 60 * 6 // 6 hours
+          Date.now() - new Date(n.timestamp).getTime() < 1000 * 60 * 60 * 4 // 4 hours
       );
 
       if (!alreadyAlertedRecently) {
         this.addNotification({
-          title: `⚠️ Low Stock: ${item.name}`,
-          message: `Only ${item.stockQuantity} ${item.unit} remaining! (Threshold: ${item.lowStockThreshold}). Please restock soon.`,
+          title: `⚠️ Central WH Low Stock: ${item.name}`,
+          message: `Central Master Warehouse has only ${item.stockQuantity} ${item.unit} available (Minimum Threshold: ${item.lowStockThreshold}). Issue a Supplier Purchase Order to replenish.`,
           type: 'low_stock',
           targetRole: 'admin',
           read: false,
           linkTab: 'inventory',
         });
       }
+    });
+
+    // 2. Individual In-Store Low Stock Alerts (Gota, Bopal, Sindhu Bhavan, SG Highway)
+    items.forEach((item) => {
+      if (!item.storeAllocations) return;
+      const storeMinThreshold = Math.max(2, Math.round((item.lowStockThreshold || 10) * 0.4));
+
+      Object.entries(item.storeAllocations).forEach(([storeId, storeQty]) => {
+        if (storeQty <= storeMinThreshold) {
+          const storeObj = stores.find((s) => s.id === storeId);
+          const storeName = storeObj ? storeObj.shortName || storeObj.name : storeId.toUpperCase();
+
+          const alreadyAlertedStore = notifications.some(
+            (n) =>
+              n.type === 'low_stock' &&
+              n.title.includes(storeName) &&
+              n.title.includes(item.name) &&
+              Date.now() - new Date(n.timestamp).getTime() < 1000 * 60 * 60 * 3 // 3 hours
+          );
+
+          if (!alreadyAlertedStore) {
+            this.addNotification({
+              title: `⚠️ In-Store Low Stock: ${storeName} - ${item.name}`,
+              message: `${storeName} currently has only ${storeQty} ${item.unit} remaining (Store Min Threshold: ${storeMinThreshold}). Dispatch replenishment from Central Master Warehouse.`,
+              type: 'low_stock',
+              targetRole: 'admin',
+              read: false,
+              linkTab: 'store_stock',
+            });
+          }
+        }
+      });
     });
   }
 
@@ -1419,19 +1492,45 @@ export class StorageService {
       createdAt: new Date().toISOString(),
     };
 
-    // 1. Deduct Inventory Stock in Real-Time (Global & Store Specific)
+    // 1. Deduct Inventory Stock in Real-Time (Store Specific Allocation or Central Warehouse)
     const inventory = this.getInventory();
+    const stores = this.getStores();
+    let triggeredStoreLowStock = false;
+
     orderData.items.forEach((item) => {
       const invItem = inventory.find((i) => i.id === item.itemId || i.sku === item.sku);
       if (invItem) {
-        invItem.stockQuantity = Math.max(0, invItem.stockQuantity - item.quantity);
-        if (orderData.storeId && invItem.storeAllocations) {
+        if (orderData.storeId) {
+          if (!invItem.storeAllocations) invItem.storeAllocations = {};
           const currentStoreStock = invItem.storeAllocations[orderData.storeId] || 0;
-          invItem.storeAllocations[orderData.storeId] = Math.max(0, currentStoreStock - item.quantity);
+          const newStoreStock = Math.max(0, currentStoreStock - item.quantity);
+          invItem.storeAllocations[orderData.storeId] = newStoreStock;
+
+          const storeMinThreshold = Math.max(2, Math.round((invItem.lowStockThreshold || 10) * 0.4));
+          if (newStoreStock <= storeMinThreshold) {
+            triggeredStoreLowStock = true;
+            const stObj = stores.find((s) => s.id === orderData.storeId);
+            const stName = stObj ? stObj.shortName || stObj.name : orderData.storeId.toUpperCase();
+            this.addNotification({
+              title: `⚠️ In-Store Low Stock: ${stName} - ${invItem.name}`,
+              message: `Post-Sale Alert: ${stName} stock dropped to ${newStoreStock} ${invItem.unit} (Threshold: ${storeMinThreshold}). Warehouse replenishment needed!`,
+              type: 'low_stock',
+              targetRole: 'admin',
+              read: false,
+              linkTab: 'store_stock',
+            });
+          }
+        } else {
+          // Central Warehouse dispatch for unallocated / direct orders
+          invItem.stockQuantity = Math.max(0, invItem.stockQuantity - item.quantity);
         }
       }
     });
     this.saveInventory(inventory);
+
+    if (triggeredStoreLowStock) {
+      soundEffects.playWarningChime();
+    }
 
     // 2. Award or Deduct Loyalty Points
     if (orderData.customerPhone || orderData.customerId) {

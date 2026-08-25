@@ -35,6 +35,7 @@ interface WarehouseHeaderProps {
   onOpenTransfer: () => void;
   onOpenIndent: () => void;
   onOpenAdjustment: () => void;
+  onOpenPipelineTester?: () => void;
   nearExpiryCount: number;
   inTransitCount: number;
   lowStockCount: number;
@@ -53,6 +54,7 @@ export const WarehouseHeader: React.FC<WarehouseHeaderProps> = ({
   onOpenTransfer,
   onOpenIndent,
   onOpenAdjustment,
+  onOpenPipelineTester,
   nearExpiryCount,
   inTransitCount,
   lowStockCount,

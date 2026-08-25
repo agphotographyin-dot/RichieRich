@@ -19,6 +19,7 @@ import { StockAdjustmentModal } from './modals/StockAdjustmentModal';
 import { RecordPaymentModal } from './modals/RecordPaymentModal';
 import { AddSupplierModal } from './modals/AddSupplierModal';
 import { AddWarehouseModal } from './modals/AddWarehouseModal';
+import { PipelineTesterModal } from './modals/PipelineTesterModal';
 
 import {
   WarehouseTab,
@@ -78,6 +79,7 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
   const [selectedSupplierForPayment, setSelectedSupplierForPayment] = useState<string>('');
   const [isAddSupplierModalOpen, setIsAddSupplierModalOpen] = useState(false);
   const [isAddWarehouseModalOpen, setIsAddWarehouseModalOpen] = useState(false);
+  const [isPipelineTesterOpen, setIsPipelineTesterOpen] = useState(false);
   const [receivingTransfer, setReceivingTransfer] = useState<StockTransfer | null>(null);
 
   const loadData = () => {
@@ -150,6 +152,7 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
         onOpenTransfer={() => setIsTransferModalOpen(true)}
         onOpenIndent={() => setIsIndentModalOpen(true)}
         onOpenAdjustment={() => setIsAdjustmentModalOpen(true)}
+        onOpenPipelineTester={() => setIsPipelineTesterOpen(true)}
         nearExpiryCount={nearExpiryCount}
         inTransitCount={inTransitCount}
         lowStockCount={lowStockCount}
@@ -174,6 +177,7 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           onOpenTransfer={() => setIsTransferModalOpen(true)}
           onOpenIndent={() => setIsIndentModalOpen(true)}
           onOpenAdjustment={() => setIsAdjustmentModalOpen(true)}
+          onOpenPipelineTester={() => setIsPipelineTesterOpen(true)}
         />
       )}
 
@@ -353,6 +357,12 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
         isOpen={isAddWarehouseModalOpen}
         onClose={() => setIsAddWarehouseModalOpen(false)}
         onSuccess={loadData}
+      />
+
+      <PipelineTesterModal
+        isOpen={isPipelineTesterOpen}
+        onClose={() => setIsPipelineTesterOpen(false)}
+        onNavigateTab={handleSelectTab}
       />
     </div>
   );
