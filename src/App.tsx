@@ -16,6 +16,9 @@ import { Header } from './components/common/Header';
 import { BarcodeScannerModal } from './components/common/BarcodeScannerModal';
 import { NotificationDrawer } from './components/common/NotificationDrawer';
 
+// Landing Page Portal Chooser (Two options: Admin Dashboard & POS Dashboard, separate Customer page)
+import { LandingPortal } from './components/auth/LandingPortal';
+
 // Authentication Login Screens
 import { AdminLogin } from './components/auth/AdminLogin';
 import { POSLogin } from './components/auth/POSLogin';
@@ -155,6 +158,11 @@ export const App: React.FC = () => {
     }
   };
 
+  const navigateToRole = (role: UserRole) => {
+    setCurrentRole(role);
+    updateRoute(role, role === 'admin' ? activeAdminTab : undefined);
+  };
+
   // Auth Handler: Admin
   const handleAdminLoginSuccess = () => {
     setIsAdminAuthenticated(true);
@@ -197,7 +205,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
-      {/* Universal Portal Header without role toggles */}
+      {/* Universal Portal Header */}
       <Header
         currentRole={currentRole}
         activeAdminTab={activeAdminTab}
@@ -208,17 +216,37 @@ export const App: React.FC = () => {
         lowStockCount={lowStockCount}
         onLogout={getActiveLogoutHandler()}
         currentCustomer={currentCustomer}
+        onNavigateLanding={() => navigateToRole('landing')}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* ================================================================= */}
-        {/* INTERFACE 1: ADMIN MANAGEMENT PORTAL (URL: /admin) */}
+        {/* LANDING PAGE: 2 LOGIN OPTIONS (Admin Dashboard & POS Dashboard)   */}
+        {/* Separate Customer Page Link                                       */}
+        {/* ================================================================= */}
+        {currentRole === 'landing' && (
+          <div className="animate-in fade-in duration-200">
+            <LandingPortal
+              onSelectAdmin={() => navigateToRole('admin')}
+              onSelectPOS={() => navigateToRole('pos')}
+              onSelectCustomer={() => navigateToRole('customer')}
+              isAdminAuthenticated={isAdminAuthenticated}
+              isPOSAuthenticated={isPOSAuthenticated}
+            />
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* INTERFACE 1: ADMIN MANAGEMENT DASHBOARD (URL: /admin)            */}
         {/* ================================================================= */}
         {currentRole === 'admin' && (
           <>
             {!isAdminAuthenticated ? (
-              <AdminLogin onLoginSuccess={handleAdminLoginSuccess} />
+              <AdminLogin
+                onLoginSuccess={handleAdminLoginSuccess}
+                onBackToLanding={() => navigateToRole('landing')}
+              />
             ) : (
               <div className="space-y-6 animate-in fade-in duration-150">
                 {activeAdminTab === 'dashboard' && (
@@ -264,12 +292,15 @@ export const App: React.FC = () => {
         )}
 
         {/* ================================================================= */}
-        {/* INTERFACE 2: POINT OF SALE (POS) TERMINAL (URL: /pos) */}
+        {/* INTERFACE 2: POINT OF SALE (POS) DASHBOARD (URL: /pos)           */}
         {/* ================================================================= */}
         {currentRole === 'pos' && (
           <>
             {!isPOSAuthenticated ? (
-              <POSLogin onLoginSuccess={handlePOSLoginSuccess} />
+              <POSLogin
+                onLoginSuccess={handlePOSLoginSuccess}
+                onBackToLanding={() => navigateToRole('landing')}
+              />
             ) : (
               <div className="animate-in fade-in duration-150">
                 <POSTerminal
@@ -284,7 +315,7 @@ export const App: React.FC = () => {
         )}
 
         {/* ================================================================= */}
-        {/* INTERFACE 3: END CUSTOMER ORDERING PORTAL (URL: /customer) */}
+        {/* INTERFACE 3: SEPARATE CUSTOMER ORDERING PORTAL (URL: /customer)   */}
         {/* ================================================================= */}
         {currentRole === 'customer' && (
           <>

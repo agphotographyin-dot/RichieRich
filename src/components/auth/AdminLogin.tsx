@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { Shield, Lock, User, KeyRound, Eye, EyeOff, Crown, ArrowRight, AlertCircle } from 'lucide-react';
+import { Shield, Lock, User, KeyRound, Eye, EyeOff, Crown, ArrowRight, AlertCircle, ArrowLeft } from 'lucide-react';
 import { authService } from '../../services/auth';
 
 interface AdminLoginProps {
   onLoginSuccess: () => void;
+  onBackToLanding?: () => void;
 }
 
-export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
+export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackToLanding }) => {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -35,6 +36,18 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Header Banner */}
         <div className="bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#334155] p-7 text-white text-center relative overflow-hidden">
+          {onBackToLanding && (
+            <button
+              type="button"
+              onClick={onBackToLanding}
+              className="absolute top-4 left-4 p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer text-xs flex items-center gap-1 border border-slate-700"
+              title="Return to Portal Selection"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back</span>
+            </button>
+          )}
+
           <div className="absolute top-0 right-0 w-36 h-36 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
           <div className="relative z-10 flex flex-col items-center">
             <div className="w-14 h-14 rounded-2xl bg-slate-800/80 border border-slate-700/80 text-amber-400 flex items-center justify-center mb-3 shadow-lg">
@@ -43,7 +56,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
             <h2 className="text-xl font-extrabold tracking-tight">Richie Rich Pan House</h2>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 mt-2 rounded-full bg-slate-800 border border-slate-700 text-amber-400 text-xs font-bold uppercase tracking-wider">
               <Shield className="w-3.5 h-3.5" />
-              <span>Admin Management Portal</span>
+              <span>Admin Management Dashboard</span>
             </div>
             <p className="text-xs text-slate-300 mt-2 font-medium">
               Enter Administrator credentials to access dashboard, master inventory, analytics, and security.
@@ -126,16 +139,27 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
             ) : (
               <>
                 <KeyRound className="w-4 h-4 text-amber-400" />
-                <span>Log In to Admin Portal</span>
+                <span>Log In to Admin Dashboard</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
 
           {/* Security Notice */}
-          <div className="pt-3 border-t border-slate-100 text-center">
-            <p className="text-[11px] text-slate-500 font-medium">
-              Direct access route: <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded-md text-slate-700 font-bold">/admin</code>
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            {onBackToLanding ? (
+              <button
+                type="button"
+                onClick={onBackToLanding}
+                className="text-slate-600 hover:text-slate-900 font-semibold underline cursor-pointer"
+              >
+                Switch to POS Dashboard
+              </button>
+            ) : (
+              <span />
+            )}
+            <p className="text-[11px] font-medium">
+              Direct route: <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded-md text-slate-700 font-bold">/admin</code>
             </p>
           </div>
         </form>
