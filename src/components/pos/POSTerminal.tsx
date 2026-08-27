@@ -31,12 +31,14 @@ import { CURRENCY, storage } from '../../services/storage';
 import { soundEffects } from '../../services/audio';
 import { POSReceiptModal } from './POSReceiptModal';
 import { POSStoreCounterLogin } from './POSStoreCounterLogin';
+import { BarcodeScannerModal } from '../common/BarcodeScannerModal';
 
 interface POSTerminalProps {
   inventory: InventoryItem[];
   categories: Category[];
   customers: Customer[];
-  onOpenScanner: () => void;
+  onOpenScanner?: () => void;
+  onBarcodeScanned?: (barcode: string) => void;
 }
 
 interface CartItem extends OrderItem {
@@ -72,37 +74,14 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
   const [recentOrder, setRecentOrder] = useState<Order | null>(null);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
 
-  // Shift summary drawer
   const [showShiftSummary, setShowShiftSummary] = useState(false);
-
-  // If no active session, show Store & Counter PIN selection screen
-  if (!posSession) {
-    return (
-      <POSStoreCounterLogin
-        onLoginSuccess={(session) => {
-          setPosSession(session);
-        }}
-      />
-    );
-  }
-
-  // Get store specific available stock for this counter's branch
-  const getItemStoreStock = (item: InventoryItem): number => {
-    if (item.storeAllocations && posSession.storeId in item.storeAllocations) {
-      return item.storeAllocations[posSession.storeId];
-    }
-    return item.stockQuantity;
-  };
-
-  // Filter products
-  const filteredProducts = inventory.filter((item) => {
-    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
-    const matchesSearch =
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.barcode.includes(searchTerm);
-    return matchesCategory && matchesSearch;
-  });
+  const [localScannerOpen, setLocalScannerOpen] = useState(false);
+  const [lastScannedFeedback, setLastScannedFeedback] = useState<{
+    name: string;
+    barcode: string;
+    price: number;
+    timestamp: number;
+  } | null>(null);
 
   // Cart operations
   const addToCart = (item: InventoryItem, customPref?: string) => {
@@ -115,6 +94,13 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
     }
 
     soundEffects.playScanBeep();
+
+    setLastScannedFeedback({
+      name: item.name,
+      barcode: item.barcode,
+      price: item.sellingPrice,
+      timestamp: Date.now(),
+    });
 
     setCart((prev) => {
       const existing = prev.find((ci) => ci.itemId === item.id && ci.customization === (customPref || undefined));
@@ -153,6 +139,123 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
       }
     });
   };
+
+  // Direct Barcode Scan Handler -> Auto Adds to Cart
+  const handleBarcodeScanned = (barcode: string) => {
+    const found = storage.findItemByBarcode(barcode) || inventory.find(
+      (i) => i.barcode.toLowerCase() === barcode.trim().toLowerCase() || i.sku.toLowerCase() === barcode.trim().toLowerCase()
+    );
+
+    if (found) {
+      addToCart(found);
+      setSearchTerm('');
+    } else {
+      soundEffects.playWarningChime();
+      alert(`No product found in catalog matching barcode or SKU: "${barcode}".`);
+    }
+  };
+
+  // Listen for global scan event (e.g. from top nav / camera modal)
+  useEffect(() => {
+    const handleGlobalScanEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ barcode: string; item: InventoryItem }>;
+      if (customEvent.detail && customEvent.detail.item) {
+        addToCart(customEvent.detail.item);
+      } else if (customEvent.detail && customEvent.detail.barcode) {
+        handleBarcodeScanned(customEvent.detail.barcode);
+      }
+    };
+
+    window.addEventListener('pos_barcode_scanned', handleGlobalScanEvent);
+    return () => {
+      window.removeEventListener('pos_barcode_scanned', handleGlobalScanEvent);
+    };
+  }, [posSession, inventory]);
+
+  // Hardware USB/Bluetooth Barcode Scanner Wedge Listener
+  useEffect(() => {
+    let buffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept when user is typing in regular text inputs or modals (unless it's an ultra-fast scanner burst)
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+
+      const currentTime = Date.now();
+      const timeDiff = currentTime - lastKeyTime;
+      lastKeyTime = currentTime;
+
+      // Scanners typically enter keys rapidly (< 40ms between strokes)
+      if (e.key === 'Enter') {
+        if (buffer.length >= 3) {
+          const scannedCode = buffer.trim();
+          buffer = '';
+          const match = storage.findItemByBarcode(scannedCode) || inventory.find(
+            (i) => i.barcode.toLowerCase() === scannedCode.toLowerCase() || i.sku.toLowerCase() === scannedCode.toLowerCase()
+          );
+
+          if (match) {
+            if (isInput) {
+              (target as HTMLInputElement).value = '';
+            }
+            e.preventDefault();
+            addToCart(match);
+            return;
+          }
+        }
+        buffer = '';
+      } else if (e.key.length === 1) {
+        if (timeDiff > 120) {
+          buffer = ''; // reset buffer if human typing slowly
+        }
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [posSession, inventory]);
+
+  // Auto-dismiss scanned toast after 3 seconds
+  useEffect(() => {
+    if (!lastScannedFeedback) return;
+    const timer = setTimeout(() => {
+      setLastScannedFeedback(null);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [lastScannedFeedback]);
+
+  // If no active session, show Store & Counter PIN selection screen
+  if (!posSession) {
+    return (
+      <POSStoreCounterLogin
+        onLoginSuccess={(session) => {
+          setPosSession(session);
+        }}
+      />
+    );
+  }
+
+  // Get store specific available stock for this counter's branch
+  const getItemStoreStock = (item: InventoryItem): number => {
+    if (item.storeAllocations && posSession.storeId in item.storeAllocations) {
+      return item.storeAllocations[posSession.storeId];
+    }
+    return item.stockQuantity;
+  };
+
+  // Filter products
+  const filteredProducts = inventory.filter((item) => {
+    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+    const matchesSearch =
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.barcode.includes(searchTerm);
+    return matchesCategory && matchesSearch;
+  });
 
   const updateQuantity = (index: number, delta: number) => {
     setCart((prev) => {
@@ -378,7 +481,7 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
 
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <button
-            onClick={onOpenScanner}
+            onClick={onOpenScanner || (() => setLocalScannerOpen(true))}
             className="px-3 py-2 bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
           >
             <Scan className="w-4 h-4 text-amber-400" />
@@ -401,6 +504,29 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Real-time Scanned Item Feedback Toast Banner */}
+      {lastScannedFeedback && (
+        <div className="bg-emerald-900 text-emerald-100 px-4 py-2.5 rounded-xl border border-emerald-700 shadow-md flex items-center justify-between animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-emerald-800 text-amber-300 flex items-center justify-center font-bold">
+              <Scan className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>✓ Added to Cart:</span>
+                <span className="text-amber-300">{lastScannedFeedback.name}</span>
+              </p>
+              <p className="text-[10px] text-emerald-200">
+                Barcode: <span className="font-mono">{lastScannedFeedback.barcode}</span> • Price: {CURRENCY}{lastScannedFeedback.price.toFixed(2)}
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] bg-emerald-800/80 px-2 py-0.5 rounded-md font-mono text-emerald-200">
+            Auto-added
+          </span>
+        </div>
+      )}
 
       {/* Main POS Grid: Product Catalog (Left 7 cols) + Live Cart & Tender (Right 5 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
@@ -910,6 +1036,16 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
         onClose={() => setReceiptModalOpen(false)}
         order={recentOrder}
         customer={selectedCustomer}
+      />
+
+      {/* POS Dedicated Barcode Scanner Modal */}
+      <BarcodeScannerModal
+        isOpen={localScannerOpen}
+        onClose={() => setLocalScannerOpen(false)}
+        onScanSuccess={(code) => {
+          handleBarcodeScanned(code);
+          setLocalScannerOpen(false);
+        }}
       />
     </div>
   );

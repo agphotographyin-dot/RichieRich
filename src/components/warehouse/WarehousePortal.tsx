@@ -20,6 +20,9 @@ import { RecordPaymentModal } from './modals/RecordPaymentModal';
 import { AddSupplierModal } from './modals/AddSupplierModal';
 import { AddWarehouseModal } from './modals/AddWarehouseModal';
 import { PipelineTesterModal } from './modals/PipelineTesterModal';
+import { AddItemModal } from '../admin/AddItemModal';
+import { RegisterBarcodeModal } from '../admin/RegisterBarcodeModal';
+import { BarcodeScannerModal } from '../common/BarcodeScannerModal';
 
 import {
   WarehouseTab,
@@ -35,7 +38,7 @@ import {
   StockMovementAudit,
   SupplierLedgerEntry,
 } from '../../types/warehouse';
-import { InventoryItem, StoreLocation } from '../../types';
+import { InventoryItem, StoreLocation, Category } from '../../types';
 import { warehouseStorage } from '../../services/warehouseStorage';
 import { storage } from '../../services/storage';
 
@@ -67,6 +70,7 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
   // Base state entities from main storage
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [stores, setStores] = useState<StoreLocation[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   // Modal visibility states
   const [isPOModalOpen, setIsPOModalOpen] = useState(false);
@@ -83,6 +87,12 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
   const [isPipelineTesterOpen, setIsPipelineTesterOpen] = useState(false);
   const [receivingTransfer, setReceivingTransfer] = useState<StockTransfer | null>(null);
 
+  // Master Inventory and Catalog Modals
+  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
+  const [isRegisterBarcodeOpen, setIsRegisterBarcodeOpen] = useState(false);
+  const [registerBarcodeTargetItem, setRegisterBarcodeTargetItem] = useState<InventoryItem | null>(null);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+
   const loadData = () => {
     setWarehouses(warehouseStorage.getWarehouses());
     setSuppliers(warehouseStorage.getSuppliers());
@@ -97,6 +107,7 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
 
     setInventory(storage.getInventory());
     setStores(storage.getStores());
+    setCategories(storage.getCategories());
   };
 
   useEffect(() => {
@@ -153,6 +164,7 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
         onOpenTransfer={() => setIsTransferModalOpen(true)}
         onOpenIndent={() => setIsIndentModalOpen(true)}
         onOpenAdjustment={() => setIsAdjustmentModalOpen(true)}
+        onOpenAddItem={() => setIsAddItemOpen(true)}
         onOpenPipelineTester={() => setIsPipelineTesterOpen(true)}
         nearExpiryCount={nearExpiryCount}
         inTransitCount={inTransitCount}
@@ -187,12 +199,19 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           inventory={inventory}
           batches={batches}
           warehouses={warehouses}
+          categories={categories}
           searchQuery={searchQuery}
           onOpenInwardBill={() => setIsInwardModalOpen(true)}
           onOpenTransfer={() => {
             setTransferInitialData(null);
             setIsTransferModalOpen(true);
           }}
+          onOpenAddItem={() => setIsAddItemOpen(true)}
+          onOpenRegisterBarcode={(item) => {
+            setRegisterBarcodeTargetItem(item || null);
+            setIsRegisterBarcodeOpen(true);
+          }}
+          onOpenScanner={() => setIsScannerOpen(true)}
         />
       )}
 
@@ -372,6 +391,39 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
         isOpen={isPipelineTesterOpen}
         onClose={() => setIsPipelineTesterOpen(false)}
         onNavigateTab={handleSelectTab}
+      />
+
+      {/* Master Inventory Modals */}
+      <AddItemModal
+        isOpen={isAddItemOpen}
+        onClose={() => setIsAddItemOpen(false)}
+        categories={categories}
+      />
+
+      <RegisterBarcodeModal
+        isOpen={isRegisterBarcodeOpen}
+        onClose={() => {
+          setIsRegisterBarcodeOpen(false);
+          setRegisterBarcodeTargetItem(null);
+        }}
+        inventory={inventory}
+        preselectedItem={registerBarcodeTargetItem}
+      />
+
+      <BarcodeScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onScanSuccess={(code) => {
+          setIsScannerOpen(false);
+          const found = inventory.find((i) => i.barcode === code || i.sku === code);
+          if (found) {
+            setSearchQuery(found.name);
+            setActiveTab('inventory');
+          } else {
+            setSearchQuery(code);
+            setActiveTab('inventory');
+          }
+        }}
       />
     </div>
   );

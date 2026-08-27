@@ -1,6 +1,6 @@
 export type Role = 'landing' | 'admin' | 'pos' | 'customer' | 'warehouse';
 export type UserRole = Role;
-export type AdminTab = 'dashboard' | 'inventory' | 'staff_counters' | 'analytics' | 'orders' | 'loyalty_promos' | 'backups';
+export type AdminTab = 'dashboard' | 'staff_counters' | 'analytics' | 'orders' | 'loyalty_promos' | 'backups';
 
 export * from './warehouse';
 

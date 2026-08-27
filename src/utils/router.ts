@@ -30,10 +30,13 @@ export function parseCurrentRoute(): RouteState {
     return { role: 'customer', adminTab: 'dashboard' };
   }
   if (cleanHash.startsWith('admin')) {
-    const hashTab = cleanHash.split('/')[1] as AdminTab | undefined;
+    const hashTab = cleanHash.split('/')[1];
+    if (hashTab === 'inventory') {
+      return { role: 'warehouse', adminTab: 'dashboard', warehouseTab: 'inventory' };
+    }
     return {
       role: 'admin',
-      adminTab: hashTab || tabQuery || 'dashboard',
+      adminTab: (hashTab as AdminTab) || tabQuery || 'dashboard',
     };
   }
   if (cleanHash === 'landing' || cleanHash === 'login' || cleanHash === 'home') {
@@ -58,11 +61,13 @@ export function parseCurrentRoute(): RouteState {
   }
 
   if (pathname.includes('/admin')) {
+    if (tabQuery === 'inventory' as any || pathname.includes('/admin/inventory')) {
+      return { role: 'warehouse', adminTab: 'dashboard', warehouseTab: 'inventory' };
+    }
     let tab: AdminTab = 'dashboard';
-    if (tabQuery && ['dashboard', 'inventory', 'staff_counters', 'analytics', 'orders', 'loyalty_promos', 'backups'].includes(tabQuery)) {
+    if (tabQuery && ['dashboard', 'staff_counters', 'analytics', 'orders', 'loyalty_promos', 'backups'].includes(tabQuery)) {
       tab = tabQuery;
-    } else if (pathname.includes('/admin/inventory')) tab = 'inventory';
-    else if (pathname.includes('/admin/staff') || pathname.includes('/admin/counters')) tab = 'staff_counters';
+    } else if (pathname.includes('/admin/staff') || pathname.includes('/admin/counters')) tab = 'staff_counters';
     else if (pathname.includes('/admin/analytics')) tab = 'analytics';
     else if (pathname.includes('/admin/orders')) tab = 'orders';
     else if (pathname.includes('/admin/loyalty') || pathname.includes('/admin/promos')) tab = 'loyalty_promos';

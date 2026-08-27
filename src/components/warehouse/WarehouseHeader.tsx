@@ -35,6 +35,7 @@ interface WarehouseHeaderProps {
   onOpenTransfer: () => void;
   onOpenIndent: () => void;
   onOpenAdjustment: () => void;
+  onOpenAddItem?: () => void;
   onOpenPipelineTester?: () => void;
   nearExpiryCount: number;
   inTransitCount: number;
@@ -54,6 +55,7 @@ export const WarehouseHeader: React.FC<WarehouseHeaderProps> = ({
   onOpenTransfer,
   onOpenIndent,
   onOpenAdjustment,
+  onOpenAddItem,
   onOpenPipelineTester,
   nearExpiryCount,
   inTransitCount,
@@ -62,7 +64,7 @@ export const WarehouseHeader: React.FC<WarehouseHeaderProps> = ({
 }) => {
   const tabs: { id: WarehouseTab; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
     { id: 'dashboard', label: 'Overview Dashboard', icon: LayoutDashboard },
-    { id: 'inventory', label: 'Central Stock & Batches', icon: Boxes, badge: lowStockCount || undefined },
+    { id: 'inventory', label: 'Master Inventory & Catalog', icon: Boxes, badge: lowStockCount || undefined },
     { id: 'store_stock', label: 'Individual Store Stock', icon: Store },
     { id: 'transfers', label: 'Transfers & In-Transit', icon: Truck, badge: inTransitCount || undefined },
     { id: 'purchases', label: 'Purchases & Suppliers', icon: FileSpreadsheet, badge: overdueBillsCount || undefined },
@@ -123,10 +125,20 @@ export const WarehouseHeader: React.FC<WarehouseHeaderProps> = ({
           </div>
 
           {/* Quick Action Trigger Buttons */}
+          {(subRole === 'admin' || subRole === 'warehouse_manager') && onOpenAddItem && (
+            <button
+              onClick={onOpenAddItem}
+              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Product</span>
+            </button>
+          )}
+
           {(subRole === 'admin' || subRole === 'purchase_manager') && (
             <button
               onClick={onOpenNewPO}
-              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+              className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New PO</span>

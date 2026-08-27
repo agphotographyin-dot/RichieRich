@@ -27,7 +27,6 @@ import { WarehouseLogin } from './components/auth/WarehouseLogin';
 
 // Admin views
 import { AdminDashboard } from './components/admin/AdminDashboard';
-import { AdminInventory } from './components/admin/AdminInventory';
 import { AdminStaffCounters } from './components/admin/AdminStaffCounters';
 import { AddItemModal } from './components/admin/AddItemModal';
 import { AdminAnalytics } from './components/admin/AdminAnalytics';
@@ -132,9 +131,15 @@ export const App: React.FC = () => {
 
     if (found) {
       if (currentRole === 'pos') {
+        // Dispatch custom global event so active POS Terminal immediately adds item to cart
+        window.dispatchEvent(
+          new CustomEvent('pos_barcode_scanned', {
+            detail: { barcode: code, item: found },
+          })
+        );
         storage.addNotification({
-          title: `Item Scanned: ${found.name}`,
-          message: `SKU: ${found.sku} • Stock: ${found.stockQuantity} ${found.unit} available`,
+          title: `Item Added to Cart: ${found.name}`,
+          message: `Barcode: ${found.barcode} • SKU: ${found.sku} • Stock: ${found.stockQuantity} ${found.unit} available`,
           type: 'order_update',
           targetRole: 'pos',
           read: false,
@@ -278,15 +283,6 @@ export const App: React.FC = () => {
                     onOpenAddItem={() => setIsAddItemOpen(true)}
                     onNavigateTab={handleAdminTabSelect}
                     onNavigateRole={(role) => navigateToRole(role)}
-                  />
-                )}
-
-                {activeAdminTab === 'inventory' && (
-                  <AdminInventory
-                    inventory={inventory}
-                    categories={categories}
-                    onOpenScanner={() => setIsScannerOpen(true)}
-                    onOpenAddItem={() => setIsAddItemOpen(true)}
                   />
                 )}
 

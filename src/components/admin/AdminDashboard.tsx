@@ -717,10 +717,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <p className="text-xs text-slate-500">Live on-hand balance and safety reorder health</p>
               </div>
               <button
-                onClick={() => onNavigateTab('inventory')}
+                onClick={() => (onNavigateRole ? onNavigateRole('warehouse') : onNavigateTab('dashboard'))}
                 className="text-xs text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1 cursor-pointer"
               >
-                <span>Full Inventory</span>
+                <span>Warehouse & Catalog Hub</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -900,10 +900,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </h3>
                 </div>
                 <button
-                  onClick={() => onNavigateTab('inventory')}
+                  onClick={() => (onNavigateRole ? onNavigateRole('warehouse') : onNavigateTab('dashboard'))}
                   className="text-xs text-amber-700 hover:underline font-bold cursor-pointer"
                 >
-                  Manage
+                  Manage in WH
                 </button>
               </div>
 
