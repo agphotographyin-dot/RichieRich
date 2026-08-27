@@ -22,6 +22,7 @@ import {
 } from '../../../types/warehouse';
 import { InventoryItem, StoreLocation } from '../../../types';
 import { CURRENCY } from '../../../services/storage';
+import { pdfReportService } from '../../../services/pdfReportService';
 
 interface WarehouseReportsViewProps {
   stats: WarehouseOverviewStats;
@@ -50,6 +51,25 @@ export const WarehouseReportsView: React.FC<WarehouseReportsViewProps> = ({
     window.print();
   };
 
+  const handleExportPDF = () => {
+    if (reportType === 'valuation') {
+      pdfReportService.exportWarehouseValuationPDF(inventory, stats);
+    } else if (reportType === 'suppliers') {
+      pdfReportService.exportSupplierOutstandingPDF(suppliers, stats);
+    } else if (reportType === 'health') {
+      pdfReportService.exportLowStockHealthPDF(inventory);
+    } else if (reportType === 'scrap') {
+      const logs = adjustments.map(a => ({
+        timestamp: a.createdAt,
+        action: `SCRAP / ADJUSTMENT (${a.type.toUpperCase()})`,
+        entity: `SKU: ${a.sku}`,
+        user: a.adjustedByName || 'Warehouse Staff',
+        details: `${a.quantityChange > 0 ? '+' : ''}${a.quantityChange} units | Reason: ${a.reason} | Cost Impact: Rs. ${a.totalCostImpact || 0}`,
+      }));
+      pdfReportService.exportAuditTrailPDF(logs);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Report Selection Header */}
@@ -66,11 +86,20 @@ export const WarehouseReportsView: React.FC<WarehouseReportsViewProps> = ({
 
         <div className="flex items-center gap-2">
           <button
+            onClick={handleExportPDF}
+            className="px-3.5 py-2 rounded-xl bg-linear-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white font-bold text-xs transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+            title="Download formatted audit PDF report"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export Report as PDF</span>
+          </button>
+
+          <button
             onClick={handlePrint}
-            className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-xs"
+            className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>Print Report</span>
+            <span>Print</span>
           </button>
         </div>
       </div>

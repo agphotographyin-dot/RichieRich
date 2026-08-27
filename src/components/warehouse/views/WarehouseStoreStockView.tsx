@@ -34,6 +34,7 @@ import { StoreLocation, InventoryItem } from '../../../types';
 import { Warehouse, StockTransfer } from '../../../types/warehouse';
 import { CURRENCY, storage } from '../../../services/storage';
 import { warehouseStorage } from '../../../services/warehouseStorage';
+import { pdfReportService } from '../../../services/pdfReportService';
 
 interface WarehouseStoreStockViewProps {
   stores: StoreLocation[];
@@ -292,6 +293,13 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
     document.body.removeChild(link);
   };
 
+  // Export Store Stock PDF Report
+  const handleExportPDF = () => {
+    if (currentStore) {
+      pdfReportService.exportStoreStockPDF(currentStore, inventory);
+    }
+  };
+
   // Print Inventory Sheet
   const handlePrint = () => {
     window.print();
@@ -509,11 +517,20 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
                 </button>
                 <button
                   type="button"
+                  onClick={handleExportPDF}
+                  title="Export Store Stock Audit PDF"
+                  className="px-3 py-2 rounded-xl bg-linear-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export PDF</span>
+                </button>
+                <button
+                  type="button"
                   onClick={handleExportCSV}
                   title="Export Store Stock CSV"
                   className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer"
                 >
-                  <Download className="w-4 h-4" />
+                  <FileSpreadsheet className="w-4 h-4" />
                 </button>
                 <button
                   type="button"

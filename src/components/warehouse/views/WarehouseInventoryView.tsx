@@ -41,6 +41,7 @@ import {
 import { InventoryItem, Category } from '../../../types';
 import { BatchRecord, Warehouse } from '../../../types/warehouse';
 import { CURRENCY, storage } from '../../../services/storage';
+import { pdfReportService } from '../../../services/pdfReportService';
 import { BarcodeVisualizer } from '../../common/BarcodeVisualizer';
 import { soundEffects } from '../../../services/audio';
 
@@ -190,6 +191,11 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
     setEditingItem(null);
   };
 
+  const handleExportPDF = () => {
+    pdfReportService.exportInventoryValuationPDF(inventory);
+    soundEffects.playClick();
+  };
+
   const handleExportCSV = () => {
     const csv = storage.exportMonthlyAnalyticalReportCSV();
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -247,11 +253,20 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
           )}
 
           <button
-            onClick={handleExportCSV}
-            className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            onClick={handleExportPDF}
+            className="px-3.5 py-2 bg-linear-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            title="Export master inventory catalog and valuation matrix as PDF"
           >
-            <Download className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Export CSV</span>
+            <Download className="w-3.5 h-3.5" />
+            <span>Export PDF Report</span>
+          </button>
+
+          <button
+            onClick={handleExportCSV}
+            className="px-2.5 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 text-xs font-bold rounded-xl flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
+            title="Export Raw CSV Data"
+          >
+            <span>CSV</span>
           </button>
 
           {onOpenAddItem && (

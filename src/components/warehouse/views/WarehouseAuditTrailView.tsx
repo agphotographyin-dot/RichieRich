@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { StockMovementAudit } from '../../../types/warehouse';
 import { CURRENCY } from '../../../services/storage';
+import { pdfReportService } from '../../../services/pdfReportService';
 
 interface WarehouseAuditTrailViewProps {
   auditTrail: StockMovementAudit[];
@@ -40,6 +41,17 @@ export const WarehouseAuditTrailView: React.FC<WarehouseAuditTrailViewProps> = (
     const matchesType = eventTypeFilter === 'all' || item.eventType === eventTypeFilter;
     return matchesSearch && matchesType;
   });
+
+  const handleExportPDF = () => {
+    const logs = filteredAudit.map(a => ({
+      timestamp: a.timestamp,
+      action: `${a.eventType.toUpperCase()} [${a.referenceNumber}]`,
+      entity: `${a.itemName} (${a.sku})`,
+      user: `${a.performedBy} (${a.userRole})`,
+      details: `${a.quantity} ${a.unit} | From: ${a.fromLocation} -> To: ${a.toLocation} | Val: Rs. ${a.totalValuation}`,
+    }));
+    pdfReportService.exportAuditTrailPDF(logs);
+  };
 
   const handleExportCSV = () => {
     const headers = 'ID,Timestamp,Event,Item,SKU,Batch,From,To,Qty,Unit,UnitCost,TotalVal,RefNo,User,Role\n';
@@ -72,13 +84,23 @@ export const WarehouseAuditTrailView: React.FC<WarehouseAuditTrailViewProps> = (
           </p>
         </div>
 
-        <button
-          onClick={handleExportCSV}
-          className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-xs"
-        >
-          <Download className="w-3.5 h-3.5 text-slate-600" />
-          <span>Export Audit Log (CSV)</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleExportPDF}
+            className="px-3.5 py-2 rounded-xl bg-linear-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white font-bold text-xs transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+            title="Download formatted audit PDF"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export PDF Audit</span>
+          </button>
+
+          <button
+            onClick={handleExportCSV}
+            className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+          >
+            <span>CSV</span>
+          </button>
+        </div>
       </div>
 
       {/* Event Filter Pills */}

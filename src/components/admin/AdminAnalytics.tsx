@@ -35,6 +35,7 @@ import {
 } from 'recharts';
 import { InventoryItem, Order, Customer, StoreFinancialStats, StoreOutlet } from '../../types';
 import { CURRENCY, storage } from '../../services/storage';
+import { pdfReportService } from '../../services/pdfReportService';
 
 interface AdminAnalyticsProps {
   inventory: InventoryItem[];
@@ -207,6 +208,11 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
     selling: item.sellingPrice,
   }));
 
+  const handleExportPDF = () => {
+    const storeLabel = selectedStoreId === 'all' ? 'All Outlets & Branches' : selectedStoreId;
+    pdfReportService.exportMonthlyAnalyticsPDF(selectedMonth, storeLabel);
+  };
+
   const handleExportCSV = () => {
     const csv = storage.exportMonthlyAnalyticalReportCSV();
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -248,11 +254,20 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
           </div>
 
           <button
-            onClick={handleExportCSV}
-            className="px-4 py-2 bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+            onClick={handleExportPDF}
+            className="px-4 py-2 bg-linear-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+            title="Export official performance report as PDF"
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-            <span>Export CSV</span>
+            <Download className="w-4 h-4" />
+            <span>Export PDF Report</span>
+          </button>
+
+          <button
+            onClick={handleExportCSV}
+            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 flex items-center gap-1 cursor-pointer transition-colors"
+            title="Download CSV Spreadsheet"
+          >
+            <span>CSV</span>
           </button>
         </div>
       </div>

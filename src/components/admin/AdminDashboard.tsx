@@ -42,6 +42,7 @@ import {
 import { InventoryItem, Order, Customer, StoreFinancialStats, AdminTab, UserRole, StoreLocation } from '../../types';
 import { CURRENCY, storage } from '../../services/storage';
 import { warehouseStorage } from '../../services/warehouseStorage';
+import { pdfReportService } from '../../services/pdfReportService';
 import { Warehouse, Supplier, PurchaseOrder, PurchaseBill, BatchRecord, StockTransfer } from '../../types/warehouse';
 import { CreatePOModal } from '../warehouse/modals/CreatePOModal';
 import { InwardBillModal } from '../warehouse/modals/InwardBillModal';
@@ -195,6 +196,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
   };
 
+  const handleExportPDF = () => {
+    const monthStr = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
+    const storeLabel = selectedStoreFilter === 'all' ? 'All Outlets' : stores.find(s => s.id === selectedStoreFilter)?.name || 'Store';
+    pdfReportService.exportMonthlyAnalyticsPDF(monthStr, storeLabel);
+  };
+
   const handleExportCSV = () => {
     const csvContent = storage.exportMonthlyAnalyticalReportCSV();
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -340,13 +347,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
 
           <button
+            id="btn-admin-export-pdf"
+            type="button"
+            onClick={handleExportPDF}
+            className="bg-linear-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+            title="Export full executive financial analytics report as PDF"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export PDF Report</span>
+          </button>
+
+          <button
             id="btn-admin-export-csv"
             type="button"
             onClick={handleExportCSV}
-            className="border border-slate-200 hover:bg-slate-50 active:scale-95 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+            className="border border-slate-200 hover:bg-slate-50 active:scale-95 text-slate-600 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+            title="Export Raw CSV Data"
           >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
-            <span>Export CSV</span>
+            <span>CSV</span>
           </button>
         </div>
       </div>
@@ -584,24 +602,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* ========================================================================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Today's Sales */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs">
+        <div 
+          onClick={() => onNavigateTab('orders')}
+          className="bg-white p-5 rounded-2xl border border-slate-200/90 hover:border-amber-400 hover:shadow-md transition-all shadow-xs cursor-pointer group"
+          title="Click to view Master Orders & Sales Ledger and Daily Collection Report"
+        >
           <div className="text-slate-500 text-xs font-bold uppercase mb-1 flex items-center justify-between">
-            <span>
+            <span className="group-hover:text-amber-900 transition-colors">
               {selectedStoreFilter === 'all' ? "Today's Total Sales" : "Store Sales Today"}
             </span>
-            <div className="p-1.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100">
+            <div className="p-1.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 group-hover:bg-amber-500 group-hover:text-white transition-colors">
               <DollarSign className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="text-2xl font-bold text-slate-900 font-mono">
             {CURRENCY}
             {(selectedStoreFilter === 'all'
-              ? globalStats.totalRevenue
+              ? orders.filter(o => o.createdAt.split('T')[0] === new Date().toISOString().split('T')[0]).reduce((s, o) => s + o.grandTotal, 0) || globalStats.totalRevenue
               : filteredOrders.reduce((sum, o) => sum + o.grandTotal, 0)
-            ).toLocaleString('en-IN')}
+            ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="text-emerald-600 text-xs font-bold mt-2 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" /> ↑ 18.4% vs yesterday
+          <div className="text-xs font-semibold text-amber-800 mt-2 flex items-center justify-between">
+            <span className="flex items-center gap-1 text-emerald-700">
+              <TrendingUp className="w-3 h-3" /> Live Collection Ledger
+            </span>
+            <span className="text-[10px] text-amber-700 underline font-bold group-hover:text-amber-900">
+              Open Ledger →
+            </span>
           </div>
         </div>
 

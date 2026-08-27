@@ -640,7 +640,15 @@ export const INITIAL_PROMOTIONS: Promotion[] = [
   },
 ];
 
-// Initial Recent Orders with full Store & Salesperson details
+// Helper to generate dynamic ISO timestamps for today and recent days
+const getRelativeDateISO = (daysAgo: number, hours: number, minutes: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  d.setHours(hours, minutes, 0, 0);
+  return d.toISOString();
+};
+
+// Initial Recent Orders with full Store & Salesperson details and mixed payment methods
 export const INITIAL_ORDERS: Order[] = [
   {
     id: 'ord-1001',
@@ -670,7 +678,7 @@ export const INITIAL_ORDERS: Order[] = [
     paymentMethod: 'upi_qr',
     paymentStatus: 'paid',
     status: 'completed',
-    createdAt: '2026-08-22T06:15:00.000Z',
+    createdAt: getRelativeDateISO(0, 9, 30), // Today 09:30 AM
   },
   {
     id: 'ord-1002',
@@ -696,8 +704,8 @@ export const INITIAL_ORDERS: Order[] = [
     totalProfit: 272.5,
     paymentMethod: 'card',
     paymentStatus: 'paid',
-    status: 'preparing',
-    createdAt: '2026-08-22T06:45:00.000Z',
+    status: 'completed',
+    createdAt: getRelativeDateISO(0, 10, 45), // Today 10:45 AM
     notes: 'Please pack in insulated cool pouch.',
     cashierName: 'Online Direct App',
   },
@@ -729,7 +737,7 @@ export const INITIAL_ORDERS: Order[] = [
     paymentMethod: 'cash',
     paymentStatus: 'paid',
     status: 'completed',
-    createdAt: '2026-08-22T07:20:00.000Z',
+    createdAt: getRelativeDateISO(0, 11, 20), // Today 11:20 AM
   },
   {
     id: 'ord-1004',
@@ -757,7 +765,7 @@ export const INITIAL_ORDERS: Order[] = [
     paymentMethod: 'upi_qr',
     paymentStatus: 'paid',
     status: 'completed',
-    createdAt: '2026-08-22T07:45:00.000Z',
+    createdAt: getRelativeDateISO(0, 13, 10), // Today 01:10 PM
   },
   {
     id: 'ord-1005',
@@ -786,7 +794,146 @@ export const INITIAL_ORDERS: Order[] = [
     paymentMethod: 'card',
     paymentStatus: 'paid',
     status: 'completed',
-    createdAt: '2026-08-22T08:10:00.000Z',
+    createdAt: getRelativeDateISO(0, 14, 45), // Today 02:45 PM
+  },
+  {
+    id: 'ord-1006',
+    orderNumber: 'RR-2026-1006',
+    source: 'pos_counter',
+    storeId: 'gota',
+    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
+    counterNumber: 2,
+    counterName: 'Counter 2 (Beverages & Shakes)',
+    cashierName: 'Jayesh Patel',
+    customerName: 'Ananya Desai',
+    customerPhone: '9879512345',
+    items: [
+      { itemId: 'item-302', name: 'Belgian Chocolate Thick Shake', sku: 'SHK-CHO-02', price: 140, costPrice: 50, quantity: 2, subtotal: 280, profit: 180, isTaxApplicable: true, taxRate: 5 },
+      { itemId: 'item-103', name: 'Silver Coated Navratan Sweet Paan', sku: 'PAN-NAV-03', price: 80, costPrice: 30, quantity: 2, subtotal: 160, profit: 100, isTaxApplicable: true, taxRate: 5 },
+    ],
+    subtotal: 440,
+    discountAmount: 0,
+    loyaltyPointsUsed: 0,
+    loyaltyPointsEarned: 44,
+    taxAmount: 22.0,
+    grandTotal: 462.0,
+    totalCost: 160,
+    totalProfit: 302.0,
+    paymentMethod: 'cash',
+    paymentStatus: 'paid',
+    status: 'completed',
+    createdAt: getRelativeDateISO(0, 15, 30), // Today 03:30 PM
+  },
+  {
+    id: 'ord-1007',
+    orderNumber: 'RR-2026-1007',
+    source: 'pos_counter',
+    storeId: 'bopal',
+    storeName: 'Richie Rich Pan House - Bopal Branch',
+    counterNumber: 1,
+    counterName: 'Counter 1 (Main Billing)',
+    cashierName: 'Karan Patel',
+    customerName: 'Nikhil Trivedi',
+    customerPhone: '9426011223',
+    items: [
+      { itemId: 'item-101', name: 'Royal Maghai Meetha Paan', sku: 'PAN-MAG-01', price: 50, costPrice: 20, quantity: 4, subtotal: 200, profit: 120, isTaxApplicable: true, taxRate: 5 },
+      { itemId: 'item-cof-1', name: 'Royal Dark Roast Espresso Double Shot', sku: 'COF-ESP-01', price: 60, costPrice: 20, quantity: 2, subtotal: 120, profit: 80, isTaxApplicable: true, taxRate: 5 },
+    ],
+    subtotal: 320,
+    discountAmount: 20,
+    appliedPromoCode: 'ROYALPAN20',
+    loyaltyPointsUsed: 0,
+    loyaltyPointsEarned: 30,
+    taxAmount: 15.0,
+    grandTotal: 315.0,
+    totalCost: 120,
+    totalProfit: 195.0,
+    paymentMethod: 'upi_qr',
+    paymentStatus: 'paid',
+    status: 'completed',
+    createdAt: getRelativeDateISO(0, 16, 15), // Today 04:15 PM
+  },
+  {
+    id: 'ord-1008',
+    orderNumber: 'RR-2026-1008',
+    source: 'pos_counter',
+    storeId: 'sindhubhavan',
+    storeName: 'Richie Rich Pan & Espresso Lounge - Sindhubhavan Road',
+    counterNumber: 1,
+    counterName: 'Counter 1 (VIP Pan Lounge)',
+    cashierName: 'Pritesh Dave',
+    customerName: 'Sunil Mittal',
+    customerPhone: '9712988334',
+    items: [
+      { itemId: 'item-401', name: 'Handcrafted Paan Ganache Dark Truffles (Box of 6)', sku: 'CHO-TRU-01', price: 260, costPrice: 110, quantity: 2, subtotal: 520, profit: 300, isTaxApplicable: true, taxRate: 18 },
+    ],
+    subtotal: 520,
+    discountAmount: 0,
+    loyaltyPointsUsed: 0,
+    loyaltyPointsEarned: 52,
+    taxAmount: 93.6,
+    grandTotal: 613.6,
+    totalCost: 220,
+    totalProfit: 393.6,
+    paymentMethod: 'cash',
+    paymentStatus: 'paid',
+    status: 'completed',
+    createdAt: getRelativeDateISO(0, 17, 0), // Today 05:00 PM
+  },
+  {
+    id: 'ord-1009',
+    orderNumber: 'RR-2026-1009',
+    source: 'pos_counter',
+    storeId: 'gota',
+    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
+    counterNumber: 1,
+    counterName: 'Counter 1 (Royal Paan Special)',
+    cashierName: 'Mahesh Solanki',
+    customerName: 'Rohan Mehra',
+    customerPhone: '9925044556',
+    items: [
+      { itemId: 'item-102', name: 'Signature Chocolate Fire Paan', sku: 'PAN-FIR-02', price: 110, costPrice: 45, quantity: 3, subtotal: 330, profit: 195, isTaxApplicable: true, taxRate: 5 },
+      { itemId: 'item-cof-2', name: 'Richie Rich Chilled Hazelnut Cold Coffee (350ml)', sku: 'COF-CLD-02', price: 120, costPrice: 45, quantity: 1, subtotal: 120, profit: 75, isTaxApplicable: true, taxRate: 5 },
+    ],
+    subtotal: 450,
+    discountAmount: 0,
+    loyaltyPointsUsed: 0,
+    loyaltyPointsEarned: 45,
+    taxAmount: 22.5,
+    grandTotal: 472.5,
+    totalCost: 180,
+    totalProfit: 292.5,
+    paymentMethod: 'card',
+    paymentStatus: 'paid',
+    status: 'completed',
+    createdAt: getRelativeDateISO(1, 19, 20), // Yesterday
+  },
+  {
+    id: 'ord-1010',
+    orderNumber: 'RR-2026-1010',
+    source: 'pos_counter',
+    storeId: 'sg_highway',
+    storeName: 'Richie Rich Express Drive-Thru - SG Highway',
+    counterNumber: 1,
+    counterName: 'Counter 1 (Express Highway Window)',
+    cashierName: 'Vikram Rajput',
+    customerName: 'Chirag Vyas',
+    customerPhone: '9879022334',
+    items: [
+      { itemId: 'item-201', name: 'Royal Rajwadi Shahi Mukhwas (200g Jar)', sku: 'MUK-RAJ-01', price: 180, costPrice: 90, quantity: 2, subtotal: 360, profit: 180, isTaxApplicable: true, taxRate: 12 },
+    ],
+    subtotal: 360,
+    discountAmount: 0,
+    loyaltyPointsUsed: 0,
+    loyaltyPointsEarned: 36,
+    taxAmount: 43.2,
+    grandTotal: 403.2,
+    totalCost: 180,
+    totalProfit: 223.2,
+    paymentMethod: 'cash',
+    paymentStatus: 'paid',
+    status: 'completed',
+    createdAt: getRelativeDateISO(2, 18, 10), // 2 days ago
   },
 ];
 
@@ -1888,6 +2035,65 @@ export class StorageService {
     orders.forEach((o) => {
       const itemCount = o.items.reduce((s, i) => s + i.quantity, 0);
       csv += `"${o.orderNumber}","${o.createdAt.split('T')[0]}","${o.source}","${o.customerName || 'Walk-in'}",${itemCount},${o.subtotal},${o.discountAmount},${o.grandTotal},${o.totalCost},${o.totalProfit},"${o.paymentMethod}","${o.status}"\n`;
+    });
+
+    return csv;
+  }
+
+  exportDailyCollectionReportCSV(selectedDate?: string, storeId?: string): string {
+    const orders = this.getOrders();
+    const targetDate = selectedDate || new Date().toISOString().split('T')[0];
+    
+    // Filter orders by date & optional store
+    const dayOrders = orders.filter((o) => {
+      const orderDate = o.createdAt.split('T')[0];
+      const matchesDate = orderDate === targetDate;
+      const matchesStore = !storeId || storeId === 'all' || o.storeId === storeId;
+      return matchesDate && matchesStore;
+    });
+
+    const cashOrders = dayOrders.filter((o) => o.paymentMethod === 'cash');
+    const upiOrders = dayOrders.filter((o) => o.paymentMethod === 'upi_qr');
+    const cardOrders = dayOrders.filter((o) => o.paymentMethod === 'card');
+    const otherOrders = dayOrders.filter((o) => !['cash', 'upi_qr', 'card'].includes(o.paymentMethod));
+
+    const totalSales = dayOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+    const totalCash = cashOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+    const totalUPI = upiOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+    const totalCard = cardOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+    const totalOther = otherOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+    const totalTax = dayOrders.reduce((sum, o) => sum + o.taxAmount, 0);
+    const totalProfit = dayOrders.reduce((sum, o) => sum + o.totalProfit, 0);
+
+    let csv = `RICHIE RICH PAN HOUSE - DAILY SALES & COLLECTION RECONCILIATION REPORT\n`;
+    csv += `Audit Date,${targetDate}\n`;
+    csv += `Store Filter,${storeId && storeId !== 'all' ? storeId.toUpperCase() : 'ALL STORES & OUTLETS'}\n`;
+    csv += `Currency,${CURRENCY} (INR)\n`;
+    csv += `Generated Timestamp,${new Date().toISOString()}\n\n`;
+
+    csv += `EXECUTIVE DAILY COLLECTION SUMMARY\n`;
+    csv += `Payment Method,Total Amount (${CURRENCY}),Transaction Count,Share of Total (%)\n`;
+    csv += `ONLY CASH,${totalCash.toFixed(2)},${cashOrders.length},${totalSales > 0 ? ((totalCash / totalSales) * 100).toFixed(1) : 0}%\n`;
+    csv += `ONLY UPI (QR / PhonePe / GPay),${totalUPI.toFixed(2)},${upiOrders.length},${totalSales > 0 ? ((totalUPI / totalSales) * 100).toFixed(1) : 0}%\n`;
+    csv += `ONLY CARD (POS Swipe / Tap),${totalCard.toFixed(2)},${cardOrders.length},${totalSales > 0 ? ((totalCard / totalSales) * 100).toFixed(1) : 0}%\n`;
+    if (otherOrders.length > 0) {
+      csv += `LOYALTY / OTHER,${totalOther.toFixed(2)},${otherOrders.length},${totalSales > 0 ? ((totalOther / totalSales) * 100).toFixed(1) : 0}%\n`;
+    }
+    csv += `TOTAL SALE TODAY / DAY REVENUE,${totalSales.toFixed(2)},${dayOrders.length},100.0%\n\n`;
+
+    csv += `FINANCIAL BREAKDOWN\n`;
+    csv += `Gross Daily Sales,${CURRENCY}${totalSales.toFixed(2)}\n`;
+    csv += `Total Tax Collected (GST),${CURRENCY}${totalTax.toFixed(2)}\n`;
+    csv += `Estimated Gross Profit,${CURRENCY}${totalProfit.toFixed(2)}\n`;
+    csv += `Average Ticket Size,${CURRENCY}${dayOrders.length > 0 ? (totalSales / dayOrders.length).toFixed(2) : '0.00'}\n\n`;
+
+    csv += `TRANSACTION REGISTER LOG FOR ${targetDate}\n`;
+    csv += `Order #,Time,Store,Counter,Cashier,Customer,Payment Mode,Items Qty,Subtotal,Discount,Tax,Grand Total,Profit,Status\n`;
+
+    dayOrders.forEach((o) => {
+      const timeStr = new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const qty = o.items.reduce((s, i) => s + i.quantity, 0);
+      csv += `"${o.orderNumber}","${timeStr}","${o.storeName || 'Main'}","${o.counterName || o.counterNumber || 1}","${o.cashierName || 'Staff'}","${o.customerName || 'Walk-in'}","${o.paymentMethod.toUpperCase()}",${qty},${o.subtotal.toFixed(2)},${o.discountAmount.toFixed(2)},${o.taxAmount.toFixed(2)},${o.grandTotal.toFixed(2)},${o.totalProfit.toFixed(2)},"${o.status}"\n`;
     });
 
     return csv;
