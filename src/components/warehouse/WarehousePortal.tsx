@@ -71,6 +71,7 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
   // Modal visibility states
   const [isPOModalOpen, setIsPOModalOpen] = useState(false);
   const [isInwardModalOpen, setIsInwardModalOpen] = useState(false);
+  const [inwardInitialPO, setInwardInitialPO] = useState<PurchaseOrder | null>(null);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferInitialData, setTransferInitialData] = useState<Partial<StockTransfer> | null>(null);
   const [isIndentModalOpen, setIsIndentModalOpen] = useState(false);
@@ -231,7 +232,10 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           warehouses={warehouses}
           searchQuery={searchQuery}
           onOpenNewPO={() => setIsPOModalOpen(true)}
-          onOpenInwardBill={() => setIsInwardModalOpen(true)}
+          onOpenInwardBill={(po) => {
+            setInwardInitialPO(po || null);
+            setIsInwardModalOpen(true);
+          }}
           onOpenRecordPayment={(supId) => {
             setSelectedSupplierForPayment(supId);
             setIsPaymentModalOpen(true);
@@ -292,10 +296,15 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
 
       <InwardBillModal
         isOpen={isInwardModalOpen}
-        onClose={() => setIsInwardModalOpen(false)}
+        onClose={() => {
+          setIsInwardModalOpen(false);
+          setInwardInitialPO(null);
+        }}
         suppliers={suppliers}
         warehouses={warehouses}
         inventory={inventory}
+        purchaseOrders={purchaseOrders}
+        initialPO={inwardInitialPO}
         onSuccess={loadData}
       />
 

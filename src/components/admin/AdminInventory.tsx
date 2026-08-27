@@ -21,16 +21,20 @@ import {
   Upload,
   Check,
   X,
+  Barcode as BarcodeIcon,
+  QrCode,
 } from 'lucide-react';
 import { InventoryItem, Category } from '../../types';
 import { CURRENCY, storage } from '../../services/storage';
 import { BarcodeVisualizer } from '../common/BarcodeVisualizer';
+import { RegisterBarcodeModal } from './RegisterBarcodeModal';
 
 interface AdminInventoryProps {
   inventory: InventoryItem[];
   categories: Category[];
   onOpenScanner: () => void;
-  onOpenAddItemModal: () => void;
+  onOpenAddItemModal?: () => void;
+  onOpenAddItem?: () => void;
 }
 
 const SAMPLE_PHOTO_PRESETS = [
@@ -47,12 +51,16 @@ export const AdminInventory: React.FC<AdminInventoryProps> = ({
   categories,
   onOpenScanner,
   onOpenAddItemModal,
+  onOpenAddItem,
 }) => {
+  const handleOpenAddItem = onOpenAddItemModal || onOpenAddItem || (() => {});
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'low_stock' | 'out_of_stock' | 'high_margin' | 'tax_exempt'>('all');
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [printingLabelItem, setPrintingLabelItem] = useState<InventoryItem | null>(null);
+  const [isRegisterBarcodeOpen, setIsRegisterBarcodeOpen] = useState(false);
+  const [registerBarcodeTargetItem, setRegisterBarcodeTargetItem] = useState<InventoryItem | null>(null);
   const [sortBy, setSortBy] = useState<'name' | 'stock' | 'profit' | 'margin'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
@@ -169,6 +177,17 @@ export const AdminInventory: React.FC<AdminInventoryProps> = ({
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
+            onClick={() => {
+              setRegisterBarcodeTargetItem(null);
+              setIsRegisterBarcodeOpen(true);
+            }}
+            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-xs border border-amber-400"
+          >
+            <BarcodeIcon className="w-4 h-4" />
+            <span>Register Product Barcode</span>
+          </button>
+
+          <button
             onClick={onOpenScanner}
             className="px-3.5 py-2 bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
           >
@@ -185,8 +204,8 @@ export const AdminInventory: React.FC<AdminInventoryProps> = ({
           </button>
 
           <button
-            onClick={onOpenAddItemModal}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            onClick={handleOpenAddItem}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add New Item</span>
@@ -454,6 +473,16 @@ export const AdminInventory: React.FC<AdminInventoryProps> = ({
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => {
+                              setRegisterBarcodeTargetItem(item);
+                              setIsRegisterBarcodeOpen(true);
+                            }}
+                            title="Register / Change Product Barcode"
+                            className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:text-amber-900 hover:bg-amber-100 transition-colors cursor-pointer border border-amber-200"
+                          >
+                            <BarcodeIcon className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             onClick={() => setPrintingLabelItem(item)}
                             title="Print Label"
@@ -874,6 +903,20 @@ export const AdminInventory: React.FC<AdminInventoryProps> = ({
           </div>
         </div>
       )}
+
+      {/* Register Barcode Modal */}
+      <RegisterBarcodeModal
+        isOpen={isRegisterBarcodeOpen}
+        onClose={() => {
+          setIsRegisterBarcodeOpen(false);
+          setRegisterBarcodeTargetItem(null);
+        }}
+        inventory={inventory}
+        preselectedItem={registerBarcodeTargetItem}
+        onBarcodeRegistered={(item, newBarcode) => {
+          // Handled via storage notify, state updates automatically
+        }}
+      />
     </div>
   );
 };

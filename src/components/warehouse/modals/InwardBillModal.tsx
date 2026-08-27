@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { X, Plus, Trash2, PackagePlus, Building2, Calendar, FileText } from 'lucide-react';
-import { Supplier, Warehouse, PurchaseBillItem } from '../../../types/warehouse';
+import React, { useState, useEffect } from 'react';
+import { X, Plus, Trash2, PackagePlus, Building2, Calendar, FileText, Link2, CheckCircle2 } from 'lucide-react';
+import { Supplier, Warehouse, PurchaseBillItem, PurchaseOrder } from '../../../types/warehouse';
 import { InventoryItem } from '../../../types';
 import { CURRENCY } from '../../../services/storage';
 import { warehouseStorage } from '../../../services/warehouseStorage';
@@ -12,6 +12,8 @@ interface InwardBillModalProps {
   suppliers: Supplier[];
   warehouses: Warehouse[];
   inventory: InventoryItem[];
+  purchaseOrders?: PurchaseOrder[];
+  initialPO?: PurchaseOrder | null;
   onSuccess: () => void;
 }
 
@@ -21,6 +23,8 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
   suppliers,
   warehouses,
   inventory,
+  purchaseOrders = [],
+  initialPO = null,
   onSuccess,
 }) => {
   if (!isOpen) return null;
@@ -30,11 +34,14 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
     name: 'Richie Rich Central Master Warehouse (Ahmedabad Hub)',
   };
 
-  const [supplierId, setSupplierId] = useState(suppliers[0]?.id || '');
+  const [selectedPoId, setSelectedPoId] = useState<string>(initialPO?.id || '');
+  const [supplierId, setSupplierId] = useState(initialPO?.supplierId || suppliers[0]?.id || '');
   const [invoiceNo, setInvoiceNo] = useState(`INV-${Date.now().toString().slice(-6)}`);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMode, setPaymentMode] = useState<'credit_payable' | 'cash' | 'bank_neft' | 'upi_qr'>('credit_payable');
   const [notes, setNotes] = useState('');
+  const [includeGst, setIncludeGst] = useState<boolean>(initialPO ? (initialPO.taxTotal > 0) : false);
+  const [taxPercent, setTaxPercent] = useState<number>(initialPO?.items[0]?.taxPercent || 5);
 
   const [items, setItems] = useState<
     Array<{
@@ -49,20 +56,70 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
       mfgDate: string;
       expiryDate: string;
     }>
-  >([
-    {
-      itemId: inventory[0]?.id || 'item-101',
-      name: inventory[0]?.name || 'Royal Maghai Meetha Paan',
-      sku: inventory[0]?.sku || 'PAN-MAG-01',
-      category: inventory[0]?.category || 'Paan',
-      quantity: 100,
-      unitCost: inventory[0]?.costPrice || 20,
-      unit: inventory[0]?.unit || 'pieces',
-      batchNumber: `BATCH-${Date.now().toString().slice(-4)}`,
-      mfgDate: new Date().toISOString().split('T')[0],
-      expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    },
-  ]);
+  >(() => {
+    if (initialPO && initialPO.items && initialPO.items.length > 0) {
+      return initialPO.items.map((it, idx) => ({
+        itemId: it.itemId,
+        name: it.name,
+        sku: it.sku,
+        category: it.category || 'Paan',
+        quantity: it.quantityOrdered, // Exact ordered units (e.g. 50 units)
+        unitCost: it.unitPrice,
+        unit: it.unit || 'pieces',
+        batchNumber: `BATCH-${it.sku ? it.sku.slice(0, 4) : 'PAN'}-${Date.now().toString().slice(-4)}`,
+        mfgDate: new Date().toISOString().split('T')[0],
+        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      }));
+    }
+    return [
+      {
+        itemId: inventory[0]?.id || 'item-101',
+        name: inventory[0]?.name || 'Royal Maghai Meetha Paan',
+        sku: inventory[0]?.sku || 'PAN-MAG-01',
+        category: inventory[0]?.category || 'Paan',
+        quantity: 50,
+        unitCost: inventory[0]?.costPrice || 20,
+        unit: inventory[0]?.unit || 'pieces',
+        batchNumber: `BATCH-${Date.now().toString().slice(-4)}`,
+        mfgDate: new Date().toISOString().split('T')[0],
+        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      },
+    ];
+  });
+
+  // Handle PO selection change to load exact ordered items & units
+  const handleSelectPO = (poId: string) => {
+    setSelectedPoId(poId);
+    if (!poId) return;
+
+    const po = purchaseOrders.find((p) => p.id === poId);
+    if (po) {
+      if (po.supplierId) setSupplierId(po.supplierId);
+      if (po.taxTotal > 0) {
+        setIncludeGst(true);
+        setTaxPercent(po.items[0]?.taxPercent || 5);
+      } else {
+        setIncludeGst(false);
+      }
+
+      if (po.items && po.items.length > 0) {
+        setItems(
+          po.items.map((it, idx) => ({
+            itemId: it.itemId,
+            name: it.name,
+            sku: it.sku,
+            category: it.category || 'Paan',
+            quantity: it.quantityOrdered, // Exact ordered units
+            unitCost: it.unitPrice,
+            unit: it.unit || 'pieces',
+            batchNumber: `BATCH-${it.sku ? it.sku.slice(0, 4) : 'PAN'}-${Date.now().toString().slice(-4)}`,
+            mfgDate: new Date().toISOString().split('T')[0],
+            expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          }))
+        );
+      }
+    }
+  };
 
   const handleAddItem = () => {
     const defaultItem = inventory[0] || {
@@ -100,11 +157,11 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
     const next = [...items];
     next[index] = {
       ...next[index],
-      itemId: selected.itemId,
+      itemId: selected.itemId || selected.id || next[index].itemId,
       name: selected.name,
-      sku: selected.sku,
+      sku: selected.sku || next[index].sku,
       category: selected.category || 'Paan',
-      unitCost: selected.costPrice || selected.unitPrice || 20,
+      unitCost: selected.costPrice !== undefined ? selected.costPrice : (selected.unitPrice || next[index].unitCost),
       unit: selected.unit || 'pieces',
     };
     setItems(next);
@@ -116,8 +173,9 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
     setItems(next);
   };
 
-  const subTotal = items.reduce((sum, it) => sum + it.quantity * it.unitCost, 0);
-  const gstAmount = Math.round(subTotal * 0.05);
+  const subTotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitCost) || 0), 0);
+  const activeTaxRate = includeGst ? taxPercent : 0;
+  const gstAmount = Math.round(subTotal * (activeTaxRate / 100));
   const grandTotal = subTotal + gstAmount;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -125,17 +183,19 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
     const selectedSupplier = suppliers.find((s) => s.id === supplierId);
 
     const billItems: PurchaseBillItem[] = items.map((it) => {
-      const totalAmount = it.quantity * it.unitCost;
-      const gst = Math.round(totalAmount * 0.05);
+      const qty = Number(it.quantity) || 1;
+      const unitCost = Number(it.unitCost) || 0;
+      const totalAmount = qty * unitCost;
+      const gst = includeGst ? Math.round(totalAmount * (activeTaxRate / 100)) : 0;
       return {
         itemId: it.itemId,
         sku: it.sku,
         name: it.name,
         category: it.category,
-        quantity: it.quantity,
-        unitCost: it.unitCost,
+        quantity: qty,
+        unitCost: unitCost,
         unit: it.unit,
-        taxRate: 5,
+        taxRate: activeTaxRate,
         taxAmount: gst,
         totalCost: totalAmount + gst,
         batchNumber: it.batchNumber || `BATCH-${Date.now().toString().slice(-4)}`,
@@ -152,16 +212,17 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
       supplierInvoiceNo: invoiceNo,
       billDate: invoiceDate,
       receivedDate: new Date().toISOString().split('T')[0],
+      poReferenceId: selectedPoId || undefined,
       items: billItems,
       subtotal: subTotal,
       gstAmount,
       freightCharges: 0,
       roundOff: 0,
       grandTotal,
-      paidAmount: paymentMode === 'immediate' ? grandTotal : 0,
-      dueAmount: paymentMode === 'immediate' ? 0 : grandTotal,
+      paidAmount: paymentMode === 'cash' || paymentMode === 'bank_neft' || paymentMode === 'upi_qr' ? grandTotal : 0,
+      dueAmount: paymentMode === 'credit_payable' ? grandTotal : 0,
       dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      paymentStatus: paymentMode === 'immediate' ? 'paid' : 'due',
+      paymentStatus: paymentMode === 'credit_payable' ? 'due' : 'paid',
       grnStatus: 'verified_stocked',
       receivedBy: 'Warehouse Inward Officer',
       notes,
@@ -189,6 +250,34 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+          {/* PO Linking Bar */}
+          <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Link2 className="w-4 h-4 text-emerald-700 shrink-0" />
+              <div>
+                <span className="text-xs font-bold text-emerald-950 uppercase tracking-tight block">
+                  Link to Approved Purchase Order (PO)
+                </span>
+                <span className="text-[11px] text-emerald-800">
+                  Auto-fills exact ordered items, quantities & prices
+                </span>
+              </div>
+            </div>
+
+            <select
+              value={selectedPoId}
+              onChange={(e) => handleSelectPO(e.target.value)}
+              className="px-3 py-1.5 bg-white border border-emerald-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="">-- Direct Inward (Without PO) --</option>
+              {purchaseOrders.map((po) => (
+                <option key={po.id} value={po.id}>
+                  {po.poNumber} • {po.supplierName} ({CURRENCY}{po.grandTotal.toLocaleString('en-IN')}) [{po.status.toUpperCase()}]
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Supplier, Single Warehouse & Invoice info */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
@@ -202,7 +291,7 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
               >
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}
+                    {s.name} ({s.category})
                   </option>
                 ))}
               </select>
@@ -271,7 +360,7 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
                   Inward Stock & Batch Details
                 </span>
                 <span className="block text-[11px] text-slate-500 font-normal">
-                  Type item name (history suggestions appear automatically)
+                  Quantities and unit costs match the verified physical delivery
                 </span>
               </div>
               <button
@@ -313,7 +402,7 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
                         placeholder="Qty"
                         value={row.quantity}
                         onChange={(e) => handleFieldChange(idx, 'quantity', parseInt(e.target.value) || 1)}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-center font-bold"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-center font-bold text-slate-900"
                       />
                     </div>
 
@@ -327,13 +416,13 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
                         placeholder="Cost"
                         value={row.unitCost}
                         onChange={(e) => handleFieldChange(idx, 'unitCost', parseFloat(e.target.value) || 0)}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-right"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-right font-bold text-slate-900"
                       />
                     </div>
 
                     <div className="sm:col-span-2 flex items-center justify-between sm:justify-end gap-2 pt-3 sm:pt-0">
                       <div className="text-right font-mono text-xs font-bold text-slate-800">
-                        {CURRENCY}{(row.quantity * row.unitCost).toLocaleString('en-IN')}
+                        {CURRENCY}{((Number(row.quantity) || 0) * (Number(row.unitCost) || 0)).toLocaleString('en-IN')}
                       </div>
 
                       {items.length > 1 && (
@@ -384,11 +473,48 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
             </div>
           </div>
 
+          {/* Optional GST Section */}
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5">
+              <input
+                type="checkbox"
+                id="includeGstInward"
+                checked={includeGst}
+                onChange={(e) => setIncludeGst(e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer"
+              />
+              <label htmlFor="includeGstInward" className="font-semibold text-slate-800 cursor-pointer select-none">
+                Apply GST / Tax (Optional)
+              </label>
+            </div>
+
+            {includeGst && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 text-[11px] font-semibold">GST Rate:</span>
+                <select
+                  value={taxPercent}
+                  onChange={(e) => setTaxPercent(Number(e.target.value))}
+                  className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value={5}>5% GST (Standard Food/Pan)</option>
+                  <option value={12}>12% GST</option>
+                  <option value={18}>18% GST (Essentials/Packaging)</option>
+                  <option value={28}>28% GST</option>
+                </select>
+              </div>
+            )}
+          </div>
+
           {/* Valuation Summary Box */}
-          <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-100 flex items-center justify-between text-xs font-mono">
-            <span className="font-sans font-semibold text-slate-700">
-              Taxable: {CURRENCY}{subTotal.toLocaleString('en-IN')} + 5% GST: {CURRENCY}{gstAmount.toLocaleString('en-IN')}
-            </span>
+          <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+            <div className="font-sans text-slate-700 space-x-2">
+              <span>Taxable Subtotal: <strong>{CURRENCY}{subTotal.toLocaleString('en-IN')}</strong></span>
+              {includeGst ? (
+                <span className="text-emerald-700 font-semibold">• GST ({taxPercent}%): {CURRENCY}{gstAmount.toLocaleString('en-IN')}</span>
+              ) : (
+                <span className="text-slate-500 font-medium">• (No GST Applied)</span>
+              )}
+            </div>
             <span className="text-sm font-extrabold text-emerald-950">
               Total Inward Bill: {CURRENCY}{grandTotal.toLocaleString('en-IN')}
             </span>
@@ -413,13 +539,13 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2"
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer"
             >
               <PackagePlus className="w-4 h-4" />
               <span>Record Inward Stock & Post Bill</span>

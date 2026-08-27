@@ -1,7 +1,24 @@
-import React, { useState } from 'react';
-import { X, Plus, Package, Sparkles, Image as ImageIcon, Trash2, Upload, Check, Percent, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  X,
+  Plus,
+  Package,
+  Sparkles,
+  Image as ImageIcon,
+  Trash2,
+  Upload,
+  Check,
+  Percent,
+  Scan,
+  Camera,
+  CheckCircle,
+  Barcode as BarcodeIcon,
+} from 'lucide-react';
 import { Category, InventoryItem } from '../../types';
 import { CURRENCY, storage } from '../../services/storage';
+import { soundEffects } from '../../services/audio';
+import { BarcodeVisualizer } from '../common/BarcodeVisualizer';
+import { Html5Qrcode } from 'html5-qrcode';
 
 interface AddItemModalProps {
   isOpen: boolean;
@@ -34,17 +51,89 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
   const [lowStockThreshold, setLowStockThreshold] = useState<number>(10);
   const [unit, setUnit] = useState('pieces');
   const [imageUrl, setImageUrl] = useState('https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&auto=format&fit=crop&q=80');
-  const [isTaxApplicable, setIsTaxApplicable] = useState<boolean>(true); // User request: Is tax on bill applicable or not
-  const [taxRate, setTaxRate] = useState<number>(5); // User request: if GST applicable then percentage of it
+  const [isTaxApplicable, setIsTaxApplicable] = useState<boolean>(true);
+  const [taxRate, setTaxRate] = useState<number>(5);
   const [ingredientsText, setIngredientsText] = useState('Betel Leaf, Gulkand, Cardamom, Dry Fruits');
+  const [isCameraScanning, setIsCameraScanning] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
-  if (!isOpen) return null;
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerElementId = 'add-item-camera-scanner-view';
+
+  // Initialize or reset state whenever modal is opened
+  useEffect(() => {
+    if (isOpen) {
+      const defaultCat = categories[0]?.id || 'Paan';
+      const randomSuffix = Math.floor(100 + Math.random() * 900);
+      const prefix = defaultCat.slice(0, 3).toUpperCase();
+      
+      setName('');
+      setCategory(defaultCat);
+      setSku(`${prefix}-${randomSuffix}`);
+      setBarcode(`890100${randomSuffix}${Math.floor(10 + Math.random() * 90)}`);
+      setDescription('');
+      setCostPrice(30);
+      setSellingPrice(70);
+      setStockQuantity(25);
+      setLowStockThreshold(10);
+      setUnit('pieces');
+      setImageUrl('https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&auto=format&fit=crop&q=80');
+      setIsTaxApplicable(true);
+      setTaxRate(5);
+      setIngredientsText('Betel Leaf, Gulkand, Cardamom, Dry Fruits');
+      setIsCameraScanning(false);
+      setCameraError(null);
+    } else {
+      stopCamera();
+    }
+  }, [isOpen, categories]);
 
   const autoGenerateSkuBarcode = () => {
-    const randomSuffix = Math.floor(100 + Math.random() * 900);
-    const prefix = category.slice(0, 3).toUpperCase();
-    setSku(`${prefix}-${randomSuffix}`);
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const prefix = (category || 'ITEM').slice(0, 3).toUpperCase();
+    setSku(`${prefix}-${randomSuffix.toString().slice(-3)}`);
     setBarcode(`890100${randomSuffix}`);
+    soundEffects.playClick();
+  };
+
+  const startCamera = async () => {
+    setCameraError(null);
+    try {
+      if (!scannerRef.current) {
+        scannerRef.current = new Html5Qrcode(scannerElementId);
+      }
+
+      await scannerRef.current.start(
+        { facingMode: 'environment' },
+        {
+          fps: 10,
+          qrbox: { width: 220, height: 160 },
+        },
+        (decodedText) => {
+          soundEffects.playScanBeep();
+          setBarcode(decodedText);
+          stopCamera();
+        },
+        () => {}
+      );
+      setIsCameraScanning(true);
+    } catch (err) {
+      console.warn('Camera start error:', err);
+      setCameraError('Camera access unavailable. You can enter or auto-generate the barcode.');
+      setIsCameraScanning(false);
+    }
+  };
+
+  const stopCamera = async () => {
+    if (scannerRef.current && isCameraScanning) {
+      try {
+        await scannerRef.current.stop();
+        scannerRef.current.clear();
+      } catch (e) {
+        console.warn('Camera stop error:', e);
+      }
+      setIsCameraScanning(false);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -65,35 +154,54 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!name.trim()) return;
+
     const ingredients = ingredientsText
       .split(',')
       .map((i) => i.trim())
       .filter(Boolean);
 
+    const generatedSku = sku.trim() || `SKU-${Date.now().toString().slice(-4)}`;
+    const generatedBarcode = barcode.trim() || `8901${Math.floor(10000 + Math.random() * 90000)}`;
+
+    const initialStock = Number(stockQuantity) || 0;
+    // Distribute across stores
+    const storeAllocations = {
+      gota: Math.round(initialStock * 0.4),
+      bopal: Math.round(initialStock * 0.3),
+      sindhubhavan: Math.round(initialStock * 0.15),
+      sg_highway: Math.round(initialStock * 0.15),
+    };
+
     storage.addInventoryItem({
-      sku: sku || `SKU-${Date.now().toString().slice(-4)}`,
-      barcode: barcode || `8901${Math.floor(10000 + Math.random() * 90000)}`,
-      name,
-      category,
-      description,
-      costPrice: Number(costPrice),
-      sellingPrice: Number(sellingPrice),
-      stockQuantity: Number(stockQuantity),
-      lowStockThreshold: Number(lowStockThreshold),
-      unit,
+      sku: generatedSku,
+      barcode: generatedBarcode,
+      name: name.trim(),
+      category: category || 'Paan',
+      description: description.trim() || `${name} - Richie Rich Pan House master catalog product.`,
+      costPrice: Number(costPrice) || 0,
+      sellingPrice: Number(sellingPrice) || 0,
+      stockQuantity: initialStock,
+      lowStockThreshold: Number(lowStockThreshold) || 5,
+      unit: unit || 'pieces',
       imageUrl: imageUrl || '',
       isTaxApplicable,
       taxRate: isTaxApplicable ? Number(taxRate) : 0,
       isAvailableForOnline: true,
-      ingredients,
+      ingredients: ingredients.length > 0 ? ingredients : ['Artisanal Spices', 'Premium Extract'],
       tags: ['New Arrival'],
+      storeAllocations,
     });
 
+    soundEffects.playSuccessJingle();
+    stopCamera();
     onClose();
   };
 
   const profitPerUnit = sellingPrice - costPrice;
   const marginPercent = sellingPrice > 0 ? ((profitPerUnit / sellingPrice) * 100).toFixed(1) : '0';
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in">
@@ -165,37 +273,81 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
             </div>
           </div>
 
-          {/* SKU & Barcode */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-slate-700 font-bold">SKU Code</label>
-                <button
-                  type="button"
-                  onClick={autoGenerateSkuBarcode}
-                  className="text-[10px] text-amber-700 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
-                >
-                  <Sparkles className="w-2.5 h-2.5" /> Auto Fill
-                </button>
+          {/* SKU & Barcode with Live Barcode Registration */}
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-slate-700 font-bold">SKU Code</label>
+                  <button
+                    type="button"
+                    onClick={autoGenerateSkuBarcode}
+                    className="text-[10px] text-amber-700 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <Sparkles className="w-2.5 h-2.5" /> Auto Fill SKU
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={sku}
+                  onChange={(e) => setSku(e.target.value)}
+                  placeholder="e.g. PAN-ROY-01"
+                  className="w-full mt-1 bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 font-mono placeholder-slate-400 focus:outline-hidden focus:border-slate-400"
+                />
               </div>
-              <input
-                type="text"
-                value={sku}
-                onChange={(e) => setSku(e.target.value)}
-                placeholder="e.g. PAN-ROY-01"
-                className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 font-mono placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-slate-400"
-              />
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-slate-700 font-bold">Barcode (Optical Scanner ID)</label>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => (isCameraScanning ? stopCamera() : startCamera())}
+                      className="text-[10px] text-sky-700 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <Camera className="w-2.5 h-2.5 text-sky-600" />
+                      <span>{isCameraScanning ? 'Stop Camera' : 'Scan Packaging'}</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="relative mt-1">
+                  <BarcodeIcon className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={barcode}
+                    onChange={(e) => setBarcode(e.target.value)}
+                    placeholder="e.g. 890100205"
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3.5 py-2 text-xs text-slate-900 font-mono placeholder-slate-400 focus:outline-hidden focus:border-slate-400"
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="text-xs text-slate-700 font-bold">Barcode (Optical Scanner ID)</label>
-              <input
-                type="text"
-                value={barcode}
-                onChange={(e) => setBarcode(e.target.value)}
-                placeholder="e.g. 890100205"
-                className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 font-mono placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-slate-400"
-              />
-            </div>
+
+            {/* Camera Viewport if scanning */}
+            {isCameraScanning && (
+              <div className="relative bg-black rounded-xl overflow-hidden min-h-[160px] p-2 flex flex-col items-center justify-center">
+                <div id={scannerElementId} className="w-full max-w-xs rounded-lg overflow-hidden" />
+                <p className="text-slate-300 text-[10px] mt-1.5">Point camera at product packaging barcode</p>
+              </div>
+            )}
+
+            {cameraError && (
+              <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                {cameraError}
+              </div>
+            )}
+
+            {/* Live Visualizer for Barcode */}
+            {barcode.trim() && (
+              <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  Registered Barcode Preview:
+                </span>
+                <div className="bg-white px-2 py-1 rounded-md border border-slate-200">
+                  <BarcodeVisualizer value={barcode.trim()} width={130} height={26} showText={true} />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Pricing & Profit Margin Preview */}

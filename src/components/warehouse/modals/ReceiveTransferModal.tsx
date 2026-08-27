@@ -30,6 +30,22 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (transfer) {
+      setOtpInput(transfer.otpOrPin || '');
+      setReceivedItems(
+        transfer.items.map((it) => ({
+          itemId: it.itemId,
+          dispatchedQty: it.dispatchedQty,
+          receivedQty: it.dispatchedQty,
+          damagedQty: 0,
+        }))
+      );
+      setNotes('');
+      setError(null);
+    }
+  }, [transfer]);
+
   const handleQtyChange = (index: number, field: 'receivedQty' | 'damagedQty', val: number) => {
     const next = [...receivedItems];
     next[index] = { ...next[index], [field]: val };

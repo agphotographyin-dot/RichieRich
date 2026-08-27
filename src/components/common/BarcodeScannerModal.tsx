@@ -2,13 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Camera, X, Scan, CheckCircle, RefreshCw, Sparkles, AlertCircle } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { soundEffects } from '../../services/audio';
+import { storage } from '../../services/storage';
 import { InventoryItem } from '../../types';
 
 interface BarcodeScannerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onScan: (barcode: string) => void;
-  inventory: InventoryItem[];
+  onScan?: (barcode: string) => void;
+  onScanSuccess?: (barcode: string) => void;
+  inventory?: InventoryItem[];
   title?: string;
 }
 
@@ -16,7 +18,8 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   isOpen,
   onClose,
   onScan,
-  inventory,
+  onScanSuccess,
+  inventory = [],
   title = 'Barcode & QR Scanner',
 }) => {
   const [manualCode, setManualCode] = useState('');
@@ -25,6 +28,8 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerElementId = 'html5-qr-reader-container';
+
+  const activeInventory = inventory && inventory.length > 0 ? inventory : storage.getInventory();
 
   useEffect(() => {
     if (!isOpen) {
@@ -78,7 +83,8 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   const handleSuccessfulScan = (code: string) => {
     soundEffects.playScanBeep();
     setLastScanned(code);
-    onScan(code);
+    if (onScan) onScan(code);
+    if (onScanSuccess) onScanSuccess(code);
     setTimeout(() => {
       onClose();
     }, 600);
@@ -206,7 +212,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
             </div>
 
             <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-              {inventory.slice(0, 8).map((item) => (
+              {activeInventory.slice(0, 8).map((item) => (
                 <button
                   key={item.id}
                   type="button"

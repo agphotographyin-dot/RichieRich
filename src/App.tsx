@@ -277,6 +277,7 @@ export const App: React.FC = () => {
                     onOpenScanner={() => setIsScannerOpen(true)}
                     onOpenAddItem={() => setIsAddItemOpen(true)}
                     onNavigateTab={handleAdminTabSelect}
+                    onNavigateRole={(role) => navigateToRole(role)}
                   />
                 )}
 

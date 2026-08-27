@@ -36,6 +36,9 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
     new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
   const [notes, setNotes] = useState('');
+  const [includeGst, setIncludeGst] = useState<boolean>(false);
+  const [taxPercent, setTaxPercent] = useState<number>(5);
+
   const [items, setItems] = useState<
     Array<{
       itemId: string;
@@ -52,7 +55,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
       name: inventory[0]?.name || 'Royal Maghai Meetha Paan',
       sku: inventory[0]?.sku || 'PAN-MAG-01',
       category: inventory[0]?.category || 'Paan',
-      quantity: 100,
+      quantity: 50,
       unitPrice: inventory[0]?.costPrice || 20,
       unit: inventory[0]?.unit || 'pieces',
     },
@@ -91,11 +94,11 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
     const next = [...items];
     next[index] = {
       ...next[index],
-      itemId: selected.itemId,
+      itemId: selected.itemId || selected.id || next[index].itemId,
       name: selected.name,
-      sku: selected.sku,
+      sku: selected.sku || next[index].sku,
       category: selected.category || 'Paan',
-      unitPrice: selected.costPrice || selected.unitPrice || 20,
+      unitPrice: selected.costPrice !== undefined ? selected.costPrice : (selected.unitPrice || next[index].unitPrice),
       unit: selected.unit || 'pieces',
     };
     setItems(next);
@@ -107,8 +110,9 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
     setItems(next);
   };
 
-  const subTotal = items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
-  const gstAmount = Math.round(subTotal * 0.05);
+  const subTotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
+  const activeTaxRate = includeGst ? taxPercent : 0;
+  const gstAmount = Math.round(subTotal * (activeTaxRate / 100));
   const grandTotal = subTotal + gstAmount;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -116,18 +120,20 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
     const selectedSupplier = suppliers.find((s) => s.id === supplierId);
 
     const poItems: PurchaseOrderItem[] = items.map((it) => {
-      const totalCost = it.quantity * it.unitPrice;
-      const gst = Math.round(totalCost * 0.05);
+      const qty = Number(it.quantity) || 1;
+      const unitPrice = Number(it.unitPrice) || 0;
+      const totalCost = qty * unitPrice;
+      const gst = includeGst ? Math.round(totalCost * (activeTaxRate / 100)) : 0;
       return {
         itemId: it.itemId,
         sku: it.sku,
         name: it.name,
         category: it.category,
-        quantityOrdered: it.quantity,
+        quantityOrdered: qty,
         quantityReceived: 0,
-        unitPrice: it.unitPrice,
+        unitPrice: unitPrice,
         unit: it.unit,
-        taxPercent: 5,
+        taxPercent: activeTaxRate,
         taxAmount: gst,
         totalAmount: totalCost + gst,
       };
@@ -136,7 +142,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
     warehouseStorage.createPurchaseOrder({
       supplierId,
       supplierName: selectedSupplier?.name || 'Supplier',
-      supplierGstin: selectedSupplier?.gstin || '24AAACR1234F1Z5',
+      supplierGstin: selectedSupplier?.gstin && selectedSupplier.gstin !== 'N/A' ? selectedSupplier.gstin : '',
       destinationWarehouseId: defaultWh.id,
       destinationWarehouseName: defaultWh.name,
       orderDate: new Date().toISOString().split('T')[0],
@@ -324,11 +330,48 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
             </div>
           </div>
 
+          {/* Optional GST Section */}
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5">
+              <input
+                type="checkbox"
+                id="includeGstPo"
+                checked={includeGst}
+                onChange={(e) => setIncludeGst(e.target.checked)}
+                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+              />
+              <label htmlFor="includeGstPo" className="font-semibold text-slate-800 cursor-pointer select-none">
+                Apply GST / Tax (Optional)
+              </label>
+            </div>
+
+            {includeGst && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 text-[11px] font-semibold">GST Rate:</span>
+                <select
+                  value={taxPercent}
+                  onChange={(e) => setTaxPercent(Number(e.target.value))}
+                  className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value={5}>5% GST (Standard Food/Pan)</option>
+                  <option value={12}>12% GST</option>
+                  <option value={18}>18% GST (Essentials/Packaging)</option>
+                  <option value={28}>28% GST</option>
+                </select>
+              </div>
+            )}
+          </div>
+
           {/* Valuation Summary Box */}
-          <div className="p-3.5 bg-indigo-50/70 rounded-xl border border-indigo-100 flex items-center justify-between text-xs font-mono">
-            <span className="font-sans font-semibold text-slate-700">
-              Subtotal: {CURRENCY}{subTotal.toLocaleString('en-IN')} + 5% GST: {CURRENCY}{gstAmount.toLocaleString('en-IN')}
-            </span>
+          <div className="p-3.5 bg-indigo-50/70 rounded-xl border border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+            <div className="font-sans text-slate-700 space-x-2">
+              <span>Subtotal: <strong>{CURRENCY}{subTotal.toLocaleString('en-IN')}</strong></span>
+              {includeGst ? (
+                <span className="text-indigo-700 font-semibold">• GST ({taxPercent}%): {CURRENCY}{gstAmount.toLocaleString('en-IN')}</span>
+              ) : (
+                <span className="text-slate-500 font-medium">• (No GST Applied)</span>
+              )}
+            </div>
             <span className="text-sm font-extrabold text-indigo-950">
               Grand Total: {CURRENCY}{grandTotal.toLocaleString('en-IN')}
             </span>

@@ -38,7 +38,7 @@ export const AddSupplierModal: React.FC<AddSupplierModalProps> = ({
       address: `${city}, ${state}`,
       city,
       state,
-      gstin: gstin || '24AAACR1234F1Z1',
+      gstin: gstin.trim() || 'N/A',
       panNumber: 'AAACR1234F',
       paymentTerms,
       creditLimit: 500000,

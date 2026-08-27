@@ -35,7 +35,7 @@ interface WarehousePurchasesViewProps {
   warehouses: Warehouse[];
   searchQuery: string;
   onOpenNewPO: () => void;
-  onOpenInwardBill: () => void;
+  onOpenInwardBill: (po?: PurchaseOrder) => void;
   onOpenRecordPayment: (supplierId: string) => void;
   onOpenAddSupplier: () => void;
 }
@@ -243,8 +243,8 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                       <td className="py-3 px-4 text-right font-sans">
                         {po.status !== 'received' && (
                           <button
-                            onClick={onOpenInwardBill}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs transition-colors"
+                            onClick={() => onOpenInwardBill(po)}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs transition-colors cursor-pointer"
                           >
                             Inward GRN
                           </button>

@@ -84,6 +84,35 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
     ];
   });
 
+  // Re-synchronize state whenever initialData or isOpen changes
+  React.useEffect(() => {
+    if (isOpen) {
+      if (initialData) {
+        if (initialData.type) setTransferType(initialData.type);
+        if (initialData.destinationId) setDestStoreId(initialData.destinationId);
+        if (initialData.notes) setNotes(initialData.notes);
+        if (initialData.otpOrPin) setOtpCode(initialData.otpOrPin);
+        if (initialData.items && initialData.items.length > 0) {
+          setItems(
+            initialData.items.map((it) => ({
+              itemId: it.itemId,
+              name: it.name,
+              sku: it.sku,
+              category: (it as any).category || 'Paan',
+              batchNumber: it.batchNumber || batches[0]?.batchNumber || 'BATCH-AMD-01',
+              quantity: it.dispatchedQty || it.requestedQty || 10,
+              unit: it.unit || 'pieces',
+              unitCost: it.unitCost || 20,
+            }))
+          );
+        }
+      } else {
+        setDestStoreId(stores[0]?.id || 'bopal');
+        setOtpCode(Math.floor(1000 + Math.random() * 9000).toString());
+      }
+    }
+  }, [isOpen, initialData, stores, batches]);
+
   const handleAddItem = () => {
     const defaultItem = inventory[0] || {
       id: `item-${Date.now()}`,
@@ -116,16 +145,16 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
 
   const handleItemSelect = (index: number, selected: any) => {
     const next = [...items];
-    const itemBatches = batches.filter((b) => b.itemId === selected.itemId || b.sku === selected.sku);
+    const itemBatches = batches.filter((b) => b.itemId === (selected.itemId || selected.id) || b.sku === selected.sku);
     const bestBatch = itemBatches[0]?.batchNumber || `BATCH-${Date.now().toString().slice(-4)}`;
 
     next[index] = {
       ...next[index],
-      itemId: selected.itemId,
+      itemId: selected.itemId || selected.id || next[index].itemId,
       name: selected.name,
-      sku: selected.sku,
+      sku: selected.sku || next[index].sku,
       category: selected.category || 'Paan',
-      unitCost: selected.costPrice || 20,
+      unitCost: selected.costPrice !== undefined ? selected.costPrice : (selected.unitCost || 20),
       unit: selected.unit || 'pieces',
       batchNumber: bestBatch,
     };
