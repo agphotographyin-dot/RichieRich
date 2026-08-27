@@ -13,9 +13,11 @@ import {
   Store,
   BadgePercent,
   UserCheck,
+  FileText,
 } from 'lucide-react';
 import { Order, OrderStatus } from '../../types';
 import { CURRENCY, storage } from '../../services/storage';
+import { DocumentManifestModal } from '../common/DocumentManifestModal';
 
 interface AdminOrdersProps {
   orders: Order[];
@@ -28,6 +30,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
   const [storeFilter, setStoreFilter] = useState<string>('all');
   const [salespersonFilter, setSalespersonFilter] = useState<string>('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [invoiceToPrint, setInvoiceToPrint] = useState<Order | null>(null);
 
   const stores = storage.getStores();
 
@@ -272,12 +275,21 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
                       </td>
 
                       <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={() => setSelectedOrder(o)}
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer border border-slate-200"
-                        >
-                          Details
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setInvoiceToPrint(o)}
+                            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-lg transition-colors cursor-pointer border border-slate-200"
+                            title="Print Tax Invoice / Slip"
+                          >
+                            <Printer className="w-3.5 h-3.5 text-indigo-600" />
+                          </button>
+                          <button
+                            onClick={() => setSelectedOrder(o)}
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer border border-slate-200"
+                          >
+                            Details
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -299,12 +311,21 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
                   {new Date(selectedOrder.createdAt).toLocaleString()}
                 </p>
               </div>
-              <button
-                onClick={() => setSelectedOrder(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 text-base font-bold cursor-pointer"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setInvoiceToPrint(selectedOrder)}
+                  className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print Invoice</span>
+                </button>
+                <button
+                  onClick={() => setSelectedOrder(null)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 text-base font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             <div className="space-y-4 overflow-y-auto flex-1 pr-1">
@@ -419,6 +440,14 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
           </div>
         </div>
       )}
+
+      {/* Printable Invoice / Receipt Modal */}
+      <DocumentManifestModal
+        isOpen={Boolean(invoiceToPrint)}
+        onClose={() => setInvoiceToPrint(null)}
+        documentType="retail_order"
+        documentData={invoiceToPrint}
+      />
     </div>
   );
 };

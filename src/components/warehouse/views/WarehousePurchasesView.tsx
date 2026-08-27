@@ -17,6 +17,8 @@ import {
   MapPin,
   ShieldCheck,
   Calendar,
+  FileText,
+  Printer,
 } from 'lucide-react';
 import {
   Supplier,
@@ -26,6 +28,7 @@ import {
   Warehouse,
 } from '../../../types/warehouse';
 import { CURRENCY } from '../../../services/storage';
+import { DocumentManifestModal, ManifestDocumentType } from '../../common/DocumentManifestModal';
 
 interface WarehousePurchasesViewProps {
   suppliers: Supplier[];
@@ -54,6 +57,15 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'pos' | 'bills' | 'suppliers' | 'ledger'>('pos');
   const [selectedSupplierFilter, setSelectedSupplierFilter] = useState<string>('all');
+  const [manifestDoc, setManifestDoc] = useState<{
+    isOpen: boolean;
+    type: ManifestDocumentType;
+    data: any;
+  }>({
+    isOpen: false,
+    type: 'purchase_order',
+    data: null,
+  });
 
   const filteredPOs = purchaseOrders.filter((po) => {
     const q = searchQuery.toLowerCase();
@@ -241,14 +253,24 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right font-sans">
-                        {po.status !== 'received' && (
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => onOpenInwardBill(po)}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs transition-colors cursor-pointer"
+                            onClick={() => setManifestDoc({ isOpen: true, type: 'purchase_order', data: po })}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-1 cursor-pointer border border-slate-200"
+                            title="View / Print PO Manifest"
                           >
-                            Inward GRN
+                            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Manifest</span>
                           </button>
-                        )}
+                          {po.status !== 'received' && (
+                            <button
+                              onClick={() => onOpenInwardBill(po)}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs transition-colors cursor-pointer border border-emerald-200"
+                            >
+                              Inward GRN
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -312,14 +334,24 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right font-sans">
-                        {b.dueAmount > 0 && (
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => onOpenRecordPayment(b.supplierId)}
-                            className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs transition-colors"
+                            onClick={() => setManifestDoc({ isOpen: true, type: 'purchase_bill', data: b })}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-1 cursor-pointer border border-slate-200"
+                            title="View / Print Goods Receipt Note (GRN) Slip"
                           >
-                            Pay Due
+                            <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>GRN Slip</span>
                           </button>
-                        )}
+                          {b.dueAmount > 0 && (
+                            <button
+                              onClick={() => onOpenRecordPayment(b.supplierId)}
+                              className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs transition-colors border border-indigo-200"
+                            >
+                              Pay Due
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -455,6 +487,14 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Document Manifest / Print Modal */}
+      <DocumentManifestModal
+        isOpen={manifestDoc.isOpen}
+        onClose={() => setManifestDoc({ ...manifestDoc, isOpen: false })}
+        documentType={manifestDoc.type}
+        documentData={manifestDoc.data}
+      />
     </div>
   );
 };

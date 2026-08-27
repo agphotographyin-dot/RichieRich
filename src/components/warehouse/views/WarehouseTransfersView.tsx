@@ -17,11 +17,14 @@ import {
   Check,
   X,
   Sparkles,
+  FileText,
+  Printer,
 } from 'lucide-react';
 import { StockTransfer, StoreStockIndent, Warehouse } from '../../../types/warehouse';
 import { StoreLocation } from '../../../types';
 import { CURRENCY } from '../../../services/storage';
 import { warehouseStorage } from '../../../services/warehouseStorage';
+import { DocumentManifestModal, ManifestDocumentType } from '../../common/DocumentManifestModal';
 
 interface WarehouseTransfersViewProps {
   transfers: StockTransfer[];
@@ -45,6 +48,15 @@ export const WarehouseTransfersView: React.FC<WarehouseTransfersViewProps> = ({
   onOpenReceiveModal,
 }) => {
   const [subTab, setSubTab] = useState<'transfers' | 'returns' | 'indents'>('transfers');
+  const [manifestDoc, setManifestDoc] = useState<{
+    isOpen: boolean;
+    type: ManifestDocumentType;
+    data: any;
+  }>({
+    isOpen: false,
+    type: 'stock_transfer',
+    data: null,
+  });
 
   // Filter transfers
   const filteredTransfers = transfers.filter((t) => {
@@ -209,20 +221,30 @@ export const WarehouseTransfersView: React.FC<WarehouseTransfersViewProps> = ({
                       </td>
 
                       <td className="py-3 px-4 text-right font-sans">
-                        {tr.status === 'dispatched_in_transit' && (
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => onOpenReceiveModal(tr)}
-                            className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-colors"
+                            onClick={() => setManifestDoc({ isOpen: true, type: 'stock_transfer', data: tr })}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-1 cursor-pointer border border-slate-200"
+                            title="View / Print Transfer Delivery Challan & Gate Pass"
                           >
-                            Receive at Store
+                            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Challan</span>
                           </button>
-                        )}
-                        {tr.status === 'completed' && (
-                          <span className="text-[11px] text-slate-400 flex items-center justify-end gap-1 font-medium">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Verified</span>
-                          </span>
-                        )}
+                          {tr.status === 'dispatched_in_transit' && (
+                            <button
+                              onClick={() => onOpenReceiveModal(tr)}
+                              className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-colors cursor-pointer"
+                            >
+                              Receive at Store
+                            </button>
+                          )}
+                          {tr.status === 'completed' && (
+                            <span className="text-[11px] text-emerald-700 flex items-center gap-1 font-semibold px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Received</span>
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -308,17 +330,27 @@ export const WarehouseTransfersView: React.FC<WarehouseTransfersViewProps> = ({
                       </td>
 
                       <td className="py-3 px-4 text-right">
-                        {ind.status === 'pending' && (
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => handleApproveIndent(ind.id)}
-                            className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs transition-colors"
+                            onClick={() => setManifestDoc({ isOpen: true, type: 'store_indent', data: ind })}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-1 cursor-pointer border border-slate-200"
+                            title="View / Print Indent Requisition Slip"
                           >
-                            Approve & Transfer
+                            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Slip</span>
                           </button>
-                        )}
-                        {ind.status === 'converted_to_transfer' && (
-                          <span className="text-xs text-emerald-600 font-medium">Dispatched</span>
-                        )}
+                          {ind.status === 'pending' && (
+                            <button
+                              onClick={() => handleApproveIndent(ind.id)}
+                              className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs transition-colors cursor-pointer"
+                            >
+                              Approve & Transfer
+                            </button>
+                          )}
+                          {ind.status === 'converted_to_transfer' && (
+                            <span className="text-xs text-emerald-600 font-medium">Dispatched</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -328,6 +360,14 @@ export const WarehouseTransfersView: React.FC<WarehouseTransfersViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Document Manifest / Delivery Challan Modal */}
+      <DocumentManifestModal
+        isOpen={manifestDoc.isOpen}
+        onClose={() => setManifestDoc({ ...manifestDoc, isOpen: false })}
+        documentType={manifestDoc.type}
+        documentData={manifestDoc.data}
+      />
     </div>
   );
 };

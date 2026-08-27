@@ -20,6 +20,8 @@ import {
   Receipt,
   RotateCcw,
   PlusCircle,
+  FileText,
+  Printer,
 } from 'lucide-react';
 import {
   Warehouse,
@@ -36,6 +38,7 @@ import {
 } from '../../../types/warehouse';
 import { InventoryItem, StoreLocation } from '../../../types';
 import { CURRENCY } from '../../../services/storage';
+import { DocumentManifestModal, ManifestDocumentType } from '../../common/DocumentManifestModal';
 
 interface WarehouseDashboardViewProps {
   stats: WarehouseOverviewStats;
@@ -75,6 +78,15 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
   onOpenPipelineTester,
 }) => {
   const [valuationMode, setValuationMode] = useState<'fifo' | 'avg'>('fifo');
+  const [manifestDoc, setManifestDoc] = useState<{
+    isOpen: boolean;
+    type: ManifestDocumentType;
+    data: any;
+  }>({
+    isOpen: false,
+    type: 'stock_transfer',
+    data: null,
+  });
 
   const nearExpiryBatches = batches.filter((b) => b.status === 'near_expiry' && b.quantityInStock > 0);
   const criticalStockItems = inventory.filter((i) => i.stockQuantity <= i.lowStockThreshold);
@@ -370,13 +382,23 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
                         </div>
                       </div>
 
-                      <div className="text-right">
-                        <div className="text-xs font-mono font-bold text-slate-900">
-                          {CURRENCY}{tr.totalValuation.toLocaleString('en-IN')}
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <div className="text-xs font-mono font-bold text-slate-900">
+                            {CURRENCY}{tr.totalValuation.toLocaleString('en-IN')}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {tr.vehicleNumber} • {tr.carrierName}
+                          </div>
                         </div>
-                        <div className="text-[11px] text-slate-500">
-                          {tr.vehicleNumber} • {tr.carrierName}
-                        </div>
+                        <button
+                          onClick={() => setManifestDoc({ isOpen: true, type: 'stock_transfer', data: tr })}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-1 cursor-pointer border border-slate-200 shrink-0"
+                          title="Print Gate Pass & Transfer Manifest"
+                        >
+                          <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>Challan</span>
+                        </button>
                       </div>
                     </div>
 
@@ -540,6 +562,14 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Document Manifest / Gate Pass Print Modal */}
+      <DocumentManifestModal
+        isOpen={manifestDoc.isOpen}
+        onClose={() => setManifestDoc({ ...manifestDoc, isOpen: false })}
+        documentType={manifestDoc.type}
+        documentData={manifestDoc.data}
+      />
     </div>
   );
 };
