@@ -12,6 +12,7 @@ import {
   POSSession,
 } from '../types';
 import { soundEffects } from './audio';
+import { validateAndSanitizeBackupPayload } from './backupIntegrityService';
 
 const STORAGE_KEYS = {
   INVENTORY: 'rr_panhouse_inventory',
@@ -1936,15 +1937,20 @@ export class StorageService {
     if (!backup) return false;
 
     try {
-      const data = JSON.parse(backup.dataJson);
-      if (data.inventory) localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(data.inventory));
-      if (data.orders) localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(data.orders));
-      if (data.customers) localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(data.customers));
-      if (data.promotions) localStorage.setItem(STORAGE_KEYS.PROMOTIONS, JSON.stringify(data.promotions));
+      const parsed = JSON.parse(backup.dataJson);
+      const target = parsed.payload || parsed;
+      const { isValid, sanitized } = validateAndSanitizeBackupPayload(target);
+
+      if (!isValid) {
+        console.error('Backup validation failed during restore');
+        return false;
+      }
+
+      this.restoreSanitizedData(sanitized);
 
       this.addNotification({
         title: `🔄 System Database Restored`,
-        message: `Database successfully restored from snapshot ${backup.checksum} dated ${new Date(backup.timestamp).toLocaleString()}.`,
+        message: `Database successfully verified and restored from snapshot ${backup.checksum} dated ${new Date(backup.timestamp).toLocaleString()}.`,
         type: 'system_backup',
         targetRole: 'admin',
         read: false,
@@ -1957,6 +1963,31 @@ export class StorageService {
       console.error('Failed to restore backup', e);
       return false;
     }
+  }
+
+  restoreSanitizedData(data: {
+    inventory?: InventoryItem[];
+    orders?: Order[];
+    customers?: Customer[];
+    promotions?: Promotion[];
+    stores?: StoreLocation[];
+  }): void {
+    if (data.inventory && Array.isArray(data.inventory)) {
+      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(data.inventory));
+    }
+    if (data.orders && Array.isArray(data.orders)) {
+      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(data.orders));
+    }
+    if (data.customers && Array.isArray(data.customers)) {
+      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(data.customers));
+    }
+    if (data.promotions && Array.isArray(data.promotions)) {
+      localStorage.setItem(STORAGE_KEYS.PROMOTIONS, JSON.stringify(data.promotions));
+    }
+    if (data.stores && Array.isArray(data.stores)) {
+      localStorage.setItem(STORAGE_KEYS.STORES, JSON.stringify(data.stores));
+    }
+    this.notify();
   }
 
   // --- FINANCIAL STATS & ANALYTICS ---
