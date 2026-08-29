@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   TrendingUp,
-  DollarSign,
+  IndianRupee,
   Package,
   AlertTriangle,
   Users,
@@ -612,7 +612,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {selectedStoreFilter === 'all' ? "Today's Total Sales" : "Store Sales Today"}
             </span>
             <div className="p-1.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 group-hover:bg-amber-500 group-hover:text-white transition-colors">
-              <DollarSign className="w-3.5 h-3.5" />
+              <IndianRupee className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="text-2xl font-bold text-slate-900 font-mono">

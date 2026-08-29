@@ -31,7 +31,7 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
 
   const defaultWh = warehouses[0] || {
     id: 'wh-central-amd',
-    name: 'Richie Rich Central Master Warehouse (Ahmedabad Hub)',
+    name: 'Central Warehouse',
   };
 
   const [selectedPoId, setSelectedPoId] = useState<string>(initialPO?.id || '');

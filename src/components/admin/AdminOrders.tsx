@@ -5,7 +5,7 @@ import {
   CheckCircle2,
   Clock,
   Filter,
-  DollarSign,
+  IndianRupee,
   User,
   ArrowRight,
   Printer,

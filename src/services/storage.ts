@@ -10,6 +10,10 @@ import {
   StoreLocation,
   CounterInfo,
   POSSession,
+  StoreAdminCredential,
+  StoreExpense,
+  StoreExpenseCategory,
+  StoreFinancialSummary,
 } from '../types';
 import { soundEffects } from './audio';
 import { validateAndSanitizeBackupPayload } from './backupIntegrityService';
@@ -25,10 +29,142 @@ const STORAGE_KEYS = {
   LAST_BACKUP_DATE: 'rr_panhouse_last_backup_date',
   POS_SESSION: 'rr_panhouse_pos_session',
   STORES: 'rr_panhouse_stores',
+  STORE_ADMINS: 'rr_panhouse_store_admins',
+  STORE_EXPENSES: 'rr_panhouse_store_expenses',
   CURRENCY_SYMBOL: '₹',
 };
 
 export const CURRENCY = '₹';
+
+// Initial Store Admin Login Credentials
+export const INITIAL_STORE_ADMINS: StoreAdminCredential[] = [
+  {
+    id: 'sa-bopal',
+    username: 'admin_bopal',
+    password: 'RRbopal',
+    name: 'Rajesh Shah',
+    storeId: 'bopal',
+    storeName: 'Richie Rich Pan House - Bopal Branch',
+    phone: '+91 98250 11201',
+    email: 'bopal.admin@richierich.in',
+    roleTitle: 'Store Branch Manager',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'sa-gota',
+    username: 'admin_gota',
+    password: 'RRgota',
+    name: 'Hardik Patel',
+    storeId: 'gota',
+    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
+    phone: '+91 98250 11202',
+    email: 'gota.admin@richierich.in',
+    roleTitle: 'Store Operations Lead',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'sa-sbr',
+    username: 'admin_sbr',
+    password: 'RRsbr',
+    name: 'Manish Varma',
+    storeId: 'sindhubhavan',
+    storeName: 'Richie Rich Pan House - Sindhubhavan Road (SBR)',
+    phone: '+91 98250 11203',
+    email: 'sbr.admin@richierich.in',
+    roleTitle: 'Lounge & Store Manager',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'sa-sg',
+    username: 'admin_sg',
+    password: 'RRsg',
+    name: 'Sameer Dave',
+    storeId: 'sg_highway',
+    storeName: 'Richie Rich Pan House - SG Highway Express',
+    phone: '+91 98250 11204',
+    email: 'sg.admin@richierich.in',
+    roleTitle: 'Highway Express Supervisor',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+];
+
+// Initial Store Expenses (Realistic Seed)
+export const INITIAL_STORE_EXPENSES: StoreExpense[] = [
+  {
+    id: 'exp-101',
+    storeId: 'bopal',
+    storeName: 'Richie Rich Pan House - Bopal Branch',
+    category: 'utilities',
+    amount: 1450,
+    description: 'Electricity & Backup DG Diesel refill',
+    paymentMethod: 'upi',
+    paidTo: 'Torrent Power & Fuel Station',
+    voucherNumber: 'EXP-BOP-001',
+    loggedBy: 'Rajesh Shah',
+    date: new Date().toISOString().split('T')[0],
+    createdAt: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),
+  },
+  {
+    id: 'exp-102',
+    storeId: 'bopal',
+    storeName: 'Richie Rich Pan House - Bopal Branch',
+    category: 'raw_materials_petty',
+    amount: 680,
+    description: 'Fresh mint leaves, organic limes & crushed cooling ice',
+    paymentMethod: 'cash',
+    paidTo: 'Local Mandi Vendor',
+    voucherNumber: 'EXP-BOP-002',
+    loggedBy: 'Rajesh Shah',
+    date: new Date().toISOString().split('T')[0],
+    createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+  },
+  {
+    id: 'exp-103',
+    storeId: 'gota',
+    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
+    category: 'supplies',
+    amount: 1200,
+    description: 'Biodegradable parcel boxes, luxury paan silver pouches, napkins',
+    paymentMethod: 'cash',
+    paidTo: 'Gala Packaging Hub',
+    voucherNumber: 'EXP-GOT-001',
+    loggedBy: 'Hardik Patel',
+    date: new Date().toISOString().split('T')[0],
+    createdAt: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
+  },
+  {
+    id: 'exp-104',
+    storeId: 'gota',
+    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
+    category: 'staff_advance',
+    amount: 500,
+    description: 'Staff dinner tea & snacks for night shift',
+    paymentMethod: 'cash',
+    paidTo: 'Counter Staff Pool',
+    voucherNumber: 'EXP-GOT-002',
+    loggedBy: 'Hardik Patel',
+    date: new Date().toISOString().split('T')[0],
+    createdAt: new Date(Date.now() - 1 * 3600 * 1000).toISOString(),
+  },
+  {
+    id: 'exp-105',
+    storeId: 'sindhubhavan',
+    storeName: 'Richie Rich Pan House - Sindhubhavan Road (SBR)',
+    category: 'cleaning',
+    amount: 850,
+    description: 'Lounge floor sanitizers, glass cleaner & air fragrance refills',
+    paymentMethod: 'upi',
+    paidTo: 'CleanCare Solutions',
+    voucherNumber: 'EXP-SBR-001',
+    loggedBy: 'Manish Varma',
+    date: new Date().toISOString().split('T')[0],
+    createdAt: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
+  },
+];
 
 // Initial Store Locations
 export const INITIAL_STORES: StoreLocation[] = [
@@ -1160,6 +1296,16 @@ export class StorageService {
     if (!existingStores) {
       localStorage.setItem(STORAGE_KEYS.STORES, JSON.stringify(INITIAL_STORES));
     }
+
+    // Check store admins
+    if (!localStorage.getItem(STORAGE_KEYS.STORE_ADMINS)) {
+      localStorage.setItem(STORAGE_KEYS.STORE_ADMINS, JSON.stringify(INITIAL_STORE_ADMINS));
+    }
+
+    // Check store expenses
+    if (!localStorage.getItem(STORAGE_KEYS.STORE_EXPENSES)) {
+      localStorage.setItem(STORAGE_KEYS.STORE_EXPENSES, JSON.stringify(INITIAL_STORE_EXPENSES));
+    }
   }
 
   // --- MULTI-STORE & POS COUNTER / SALESPERSON MANAGEMENT METHODS ---
@@ -1314,6 +1460,14 @@ export class StorageService {
 
   changeCounterPin(storeId: string, counterId: number, newPin: string): boolean {
     return !!this.updateCounter(storeId, counterId, { defaultPin: newPin });
+  }
+
+  updateCounterPin(storeId: string, counterId: number, newPin: string): boolean {
+    return this.changeCounterPin(storeId, counterId, newPin);
+  }
+
+  updateCounterDetails(storeId: string, counterId: number, updates: Partial<CounterInfo>): boolean {
+    return !!this.updateCounter(storeId, counterId, updates);
   }
 
   getActivePOSSession(): POSSession | null {
@@ -2125,6 +2279,330 @@ export class StorageService {
       const timeStr = new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const qty = o.items.reduce((s, i) => s + i.quantity, 0);
       csv += `"${o.orderNumber}","${timeStr}","${o.storeName || 'Main'}","${o.counterName || o.counterNumber || 1}","${o.cashierName || 'Staff'}","${o.customerName || 'Walk-in'}","${o.paymentMethod.toUpperCase()}",${qty},${o.subtotal.toFixed(2)},${o.discountAmount.toFixed(2)},${o.taxAmount.toFixed(2)},${o.grandTotal.toFixed(2)},${o.totalProfit.toFixed(2)},"${o.status}"\n`;
+    });
+
+    return csv;
+  }
+
+  // =========================================================================
+  // STORE ADMIN CREDENTIALS MANAGEMENT
+  // =========================================================================
+  getStoreAdmins(): StoreAdminCredential[] {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.STORE_ADMINS);
+      if (!data) return INITIAL_STORE_ADMINS;
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_STORE_ADMINS;
+    } catch {
+      return INITIAL_STORE_ADMINS;
+    }
+  }
+
+  saveStoreAdmins(admins: StoreAdminCredential[]): void {
+    try {
+      localStorage.setItem(STORAGE_KEYS.STORE_ADMINS, JSON.stringify(admins));
+      this.notifySubscribers();
+    } catch (e) {
+      console.error('Failed to save store admins:', e);
+    }
+  }
+
+  addStoreAdmin(adminData: Omit<StoreAdminCredential, 'id' | 'createdAt'>): StoreAdminCredential {
+    const admins = this.getStoreAdmins();
+    const newAdmin: StoreAdminCredential = {
+      ...adminData,
+      id: `sa-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    admins.push(newAdmin);
+    this.saveStoreAdmins(admins);
+    return newAdmin;
+  }
+
+  updateStoreAdmin(id: string, updates: Partial<StoreAdminCredential>): boolean {
+    const admins = this.getStoreAdmins();
+    const idx = admins.findIndex((a) => a.id === id);
+    if (idx === -1) return false;
+    admins[idx] = { ...admins[idx], ...updates };
+    this.saveStoreAdmins(admins);
+    return true;
+  }
+
+  deleteStoreAdmin(id: string): boolean {
+    const admins = this.getStoreAdmins();
+    const filtered = admins.filter((a) => a.id !== id);
+    if (filtered.length === admins.length) return false;
+    this.saveStoreAdmins(filtered);
+    return true;
+  }
+
+  // =========================================================================
+  // STORE EXPENSES MANAGEMENT
+  // =========================================================================
+  getStoreExpenses(storeId?: string): StoreExpense[] {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.STORE_EXPENSES);
+      let expenses: StoreExpense[] = [];
+      if (!data) {
+        expenses = INITIAL_STORE_EXPENSES;
+      } else {
+        const parsed = JSON.parse(data);
+        expenses = Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_STORE_EXPENSES;
+      }
+      if (storeId && storeId !== 'all') {
+        return expenses.filter((e) => e.storeId === storeId);
+      }
+      return expenses;
+    } catch {
+      return INITIAL_STORE_EXPENSES;
+    }
+  }
+
+  saveStoreExpenses(expenses: StoreExpense[]): void {
+    try {
+      localStorage.setItem(STORAGE_KEYS.STORE_EXPENSES, JSON.stringify(expenses));
+      this.notifySubscribers();
+    } catch (e) {
+      console.error('Failed to save store expenses:', e);
+    }
+  }
+
+  addStoreExpense(
+    expenseData: Omit<StoreExpense, 'id' | 'createdAt' | 'voucherNumber'> & { voucherNumber?: string }
+  ): StoreExpense {
+    const expenses = this.getStoreExpenses();
+    const storeShort = (expenseData.storeId || 'GEN').toUpperCase().slice(0, 3);
+    const voucherNumber =
+      expenseData.voucherNumber?.trim() ||
+      `EXP-${storeShort}-${Math.floor(100 + Math.random() * 900)}`;
+
+    const newExpense: StoreExpense = {
+      ...expenseData,
+      voucherNumber,
+      id: `exp-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    expenses.unshift(newExpense);
+    this.saveStoreExpenses(expenses);
+
+    this.addNotification({
+      title: `Store Expense Added: ${CURRENCY}${newExpense.amount}`,
+      message: `[${newExpense.storeName}] ${newExpense.description} (${newExpense.category.replace('_', ' ')}) logged by ${newExpense.loggedBy}`,
+      type: 'order_update',
+      targetRole: 'admin',
+      read: false,
+    });
+
+    return newExpense;
+  }
+
+  updateStoreExpense(id: string, updates: Partial<StoreExpense>): boolean {
+    const expenses = this.getStoreExpenses();
+    const idx = expenses.findIndex((e) => e.id === id);
+    if (idx === -1) return false;
+    expenses[idx] = { ...expenses[idx], ...updates };
+    this.saveStoreExpenses(expenses);
+    return true;
+  }
+
+  deleteStoreExpense(id: string): boolean {
+    const expenses = this.getStoreExpenses();
+    const filtered = expenses.filter((e) => e.id !== id);
+    if (filtered.length === expenses.length) return false;
+    this.saveStoreExpenses(filtered);
+    return true;
+  }
+
+  // =========================================================================
+  // STORE FINANCIAL SUMMARY (SALES CREDIT - EXPENSES DEBIT = NET BALANCE)
+  // =========================================================================
+  getStoreFinancialSummary(storeId: string, startDate?: string, endDate?: string): StoreFinancialSummary {
+    const stores = this.getStores();
+    const storeObj = stores.find((s) => s.id === storeId) || {
+      id: storeId,
+      name: `Store (${storeId})`,
+    };
+
+    const allOrders = this.getOrders();
+    const allExpenses = this.getStoreExpenses(storeId);
+
+    // Filter orders by store and date
+    const storeOrders = allOrders.filter((o) => {
+      const matchStore = !storeId || storeId === 'all' || o.storeId === storeId;
+      if (!matchStore) return false;
+      if (o.status === 'cancelled') return false;
+
+      const orderDate = o.createdAt.split('T')[0];
+      if (startDate && orderDate < startDate) return false;
+      if (endDate && orderDate > endDate) return false;
+      return true;
+    });
+
+    // Filter expenses by date
+    const storeExpenses = allExpenses.filter((e) => {
+      const matchStore = !storeId || storeId === 'all' || e.storeId === storeId;
+      if (!matchStore) return false;
+      if (startDate && e.date < startDate) return false;
+      if (endDate && e.date > endDate) return false;
+      return true;
+    });
+
+    // Calculate Sales Breakdown (Credit Inflow)
+    const salesByPayment = {
+      cash: 0,
+      upi_qr: 0,
+      card: 0,
+      loyalty_points: 0,
+      split: 0,
+    };
+
+    let totalSalesCredit = 0;
+    let totalGSTCollected = 0;
+
+    storeOrders.forEach((o) => {
+      totalSalesCredit += o.grandTotal;
+      totalGSTCollected += o.taxAmount || 0;
+      if (o.paymentMethod === 'cash') salesByPayment.cash += o.grandTotal;
+      else if (o.paymentMethod === 'upi_qr') salesByPayment.upi_qr += o.grandTotal;
+      else if (o.paymentMethod === 'card') salesByPayment.card += o.grandTotal;
+      else if (o.paymentMethod === 'loyalty_points') salesByPayment.loyalty_points += o.grandTotal;
+      else salesByPayment.split += o.grandTotal;
+    });
+
+    // Calculate Expenses Breakdown (Debit Outflow)
+    const expensesByCategory: Record<StoreExpenseCategory, number> = {
+      rent: 0,
+      utilities: 0,
+      staff_salary: 0,
+      staff_advance: 0,
+      maintenance: 0,
+      supplies: 0,
+      raw_materials_petty: 0,
+      marketing: 0,
+      logistics: 0,
+      cleaning: 0,
+      miscellaneous: 0,
+      daily_supplies: 0,
+      electricity_utility: 0,
+      rent_lease: 0,
+      maintenance_repairs: 0,
+      store_refreshments: 0,
+      local_vendor: 0,
+      misc: 0,
+    };
+
+    const expensesByPayment = {
+      cash: 0,
+      upi: 0,
+      bank_transfer: 0,
+      card: 0,
+      cheque: 0,
+    };
+
+    let totalExpensesDebit = 0;
+
+    storeExpenses.forEach((e) => {
+      totalExpensesDebit += e.amount;
+      if (expensesByCategory[e.category] !== undefined) {
+        expensesByCategory[e.category] += e.amount;
+      } else {
+        expensesByCategory.miscellaneous += e.amount;
+      }
+
+      if (e.paymentMethod === 'cash') expensesByPayment.cash += e.amount;
+      else if (e.paymentMethod === 'upi') expensesByPayment.upi += e.amount;
+      else if (e.paymentMethod === 'bank_transfer') expensesByPayment.bank_transfer += e.amount;
+      else if (e.paymentMethod === 'card') expensesByPayment.card += e.amount;
+      else if (e.paymentMethod === 'cheque') expensesByPayment.cheque += e.amount;
+      else expensesByPayment.cash += e.amount;
+    });
+
+    // Net Balance = Credit (Sales) - Debit (Expenses)
+    const netStoreBalance = totalSalesCredit - totalExpensesDebit;
+
+    // Expected Physical Cash in Drawer = Cash Sales - Cash Expenses Paid Out
+    const expectedCashInDrawer = salesByPayment.cash - expensesByPayment.cash;
+
+    const totalOrdersCount = storeOrders.length;
+    const averageOrderValue = totalOrdersCount > 0 ? totalSalesCredit / totalOrdersCount : 0;
+    const profitMarginPercent =
+      totalSalesCredit > 0 ? ((netStoreBalance) / totalSalesCredit) * 100 : 0;
+
+    const salesByMode = {
+      cash: salesByPayment.cash,
+      upi: salesByPayment.upi_qr,
+      card: salesByPayment.card,
+    };
+
+    const expensesByMode = {
+      cash: expensesByPayment.cash,
+      online: totalExpensesDebit - expensesByPayment.cash,
+    };
+
+    return {
+      storeId: storeObj.id,
+      storeName: storeObj.name,
+      totalSales: totalSalesCredit,
+      totalSalesCredit,
+      orderCount: totalOrdersCount,
+      totalOrdersCount,
+      salesByMode,
+      salesByPayment,
+      totalExpenses: totalExpensesDebit,
+      totalExpensesDebit,
+      expenseCount: storeExpenses.length,
+      expensesByMode,
+      categoryBreakdown: expensesByCategory,
+      expensesByCategory,
+      expensesByPayment,
+      netStoreBalance,
+      expectedCashInDrawer,
+      profitMarginPercent,
+      averageOrderValue,
+      totalGSTCollected,
+    };
+  }
+
+  exportStorePnLCSV(storeId: string, startDate?: string, endDate?: string): string {
+    const summary = this.getStoreFinancialSummary(storeId, startDate, endDate);
+    const expenses = this.getStoreExpenses(storeId);
+
+    let csv = `RICHIE RICH PAN HOUSE - STORE FINANCIAL P&L & EXPENSE LEDGER\n`;
+    csv += `Store Outlet,"${summary.storeName}" (${summary.storeId})\n`;
+    csv += `Date Period,${startDate || 'All Past'} to ${endDate || 'Present'}\n`;
+    csv += `Generated Timestamp,${new Date().toISOString()}\n\n`;
+
+    csv += `EXECUTIVE FINANCIAL POSITION\n`;
+    csv += `Metric,Amount (${CURRENCY})\n`;
+    csv += `TOTAL STORE SALES (CREDIT INFLOW),${summary.totalSalesCredit.toFixed(2)}\n`;
+    csv += `TOTAL STORE EXPENSES (DEBIT OUTFLOW),${summary.totalExpensesDebit.toFixed(2)}\n`;
+    csv += `NET STORE BALANCE (PROFIT/LOSS),${summary.netStoreBalance.toFixed(2)}\n`;
+    csv += `EXPECTED CASH IN DRAWER (Cash Sales - Cash Expenses),${summary.expectedCashInDrawer.toFixed(2)}\n`;
+    csv += `TOTAL GST COLLECTED,${summary.totalGSTCollected.toFixed(2)}\n`;
+    csv += `TOTAL ORDERS BILLED,${summary.totalOrdersCount}\n`;
+    csv += `AVERAGE ORDER VALUE (AOV),${summary.averageOrderValue.toFixed(2)}\n\n`;
+
+    csv += `SALES COLLECTION BREAKDOWN\n`;
+    csv += `Payment Mode,Credit Amount (${CURRENCY})\n`;
+    csv += `Cash,${summary.salesByPayment.cash.toFixed(2)}\n`;
+    csv += `UPI QR,${summary.salesByPayment.upi_qr.toFixed(2)}\n`;
+    csv += `Card,${summary.salesByPayment.card.toFixed(2)}\n`;
+    csv += `Loyalty Points,${summary.salesByPayment.loyalty_points.toFixed(2)}\n`;
+    csv += `Split / Other,${summary.salesByPayment.split.toFixed(2)}\n\n`;
+
+    csv += `EXPENSE CATEGORY BREAKDOWN\n`;
+    csv += `Expense Category,Debit Amount (${CURRENCY})\n`;
+    Object.entries(summary.expensesByCategory).forEach(([cat, amt]) => {
+      if (amt > 0) {
+        csv += `"${cat.replace('_', ' ').toUpperCase()}",${amt.toFixed(2)}\n`;
+      }
+    });
+    csv += `\n`;
+
+    csv += `DETAILED STORE EXPENSES LOG\n`;
+    csv += `Date,Voucher #,Category,Description,Paid To,Payment Mode,Logged By,Amount (${CURRENCY})\n`;
+    expenses.forEach((e) => {
+      csv += `"${e.date}","${e.voucherNumber}","${e.category}","${e.description.replace(/"/g, '""')}","${e.paidTo}","${e.paymentMethod}","${e.loggedBy}",${e.amount.toFixed(2)}\n`;
     });
 
     return csv;

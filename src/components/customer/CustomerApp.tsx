@@ -389,14 +389,14 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({
                 <Crown className="w-3.5 h-3.5 text-amber-600" />
                 {activeCustomer.tier} Patron
               </span>
-              <span className="text-xs text-slate-500 font-medium">Richie Rich Luxury Pan & Coffee Lounge</span>
+              <span className="text-xs text-amber-700 font-bold">Pan | Coffee | Essentials | 24x7</span>
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               Namaste, {activeCustomer.name}
             </h2>
             <p className="text-xs text-slate-500 mt-1 max-w-md">
-              Handcrafted Artisanal Paans, 24x7 Fresh Brewed Coffees, Saffron Mukhwas, and Confectioneries.
+              Fresh artisanal paans, fresh brewed coffees, daily essentials, and round-the-clock 24x7 delicacies.
             </p>
 
             <button

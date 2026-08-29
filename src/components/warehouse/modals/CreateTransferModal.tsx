@@ -30,7 +30,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
 
   const defaultWh = warehouses[0] || {
     id: 'wh-central-amd',
-    name: 'Richie Rich Central Master Warehouse (Ahmedabad Hub)',
+    name: 'Central Warehouse',
   };
 
   const [transferType, setTransferType] = useState<'warehouse_to_store' | 'store_to_warehouse_return'>(

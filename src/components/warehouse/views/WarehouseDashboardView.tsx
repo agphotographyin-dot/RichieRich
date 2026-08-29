@@ -16,7 +16,7 @@ import {
   ArrowRight,
   Layers,
   Store,
-  DollarSign,
+  IndianRupee,
   Receipt,
   RotateCcw,
   PlusCircle,
@@ -129,24 +129,24 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
     <div className="space-y-6">
       {/* In-Store Low Stock Notification Alert Banner */}
       {storeLowStockAlerts.length > 0 && (
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/15 border border-amber-300/80 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs shrink-0 animate-bounce">
+            <div className="w-9 h-9 rounded-lg bg-amber-600 text-white flex items-center justify-center shadow-xs shrink-0">
               <AlertTriangle className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h4 className="font-bold text-sm text-slate-900">
-                  {storeLowStockAlerts.length} In-Store Low Stock Alert{storeLowStockAlerts.length > 1 ? 's' : ''} Triggered
+                  {storeLowStockAlerts.length} Store Low Stock Alert{storeLowStockAlerts.length > 1 ? 's' : ''}
                 </h4>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
-                  ACTION REQUIRED
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-900">
+                  Action Needed
                 </span>
               </div>
               <p className="text-xs text-slate-600 mt-0.5">
                 {storeLowStockAlerts.slice(0, 2).map((a, i) => (
                   <span key={i} className="mr-2 font-medium">
-                    • <strong>{a.storeName}</strong>: {a.itemName} ({a.currentQty} {a.unit} remaining, Min: {a.threshold})
+                    • <strong>{a.storeName}</strong>: {a.itemName} ({a.currentQty} {a.unit} left, Min: {a.threshold})
                   </span>
                 ))}
                 {storeLowStockAlerts.length > 2 && `and ${storeLowStockAlerts.length - 2} more...`}
@@ -157,38 +157,39 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
           <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
             <button
               onClick={onOpenTransfer}
-              className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <Truck className="w-3.5 h-3.5" />
               <span>Dispatch Transfer</span>
             </button>
             <button
               onClick={() => onNavigateTab('store_stock')}
-              className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 text-xs font-semibold transition-colors cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold transition-colors cursor-pointer"
             >
-              View Store Stocks
+              Store Stocks
             </button>
           </div>
         </div>
       )}
+
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Inventory Valuation */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm relative overflow-hidden">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs relative">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Total Stock Valuation
             </span>
             <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold text-slate-600">
               <button
                 onClick={() => setValuationMode('fifo')}
-                className={`px-1.5 py-0.5 rounded ${valuationMode === 'fifo' ? 'bg-white shadow-xs text-indigo-700 font-bold' : ''}`}
+                className={`px-1.5 py-0.5 rounded ${valuationMode === 'fifo' ? 'bg-white shadow-xs text-amber-700 font-bold' : ''}`}
               >
                 FIFO
               </button>
               <button
                 onClick={() => setValuationMode('avg')}
-                className={`px-1.5 py-0.5 rounded ${valuationMode === 'avg' ? 'bg-white shadow-xs text-indigo-700 font-bold' : ''}`}
+                className={`px-1.5 py-0.5 rounded ${valuationMode === 'avg' ? 'bg-white shadow-xs text-amber-700 font-bold' : ''}`}
               >
                 AVG
               </button>
@@ -200,7 +201,7 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
               {(valuationMode === 'fifo' ? stats.totalInventoryValuationFIFO : stats.totalInventoryValuationAvg).toLocaleString('en-IN')}
             </div>
             <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
-              <span className="font-medium text-emerald-600">
+              <span className="font-semibold text-slate-700">
                 {stats.centralWarehouseStockUnits + stats.storesTotalStockUnits + stats.inTransitStockUnits} Total Units
               </span>
               <span>•</span>
@@ -209,19 +210,19 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
           </div>
         </div>
 
-        {/* KPI 2: Central vs Stores vs Transit Breakdown */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+        {/* KPI 2: Multi-Hub Distribution */}
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
             <span>Multi-Hub Distribution</span>
-            <Building2 className="w-4 h-4 text-indigo-600" />
+            <Building2 className="w-4 h-4 text-slate-700" />
           </div>
           <div className="mt-3 space-y-1.5">
             <div className="flex items-center justify-between text-xs font-medium">
-              <span className="text-slate-600">Central Warehouses:</span>
+              <span className="text-slate-600">Central Hub:</span>
               <span className="font-bold text-slate-900">{stats.centralWarehouseStockUnits} units</span>
             </div>
             <div className="flex items-center justify-between text-xs font-medium">
-              <span className="text-slate-600">Active Stores (4 Outlets):</span>
+              <span className="text-slate-600">Store Outlets:</span>
               <span className="font-bold text-slate-900">{stats.storesTotalStockUnits} units</span>
             </div>
             <div className="flex items-center justify-between text-xs font-medium">
@@ -233,103 +234,103 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
           </div>
         </div>
 
-        {/* KPI 3: Stock Health & Expiry Alerts */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+        {/* KPI 3: Stock Health */}
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
             <span>Stock Health Status</span>
             <AlertTriangle className="w-4 h-4 text-amber-600" />
           </div>
           <div className="mt-3 space-y-1.5">
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-600">Low Stock SKUs:</span>
-              <span className="font-bold text-amber-600 font-mono">{stats.lowStockItemsCount} items</span>
+              <span className="font-bold text-amber-700 font-mono">{stats.lowStockItemsCount} items</span>
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-600">Critical (&lt;20%):</span>
-              <span className="font-bold text-rose-600 font-mono">{stats.criticalStockItemsCount} items</span>
+              <span className="font-bold text-slate-900 font-mono">{stats.criticalStockItemsCount} items</span>
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-600">Near Expiry Batches:</span>
-              <span className="font-bold text-purple-600 font-mono">{stats.nearExpiryBatchesCount} batches</span>
+              <span className="font-bold text-slate-900 font-mono">{stats.nearExpiryBatchesCount} batches</span>
             </div>
           </div>
         </div>
 
-        {/* KPI 4: Supplier Payables & Pending Actions */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+        {/* KPI 4: Supplier Payables */}
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
             <span>Supplier Payables</span>
-            <FileSpreadsheet className="w-4 h-4 text-violet-600" />
+            <FileSpreadsheet className="w-4 h-4 text-slate-700" />
           </div>
           <div className="mt-3">
-            <div className="text-2xl font-extrabold text-slate-900 font-mono tracking-tight text-rose-600">
+            <div className="text-2xl font-extrabold text-slate-900 font-mono tracking-tight">
               {CURRENCY}
               {stats.totalSupplierOutstanding.toLocaleString('en-IN')}
             </div>
             <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
-              <span>{stats.overdueBillsCount} Due Bills</span>
+              <span className="font-semibold text-amber-700">{stats.overdueBillsCount} Due Bills</span>
               <span>•</span>
-              <span className="text-indigo-600 font-medium">{stats.pendingTransfersCount} Active Transfers</span>
+              <span className="text-slate-700 font-medium">{stats.pendingTransfersCount} In-Transit</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Quick Launchpad & Action Modules */}
+      {/* Quick Launchpad Buttons */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <button
           onClick={onOpenNewPO}
-          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-indigo-500 hover:shadow-md transition-all text-left group cursor-pointer"
+          className="p-4 rounded-xl bg-white border border-slate-200 hover:border-amber-500 hover:shadow-xs transition-all text-left group cursor-pointer"
         >
-          <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-            <FileSpreadsheet className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-800 flex items-center justify-center mb-2">
+            <FileSpreadsheet className="w-4 h-4 text-amber-600" />
           </div>
-          <div className="text-xs font-bold text-slate-900">Create Purchase Order</div>
+          <div className="text-xs font-bold text-slate-900">Purchase Order</div>
           <div className="text-[11px] text-slate-500 mt-0.5">Issue PO to supplier</div>
         </button>
 
         <button
           onClick={onOpenInwardBill}
-          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-emerald-500 hover:shadow-md transition-all text-left group cursor-pointer"
+          className="p-4 rounded-xl bg-white border border-slate-200 hover:border-amber-500 hover:shadow-xs transition-all text-left group cursor-pointer"
         >
-          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-            <PackagePlus className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-800 flex items-center justify-center mb-2">
+            <PackagePlus className="w-4 h-4 text-amber-600" />
           </div>
-          <div className="text-xs font-bold text-slate-900">GRN Stock Inward</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Receive bill with batch & expiry</div>
+          <div className="text-xs font-bold text-slate-900">GRN Inward</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">Receive supplier stock</div>
         </button>
 
         <button
           onClick={onOpenTransfer}
-          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-amber-500 hover:shadow-md transition-all text-left group cursor-pointer"
+          className="p-4 rounded-xl bg-white border border-slate-200 hover:border-amber-500 hover:shadow-xs transition-all text-left group cursor-pointer"
         >
-          <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-            <Truck className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-800 flex items-center justify-center mb-2">
+            <Truck className="w-4 h-4 text-amber-600" />
           </div>
-          <div className="text-xs font-bold text-slate-900">Dispatch to Store</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">WH ➔ Store vehicle transit</div>
+          <div className="text-xs font-bold text-slate-900">Dispatch Transfer</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">Warehouse ➔ Outlet transit</div>
         </button>
 
         <button
           onClick={onOpenIndent}
-          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-cyan-500 hover:shadow-md transition-all text-left group cursor-pointer"
+          className="p-4 rounded-xl bg-white border border-slate-200 hover:border-amber-500 hover:shadow-xs transition-all text-left group cursor-pointer"
         >
-          <div className="w-9 h-9 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-            <ArrowDownLeft className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-800 flex items-center justify-center mb-2">
+            <ArrowDownLeft className="w-4 h-4 text-amber-600" />
           </div>
-          <div className="text-xs font-bold text-slate-900">Store Stock Indent</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Outlet replenishment request</div>
+          <div className="text-xs font-bold text-slate-900">Store Indent</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">Outlet replenishment</div>
         </button>
 
         <button
           onClick={onOpenAdjustment}
-          className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-rose-500 hover:shadow-md transition-all text-left group cursor-pointer"
+          className="p-4 rounded-xl bg-white border border-slate-200 hover:border-amber-500 hover:shadow-xs transition-all text-left group cursor-pointer"
         >
-          <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-            <AlertTriangle className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-800 flex items-center justify-center mb-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600" />
           </div>
           <div className="text-xs font-bold text-slate-900">Scrap & Adjustment</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Damaged, expired or audit loss</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">Audit adjustment / scrap</div>
         </button>
       </div>
 

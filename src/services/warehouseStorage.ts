@@ -33,7 +33,7 @@ export const INITIAL_WAREHOUSES: Warehouse[] = [
   {
     id: 'wh-central-amd',
     code: 'WH-AMD-01',
-    name: 'Richie Rich Central Master Warehouse (Ahmedabad Hub)',
+    name: 'Central Warehouse',
     type: 'central_hub',
     address: 'Survey 142/B, Gota-Godhavi Logistics Park, SG Highway',
     city: 'Ahmedabad',
@@ -143,12 +143,29 @@ export const warehouseStorage = {
         return INITIAL_WAREHOUSES;
       }
       // If user had multi-warehouse stored previously, sanitize to single active central master warehouse
+      let list = parsed;
       if (parsed.length > 1) {
         const central = parsed.find((w) => w.type === 'central_hub' || w.id === 'wh-central-amd') || INITIAL_WAREHOUSES[0];
-        this.saveWarehouses([central]);
-        return [central];
+        list = [central];
       }
-      return parsed;
+
+      // Ensure standard name "Central Warehouse"
+      let hasChanges = false;
+      list = list.map((w) => {
+        if (w.id === 'wh-central-amd' || w.type === 'central_hub' || w.name.includes('Master Warehouse') || w.name.includes('Gota Hub')) {
+          if (w.name !== 'Central Warehouse') {
+            hasChanges = true;
+            return { ...w, name: 'Central Warehouse' };
+          }
+        }
+        return w;
+      });
+
+      if (hasChanges || list.length !== parsed.length) {
+        this.saveWarehouses(list);
+      }
+
+      return list;
     } catch {
       return INITIAL_WAREHOUSES;
     }

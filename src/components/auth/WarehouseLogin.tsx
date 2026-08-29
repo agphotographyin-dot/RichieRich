@@ -16,6 +16,7 @@ import {
 import { authService } from '../../services/auth';
 import { warehouseStorage } from '../../services/warehouseStorage';
 import { WarehouseSubRole } from '../../types/warehouse';
+import { RichieRichLogo } from '../common/RichieRichLogo';
 
 interface WarehouseLoginProps {
   onLoginSuccess: () => void;
@@ -73,18 +74,16 @@ export const WarehouseLogin: React.FC<WarehouseLoginProps> = ({
           {/* Header Banner */}
           <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-8 py-7 text-white relative">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-amber-400 shadow-inner">
-                <Boxes className="w-7 h-7 text-amber-400" />
-              </div>
+              <RichieRichLogo size="lg" />
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-400 px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/20">
-                    Central Supply Chain & Logistics
+                  <span className="font-black tracking-wider text-xs uppercase text-amber-400">RICHIE RICH</span>
+                  <span className="text-[10px] text-amber-300/90 font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-400/10 border border-amber-400/20">
+                    Pan | Coffee | Essentials | 24x7
                   </span>
-                  <span className="text-xs text-slate-400 font-mono">v4.2 PRO</span>
                 </div>
-                <h1 className="text-2xl font-bold text-white tracking-tight mt-1">
-                  Warehouse & Inventory Portal
+                <h1 className="text-xl font-bold text-white tracking-tight mt-1">
+                  Central Warehouse & Logistics Portal
                 </h1>
                 <p className="text-xs text-slate-300 mt-0.5">
                   Multi-warehouse stock, POs, batch expiry tracking, and store transfers

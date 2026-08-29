@@ -95,6 +95,10 @@ class SoundEffects {
     }
   }
 
+  playSoftClick() {
+    this.playClick();
+  }
+
   // Play Low Stock / Warning chime
   playWarningChime() {
     try {
@@ -118,6 +122,36 @@ class SoundEffects {
     } catch (e) {
       console.warn('Audio play error', e);
     }
+  }
+
+  // Play Error buzzer
+  playErrorBuzzer() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(180, now);
+      osc.frequency.setValueAtTime(140, now + 0.1);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.25);
+    } catch (e) {
+      console.warn('Audio play error', e);
+    }
+  }
+
+  // Play trash / delete sound
+  playTrash() {
+    this.playWarningChime();
   }
 }
 

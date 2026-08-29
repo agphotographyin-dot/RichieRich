@@ -1,10 +1,11 @@
-import { Customer } from '../types';
+import { Customer, StoreAdminAuthState } from '../types';
 import { storage } from './storage';
 
 const ADMIN_STORAGE_KEY = 'rr_auth_admin';
 const POS_STORAGE_KEY = 'rr_auth_pos';
 const CUSTOMER_STORAGE_KEY = 'rr_auth_customer';
 const WAREHOUSE_STORAGE_KEY = 'rr_auth_warehouse';
+const STORE_ADMIN_STORAGE_KEY = 'rr_auth_store_admin';
 
 export interface AdminAuthState {
   isAuthenticated: boolean;
@@ -262,5 +263,109 @@ export const authService = {
 
   logoutWarehouse(): void {
     localStorage.removeItem(WAREHOUSE_STORAGE_KEY);
+  },
+
+  // =========================================================================
+  // 5. STORE ADMIN AUTHENTICATION (Store Selection -> Username -> Password)
+  // =========================================================================
+  isStoreAdminAuthenticated(): boolean {
+    try {
+      const data = localStorage.getItem(STORE_ADMIN_STORAGE_KEY);
+      if (!data) return false;
+      const parsed: StoreAdminAuthState = JSON.parse(data);
+      return parsed.isAuthenticated === true && Boolean(parsed.storeId);
+    } catch {
+      return false;
+    }
+  },
+
+  getStoreAdminAuthState(): StoreAdminAuthState | null {
+    try {
+      const data = localStorage.getItem(STORE_ADMIN_STORAGE_KEY);
+      if (!data) return null;
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
+  },
+
+  loginStoreAdmin(
+    storeId: string,
+    username: string,
+    password: string
+  ): { success: boolean; error?: string; session?: StoreAdminAuthState } {
+    const cleanStoreId = storeId.trim();
+    const cleanUsername = username.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
+    if (!cleanStoreId) {
+      return { success: false, error: 'Please select an authorized store outlet.' };
+    }
+
+    if (!cleanUsername) {
+      return { success: false, error: 'Please enter your Store Admin username.' };
+    }
+
+    if (!cleanPassword) {
+      return { success: false, error: 'Please enter your password.' };
+    }
+
+    const storeAdmins = storage.getStoreAdmins();
+    const stores = storage.getStores();
+    const storeObj = stores.find((s) => s.id === cleanStoreId);
+
+    if (!storeObj) {
+      return { success: false, error: 'Selected store outlet was not found in system.' };
+    }
+
+    // Check against store admin credentials list
+    const matchedAdmin = storeAdmins.find(
+      (a) =>
+        a.storeId === cleanStoreId &&
+        a.username.toLowerCase() === cleanUsername &&
+        a.password === cleanPassword
+    );
+
+    // Also allow master admin credentials override for testing/emergency
+    const isMasterAdminOverride =
+      cleanUsername === 'admin' &&
+      (cleanPassword === 'RRadmin' || cleanPassword === 'RRbopal' || cleanPassword === 'RRgota');
+
+    if (!matchedAdmin && !isMasterAdminOverride) {
+      return {
+        success: false,
+        error: `Invalid credentials for ${storeObj.shortName || storeObj.name}. Please check username & password.`,
+      };
+    }
+
+    if (matchedAdmin && !matchedAdmin.isActive) {
+      return {
+        success: false,
+        error: `This Store Admin account is currently deactivated. Please contact Master Admin.`,
+      };
+    }
+
+    // Update last login timestamp if matched
+    if (matchedAdmin) {
+      storage.updateStoreAdmin(matchedAdmin.id, {
+        lastLoginAt: new Date().toISOString(),
+      });
+    }
+
+    const authState: StoreAdminAuthState = {
+      isAuthenticated: true,
+      username: matchedAdmin ? matchedAdmin.username : 'admin',
+      storeId: cleanStoreId,
+      storeName: storeObj.name,
+      adminName: matchedAdmin ? matchedAdmin.name : 'Master Store Admin',
+      loginTime: new Date().toISOString(),
+    };
+
+    localStorage.setItem(STORE_ADMIN_STORAGE_KEY, JSON.stringify(authState));
+    return { success: true, session: authState };
+  },
+
+  logoutStoreAdmin(): void {
+    localStorage.removeItem(STORE_ADMIN_STORAGE_KEY);
   },
 };

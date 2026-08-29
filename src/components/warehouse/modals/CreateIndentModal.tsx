@@ -26,7 +26,7 @@ export const CreateIndentModal: React.FC<CreateIndentModalProps> = ({
 
   const defaultWh = warehouses[0] || {
     id: 'wh-central-amd',
-    name: 'Richie Rich Central Master Warehouse (Ahmedabad Hub)',
+    name: 'Central Warehouse',
   };
 
   const [storeId, setStoreId] = useState(stores[0]?.id || 'bopal');

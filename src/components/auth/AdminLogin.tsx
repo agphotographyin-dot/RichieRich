@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Shield, Lock, User, KeyRound, Eye, EyeOff, Crown, ArrowRight, AlertCircle, ArrowLeft } from 'lucide-react';
 import { authService } from '../../services/auth';
+import { RichieRichLogo } from '../common/RichieRichLogo';
 
 interface AdminLoginProps {
   onLoginSuccess: () => void;
@@ -50,13 +51,16 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onBackTo
 
           <div className="absolute top-0 right-0 w-36 h-36 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
           <div className="relative z-10 flex flex-col items-center">
-            <div className="w-14 h-14 rounded-2xl bg-slate-800/80 border border-slate-700/80 text-amber-400 flex items-center justify-center mb-3 shadow-lg">
-              <Crown className="w-7 h-7" />
+            <div className="mb-3">
+              <RichieRichLogo size="lg" />
             </div>
-            <h2 className="text-xl font-extrabold tracking-tight">Richie Rich Pan House</h2>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 mt-2 rounded-full bg-slate-800 border border-slate-700 text-amber-400 text-xs font-bold uppercase tracking-wider">
+            <h2 className="text-xl font-black uppercase tracking-wider text-white">RICHIE RICH</h2>
+            <p className="text-xs text-amber-300 font-semibold mt-0.5 tracking-tight">
+              Pan | Coffee | Essentials | 24x7
+            </p>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 mt-2.5 rounded-full bg-slate-800 border border-slate-700 text-amber-400 text-xs font-bold uppercase tracking-wider">
               <Shield className="w-3.5 h-3.5" />
-              <span>Admin Management Dashboard</span>
+              <span>Master Admin Management</span>
             </div>
             <p className="text-xs text-slate-300 mt-2 font-medium">
               Enter Administrator credentials to access dashboard, master inventory, analytics, and security.

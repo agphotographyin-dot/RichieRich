@@ -3,7 +3,7 @@ import {
   TrendingUp,
   Download,
   Calendar,
-  DollarSign,
+  IndianRupee,
   PieChart as PieIcon,
   BarChart3,
   Sparkles,
@@ -367,7 +367,7 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+          <IndianRupee className="w-3.5 h-3.5 text-emerald-600" />
           <span>Financial & Store Profit</span>
         </button>
         <button

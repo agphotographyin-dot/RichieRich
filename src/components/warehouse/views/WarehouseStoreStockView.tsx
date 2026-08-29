@@ -97,7 +97,7 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
     setTimeout(() => setContactSaveFeedback(''), 3000);
   };
   const centralWh = warehouses[0] || {
-    name: 'Richie Rich Central Master Warehouse (Ahmedabad Hub)',
+    name: 'Central Warehouse',
     code: 'WH-AMD-01',
   };
 

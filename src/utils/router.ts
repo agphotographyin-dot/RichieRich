@@ -1,14 +1,15 @@
-import { Role, AdminTab, WarehouseTab } from '../types';
+import { Role, AdminTab, WarehouseTab, StoreAdminTab } from '../types';
 
 export interface RouteState {
   role: Role;
   adminTab: AdminTab;
   warehouseTab?: WarehouseTab;
+  storeAdminTab?: StoreAdminTab;
 }
 
 export function parseCurrentRoute(): RouteState {
   if (typeof window === 'undefined') {
-    return { role: 'landing', adminTab: 'dashboard', warehouseTab: 'dashboard' };
+    return { role: 'landing', adminTab: 'dashboard', warehouseTab: 'dashboard', storeAdminTab: 'overview' };
   }
 
   const pathname = window.location.pathname.toLowerCase();
@@ -16,9 +17,18 @@ export function parseCurrentRoute(): RouteState {
   const searchParams = new URLSearchParams(window.location.search);
   const tabQuery = searchParams.get('tab') as AdminTab | null;
   const whTabQuery = searchParams.get('wh_tab') as WarehouseTab | null;
+  const storeAdminTabQuery = searchParams.get('store_tab') as StoreAdminTab | null;
 
-  // 1. Check Hash first (supports static hosting /#/pos /#/warehouse etc)
+  // 1. Check Hash first (supports static hosting /#/pos /#/warehouse /#/store-admin etc)
   const cleanHash = hash.replace(/^#\/?/, '');
+  if (cleanHash.startsWith('store-admin') || cleanHash.startsWith('storeadmin')) {
+    const hashTab = cleanHash.split('/')[1] as StoreAdminTab | undefined;
+    return {
+      role: 'store_admin',
+      adminTab: 'dashboard',
+      storeAdminTab: hashTab || storeAdminTabQuery || 'overview',
+    };
+  }
   if (cleanHash.startsWith('warehouse') || cleanHash.startsWith('inventory-wh')) {
     const hashTab = cleanHash.split('/')[1] as WarehouseTab | undefined;
     return { role: 'warehouse', adminTab: 'dashboard', warehouseTab: hashTab || whTabQuery || 'dashboard' };
@@ -44,9 +54,17 @@ export function parseCurrentRoute(): RouteState {
   }
 
   // 2. Check Standard Pathname
+  if (pathname.includes('/store-admin') || pathname.includes('/storeadmin')) {
+    let sTab: StoreAdminTab = 'overview';
+    if (storeAdminTabQuery && ['overview', 'finances', 'expenses', 'orders', 'inventory', 'staff', 'closing'].includes(storeAdminTabQuery)) {
+      sTab = storeAdminTabQuery;
+    }
+    return { role: 'store_admin', adminTab: 'dashboard', storeAdminTab: sTab };
+  }
+
   if (pathname.includes('/warehouse')) {
     let whTab: WarehouseTab = 'dashboard';
-    if (whTabQuery && ['dashboard', 'inventory', 'transfers', 'purchases', 'locations', 'adjustments', 'audit_trail', 'reports'].includes(whTabQuery)) {
+    if (whTabQuery && ['dashboard', 'inventory', 'store_stock', 'transfers', 'purchases', 'locations', 'adjustments', 'audit_trail', 'reports'].includes(whTabQuery)) {
       whTab = whTabQuery;
     }
     return { role: 'warehouse', adminTab: 'dashboard', warehouseTab: whTab };
@@ -78,20 +96,33 @@ export function parseCurrentRoute(): RouteState {
 
   // 3. Query Parameter ?role=
   const roleQuery = searchParams.get('role') as Role | null;
-  if (roleQuery && ['admin', 'pos', 'customer', 'landing', 'warehouse'].includes(roleQuery)) {
-    return { role: roleQuery, adminTab: tabQuery || 'dashboard', warehouseTab: whTabQuery || 'dashboard' };
+  if (roleQuery && ['admin', 'pos', 'customer', 'landing', 'warehouse', 'store_admin'].includes(roleQuery)) {
+    return {
+      role: roleQuery,
+      adminTab: tabQuery || 'dashboard',
+      warehouseTab: whTabQuery || 'dashboard',
+      storeAdminTab: storeAdminTabQuery || 'overview',
+    };
   }
 
   // Default Root is the Landing Page
-  return { role: 'landing', adminTab: 'dashboard', warehouseTab: 'dashboard' };
+  return { role: 'landing', adminTab: 'dashboard', warehouseTab: 'dashboard', storeAdminTab: 'overview' };
 }
 
-export function updateRoute(role: Role, adminTab?: AdminTab, replace = false, warehouseTab?: WarehouseTab) {
+export function updateRoute(
+  role: Role,
+  adminTab?: AdminTab,
+  replace = false,
+  warehouseTab?: WarehouseTab,
+  storeAdminTab?: StoreAdminTab
+) {
   if (typeof window === 'undefined') return;
 
   let targetUrl = '/';
   if (role === 'landing') {
     targetUrl = '/';
+  } else if (role === 'store_admin') {
+    targetUrl = storeAdminTab && storeAdminTab !== 'overview' ? `/store-admin?store_tab=${storeAdminTab}` : '/store-admin';
   } else if (role === 'warehouse') {
     targetUrl = warehouseTab && warehouseTab !== 'dashboard' ? `/warehouse?wh_tab=${warehouseTab}` : '/warehouse';
   } else if (role === 'pos') {
@@ -105,17 +136,23 @@ export function updateRoute(role: Role, adminTab?: AdminTab, replace = false, wa
   const currentPathWithSearch = window.location.pathname + window.location.search;
   if (currentPathWithSearch !== targetUrl) {
     if (replace) {
-      window.history.replaceState({ role, adminTab, warehouseTab }, '', targetUrl);
+      window.history.replaceState({ role, adminTab, warehouseTab, storeAdminTab }, '', targetUrl);
     } else {
-      window.history.pushState({ role, adminTab, warehouseTab }, '', targetUrl);
+      window.history.pushState({ role, adminTab, warehouseTab, storeAdminTab }, '', targetUrl);
     }
   }
 }
 
-export function getFullUrlForRole(role: Role, tab?: AdminTab, whTab?: WarehouseTab): string {
+export function getFullUrlForRole(
+  role: Role,
+  tab?: AdminTab,
+  whTab?: WarehouseTab,
+  storeAdminTab?: StoreAdminTab
+): string {
   if (typeof window === 'undefined') return '';
   const origin = window.location.origin;
   if (role === 'landing') return `${origin}/`;
+  if (role === 'store_admin') return storeAdminTab && storeAdminTab !== 'overview' ? `${origin}/store-admin?store_tab=${storeAdminTab}` : `${origin}/store-admin`;
   if (role === 'warehouse') return whTab && whTab !== 'dashboard' ? `${origin}/warehouse?wh_tab=${whTab}` : `${origin}/warehouse`;
   if (role === 'pos') return `${origin}/pos`;
   if (role === 'customer') return `${origin}/customer`;

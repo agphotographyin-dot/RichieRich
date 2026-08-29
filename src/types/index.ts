@@ -1,8 +1,117 @@
-export type Role = 'landing' | 'admin' | 'pos' | 'customer' | 'warehouse';
+export type Role = 'landing' | 'admin' | 'pos' | 'customer' | 'warehouse' | 'store_admin';
 export type UserRole = Role;
 export type AdminTab = 'dashboard' | 'staff_counters' | 'analytics' | 'orders' | 'loyalty_promos' | 'backups';
+export type StoreAdminTab = 'overview' | 'finances' | 'expenses' | 'orders' | 'inventory' | 'staff' | 'closing';
 
 export * from './warehouse';
+
+export interface StoreAdminCredential {
+  id: string;
+  username: string;
+  password: string;
+  name: string;
+  storeId: string;
+  storeName: string;
+  phone?: string;
+  email?: string;
+  roleTitle?: string;
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+export interface StoreAdminAuthState {
+  isAuthenticated: boolean;
+  username: string;
+  storeId: string;
+  storeName: string;
+  adminName: string;
+  loginTime: string;
+}
+
+export type StoreExpenseCategory =
+  | 'rent'
+  | 'utilities'
+  | 'staff_salary'
+  | 'staff_advance'
+  | 'maintenance'
+  | 'supplies'
+  | 'raw_materials_petty'
+  | 'marketing'
+  | 'logistics'
+  | 'cleaning'
+  | 'miscellaneous'
+  | 'daily_supplies'
+  | 'electricity_utility'
+  | 'rent_lease'
+  | 'maintenance_repairs'
+  | 'store_refreshments'
+  | 'local_vendor'
+  | 'misc';
+
+export interface StoreExpense {
+  id: string;
+  storeId: string;
+  storeName: string;
+  category: StoreExpenseCategory;
+  amount: number;
+  description: string;
+  title?: string;
+  paymentMethod: 'cash' | 'upi' | 'bank_transfer' | 'card' | 'cheque' | 'online';
+  paymentMode?: 'cash' | 'online' | 'upi' | 'card' | 'bank_transfer' | 'cheque';
+  paidTo: string;
+  paidToOrRecipient?: string;
+  voucherNumber: string;
+  receiptNumber?: string;
+  receiptUrl?: string;
+  loggedBy: string;
+  paidBy?: string;
+  notes?: string;
+  createdAt: string;
+  date: string;
+}
+
+export interface StoreFinancialSummary {
+  storeId: string;
+  storeName: string;
+  totalSales: number;
+  totalSalesCredit: number;
+  orderCount: number;
+  totalOrdersCount: number;
+  salesByMode: {
+    cash: number;
+    upi: number;
+    card: number;
+  };
+  salesByPayment: {
+    cash: number;
+    upi_qr: number;
+    card: number;
+    loyalty_points: number;
+    split: number;
+  };
+  totalExpenses: number;
+  totalExpensesDebit: number;
+  expenseCount: number;
+  expensesByMode: {
+    cash: number;
+    online: number;
+  };
+  categoryBreakdown: Record<string, number>;
+  expensesByCategory: Record<string, number>;
+  expensesByPayment: {
+    cash: number;
+    upi: number;
+    bank_transfer: number;
+    card: number;
+    cheque: number;
+  };
+  netStoreBalance: number;
+  expectedCashInDrawer: number;
+  profitMarginPercent: number;
+  averageOrderValue: number;
+  totalGSTCollected: number;
+}
 
 export interface CounterInfo {
   id: number;
@@ -54,7 +163,7 @@ export interface InventoryItem {
   name: string;
   category: string;
   description: string;
-  costPrice: number;       // Cost to store in currency (e.g. ₹ or $)
+  costPrice: number;       // Cost to store in currency (₹)
   sellingPrice: number;    // Retail price
   stockQuantity: number;   // Total in-stock quantity across all counters
   lowStockThreshold: number; // Alert triggers when stock <= this

@@ -17,101 +17,116 @@ import {
   Building2,
   FileSpreadsheet,
   AlertTriangle,
+  IndianRupee,
+  TrendingDown,
+  Layers,
+  CircleDot,
 } from 'lucide-react';
-import { authService } from '../../services/auth';
+import { RichieRichLogo } from '../common/RichieRichLogo';
 
 interface LandingPortalProps {
   onSelectAdmin: () => void;
+  onSelectStoreAdmin: (storeId?: string) => void;
   onSelectPOS: () => void;
   onSelectCustomer: () => void;
   onSelectWarehouse: () => void;
   isAdminAuthenticated: boolean;
+  isStoreAdminAuthenticated: boolean;
   isPOSAuthenticated: boolean;
   isWarehouseAuthenticated: boolean;
 }
 
 export const LandingPortal: React.FC<LandingPortalProps> = ({
   onSelectAdmin,
+  onSelectStoreAdmin,
   onSelectPOS,
   onSelectCustomer,
   onSelectWarehouse,
   isAdminAuthenticated,
+  isStoreAdminAuthenticated,
   isPOSAuthenticated,
   isWarehouseAuthenticated,
 }) => {
+  const handleStoreAdminClick = () => {
+    onSelectStoreAdmin();
+  };
+
   return (
-    <div className="min-h-[88vh] flex flex-col justify-between py-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+    <div className="relative min-h-[90vh] flex flex-col justify-between py-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto overflow-hidden">
+      {/* Ambient background glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-80 bg-gradient-to-b from-amber-500/10 via-slate-800/10 to-transparent blur-3xl pointer-events-none -z-10" />
+
       {/* Brand Hero Header */}
-      <div className="text-center space-y-3 mb-8">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900 text-amber-400 border border-slate-700 shadow-sm text-xs font-bold uppercase tracking-widest">
-          <Crown className="w-4 h-4 text-amber-400" />
-          <span>Richie Rich Pan House & Luxury Lounge</span>
+      <div className="text-center space-y-4 mb-8 pt-2">
+        {/* Brand Crest Pill Badge */}
+        <div className="inline-flex items-center gap-3 px-4 py-2 rounded-2xl bg-white/95 backdrop-blur-xs text-slate-900 border border-slate-200 shadow-sm">
+          <RichieRichLogo size="sm" />
+          <div className="text-left">
+            <div className="flex items-center gap-1.5">
+              <span className="font-black tracking-wider text-xs uppercase text-slate-900">RICHIE RICH</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse"></span>
+            </div>
+            <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider">
+              Pan | Coffee | Essentials | 24x7
+            </p>
+          </div>
         </div>
-        <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
-          Enterprise Management, Warehouse & Billing System
+
+        {/* Hero Title */}
+        <h1 className="text-2xl sm:text-4xl md:text-5xl font-black tracking-tight text-slate-900">
+          Enterprise Management, <span className="text-amber-600">Warehouse</span> & <span className="text-slate-900 underline decoration-amber-500 decoration-4 underline-offset-4">POS Billing</span>
         </h1>
-        <p className="text-sm sm:text-base text-slate-600 max-w-3xl mx-auto">
-          Select your authorized terminal below to access Central Warehouse Supply Chain, Master Admin Management, or Counter POS Billing.
+
+        <p className="text-sm sm:text-base text-slate-600 max-w-3xl mx-auto font-medium">
+          Unified operations across central multi-hub inventory, store-level financial accounting, real-time counter POS billing, and executive analytics.
         </p>
       </div>
 
-      {/* 3 Core Operational Portals: Warehouse, Admin, and POS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-6 w-full mb-8">
+      {/* 4 Core Unified Portals Grid: Warehouse, Admin, Store Admin, and POS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 w-full mb-8">
         {/* ========================================================================= */}
-        {/* OPTION 1: WAREHOUSE & SUPPLY CHAIN DASHBOARD */}
+        {/* OPTION 1: WAREHOUSE & SUPPLY CHAIN */}
         {/* ========================================================================= */}
-        <div className="bg-white border border-slate-200 hover:border-indigo-500/60 rounded-3xl shadow-lg hover:shadow-xl transition-all duration-200 overflow-hidden flex flex-col justify-between group">
-          <div className="bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-6 text-white relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-xl pointer-events-none" />
-            <div className="relative z-10 flex items-start justify-between">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-900/60 border border-indigo-700/60 text-amber-400 flex items-center justify-center shadow-md">
-                <Boxes className="w-6 h-6" />
+        <div className="bg-white border border-slate-200 hover:border-amber-500 rounded-2xl shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col justify-between group">
+          <div className="bg-[#1E293B] p-5 text-white relative">
+            <div className="flex items-start justify-between">
+              <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 text-amber-400 flex items-center justify-center shadow-xs">
+                <Boxes className="w-5 h-5" />
               </div>
-              <span className="px-2.5 py-1 rounded-full bg-indigo-900/80 border border-indigo-700/80 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
-                Supply Chain & POs
+              <span className="px-2 py-0.5 rounded-md bg-amber-400/10 border border-amber-400/20 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
+                Supply Chain
               </span>
             </div>
-            <div className="mt-4">
-              <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            <div className="mt-3">
+              <h2 className="text-base font-bold tracking-tight text-white flex items-center gap-2">
                 <span>Warehouse Portal</span>
               </h2>
-              <p className="text-xs text-indigo-200 mt-1 leading-relaxed">
-                Central stock, POs, GRN bills, supplier ledgers, batch expiry, and store dispatch transfers.
+              <p className="text-xs text-slate-300 mt-1 line-clamp-2">
+                Central stock, POs, supplier ledgers, batch expiry, and store dispatches.
               </p>
             </div>
           </div>
 
-          <div className="p-5 sm:p-6 space-y-4 flex-1 flex flex-col justify-between bg-white">
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-indigo-50/60 border border-indigo-100 text-indigo-950 font-semibold">
-                  <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                  <span className="truncate">Multi-Warehouse</span>
+          <div className="p-4 space-y-3 flex-1 flex flex-col justify-between bg-white">
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-800 font-semibold">
+                  <Building2 className="w-3 h-3 text-amber-600 shrink-0" />
+                  <span className="truncate">Multi-Hub</span>
                 </div>
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-indigo-50/60 border border-indigo-100 text-indigo-950 font-semibold">
-                  <Truck className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                  <span className="truncate">Stock In Transit</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-indigo-50/60 border border-indigo-100 text-indigo-950 font-semibold">
-                  <PackageCheck className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                  <span className="truncate">Batch Expiry</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-indigo-50/60 border border-indigo-100 text-indigo-950 font-semibold">
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                  <span className="truncate">Supplier Ledger</span>
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-800 font-semibold">
+                  <Truck className="w-3 h-3 text-amber-600 shrink-0" />
+                  <span className="truncate">Dispatches</span>
                 </div>
               </div>
 
-              {/* Login Credentials reminder */}
-              <div className="p-3 bg-indigo-50/40 rounded-xl border border-indigo-100 text-xs text-slate-600 space-y-1">
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600">
                 <div className="flex items-center justify-between font-bold text-slate-800">
                   <span>Warehouse Login:</span>
-                  <span className="text-[10px] font-mono text-indigo-600">/warehouse</span>
+                  <span className="text-[10px] font-mono text-slate-500">/warehouse</span>
                 </div>
-                <div className="flex items-center gap-2 font-mono text-[11px] text-slate-700">
-                  <span>ID: <strong className="text-slate-900">ADMIN</strong></span>
-                  <span>•</span>
-                  <span>Pass: <strong className="text-slate-900">RRwarehouse</strong></span>
+                <div className="font-mono text-[10px] text-slate-700 mt-0.5">
+                  ID: <strong className="text-amber-600">ADMIN</strong> • Pass: <strong className="text-slate-900">RRwarehouse</strong>
                 </div>
               </div>
             </div>
@@ -121,21 +136,20 @@ export const LandingPortal: React.FC<LandingPortalProps> = ({
                 <button
                   type="button"
                   onClick={onSelectWarehouse}
-                  className="w-full py-3 px-4 bg-indigo-900 hover:bg-indigo-950 text-white rounded-xl font-bold text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-2.5 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-300" />
                   <span>Enter Warehouse (Active)</span>
-                  <ArrowRight className="w-4 h-4" />
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={onSelectWarehouse}
-                  className="w-full py-3 px-4 bg-indigo-900 hover:bg-indigo-950 text-white rounded-xl font-bold text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer group-hover:bg-indigo-950"
+                  className="w-full py-2.5 px-3 bg-[#1E293B] hover:bg-slate-700 text-white rounded-xl font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  <KeyRound className="w-3.5 h-3.5 text-amber-400" />
                   <span>Login to Warehouse</span>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
@@ -143,60 +157,48 @@ export const LandingPortal: React.FC<LandingPortalProps> = ({
         </div>
 
         {/* ========================================================================= */}
-        {/* OPTION 2: ADMIN DASHBOARD */}
+        {/* OPTION 2: MASTER ADMIN DASHBOARD */}
         {/* ========================================================================= */}
-        <div className="bg-white border border-slate-200 hover:border-slate-400 rounded-3xl shadow-lg hover:shadow-xl transition-all duration-200 overflow-hidden flex flex-col justify-between group">
-          <div className="bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#334155] p-6 text-white relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full blur-xl pointer-events-none" />
-            <div className="relative z-10 flex items-start justify-between">
-              <div className="w-12 h-12 rounded-2xl bg-slate-800/90 border border-slate-700 text-amber-400 flex items-center justify-center shadow-md">
-                <Shield className="w-6 h-6" />
+        <div className="bg-white border border-slate-200 hover:border-amber-500 rounded-2xl shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col justify-between group">
+          <div className="bg-[#1E293B] p-5 text-white relative">
+            <div className="flex items-start justify-between">
+              <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 text-amber-400 flex items-center justify-center shadow-xs">
+                <Shield className="w-5 h-5" />
               </div>
-              <span className="px-2.5 py-1 rounded-full bg-slate-800/90 border border-slate-700 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
-                Executive Control
+              <span className="px-2 py-0.5 rounded-md bg-amber-400/10 border border-amber-400/20 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
+                Executive
               </span>
             </div>
-            <div className="mt-4">
-              <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-                <span>Admin Dashboard</span>
+            <div className="mt-3">
+              <h2 className="text-base font-bold tracking-tight text-white flex items-center gap-2">
+                <span>Master Admin</span>
               </h2>
-              <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                Staff & counter PINs, revenue & GST tax analytics, customer orders, promotions & automated backups.
+              <p className="text-xs text-slate-300 mt-1 line-clamp-2">
+                Store Admin logins, staff PINs, revenue analytics, catalog & backups.
               </p>
             </div>
           </div>
 
-          <div className="p-5 sm:p-6 space-y-4 flex-1 flex flex-col justify-between bg-white">
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-700 font-semibold">
-                  <Boxes className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span className="truncate">Store Catalog</span>
+          <div className="p-4 space-y-3 flex-1 flex flex-col justify-between bg-white">
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-800 font-semibold">
+                  <Store className="w-3 h-3 text-amber-600 shrink-0" />
+                  <span className="truncate">Multi-Store</span>
                 </div>
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-700 font-semibold">
-                  <Store className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span className="truncate">Multi-Store Setup</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-700 font-semibold">
-                  <KeyRound className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span className="truncate">Staff PINs</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-700 font-semibold">
-                  <Receipt className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-800 font-semibold">
+                  <Receipt className="w-3 h-3 text-amber-600 shrink-0" />
                   <span className="truncate">GST Analytics</span>
                 </div>
               </div>
 
-              {/* Login Credentials reminder */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1">
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600">
                 <div className="flex items-center justify-between font-bold text-slate-800">
                   <span>Admin Credentials:</span>
                   <span className="text-[10px] font-mono text-slate-500">/admin</span>
                 </div>
-                <div className="flex items-center gap-2 font-mono text-[11px] text-slate-700">
-                  <span>User: <strong className="text-slate-900">ADMIN</strong></span>
-                  <span>•</span>
-                  <span>Pass: <strong className="text-slate-900">RRadmin</strong></span>
+                <div className="font-mono text-[10px] text-slate-700 mt-0.5">
+                  User: <strong className="text-amber-600">ADMIN</strong> • Pass: <strong className="text-slate-900">RRadmin</strong>
                 </div>
               </div>
             </div>
@@ -206,21 +208,20 @@ export const LandingPortal: React.FC<LandingPortalProps> = ({
                 <button
                   type="button"
                   onClick={onSelectAdmin}
-                  className="w-full py-3 px-4 bg-[#1E293B] hover:bg-slate-900 text-white rounded-xl font-bold text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-2.5 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-300" />
                   <span>Enter Admin (Active)</span>
-                  <ArrowRight className="w-4 h-4" />
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={onSelectAdmin}
-                  className="w-full py-3 px-4 bg-[#1E293B] hover:bg-slate-900 text-white rounded-xl font-bold text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer group-hover:bg-slate-900"
+                  className="w-full py-2.5 px-3 bg-[#1E293B] hover:bg-slate-700 text-white rounded-xl font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  <KeyRound className="w-3.5 h-3.5 text-amber-400" />
                   <span>Login to Admin</span>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
@@ -228,60 +229,120 @@ export const LandingPortal: React.FC<LandingPortalProps> = ({
         </div>
 
         {/* ========================================================================= */}
-        {/* OPTION 3: POS DASHBOARD (POINT OF SALE TERMINAL) */}
+        {/* OPTION 3: STORE ADMIN */}
         {/* ========================================================================= */}
-        <div className="bg-white border border-slate-200 hover:border-emerald-500/60 rounded-3xl shadow-lg hover:shadow-xl transition-all duration-200 overflow-hidden flex flex-col justify-between group">
-          <div className="bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-950 p-6 text-white relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-400/10 rounded-full blur-xl pointer-events-none" />
-            <div className="relative z-10 flex items-start justify-between">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-950/90 border border-emerald-700/70 text-emerald-300 flex items-center justify-center shadow-md">
-                <CreditCard className="w-6 h-6" />
+        <div className="bg-white border border-slate-200 hover:border-amber-500 rounded-2xl shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col justify-between group">
+          <div className="bg-[#1E293B] p-5 text-white relative">
+            <div className="flex items-start justify-between">
+              <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 text-amber-400 flex items-center justify-center shadow-xs">
+                <Store className="w-5 h-5" />
               </div>
-              <span className="px-2.5 py-1 rounded-full bg-emerald-950/90 border border-emerald-700/70 text-emerald-200 text-[10px] font-bold uppercase tracking-wider">
-                Counter Desk
+              <span className="px-2 py-0.5 rounded-md bg-amber-400/10 border border-amber-400/20 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
+                Store Outlet
               </span>
             </div>
-            <div className="mt-4">
-              <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-                <span>POS Dashboard</span>
+            <div className="mt-3">
+              <h2 className="text-base font-bold tracking-tight text-white flex items-center gap-2">
+                <span>Store Admin</span>
               </h2>
-              <p className="text-xs text-emerald-100 mt-1 leading-relaxed">
-                Fast counter billing registers, quick-touch pan menu, barcode scanner sync, split cash/UPI & thermal receipts.
+              <p className="text-xs text-slate-300 mt-1 line-clamp-2">
+                Select Store &gt; User & Pass. Sales credits, store expenses & financial totals.
               </p>
             </div>
           </div>
 
-          <div className="p-5 sm:p-6 space-y-4 flex-1 flex flex-col justify-between bg-white">
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-50/70 border border-emerald-100 text-emerald-900 font-semibold">
-                  <Receipt className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span className="truncate">Rapid Billing</span>
+          <div className="p-4 space-y-3 flex-1 flex flex-col justify-between bg-white">
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-800 font-semibold">
+                  <IndianRupee className="w-3 h-3 text-amber-600 shrink-0" />
+                  <span className="truncate">Sales Credits</span>
                 </div>
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-50/70 border border-emerald-100 text-emerald-900 font-semibold">
-                  <CreditCard className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span className="truncate">Cash & UPI QR</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-50/70 border border-emerald-100 text-emerald-900 font-semibold">
-                  <Store className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span className="truncate">Store Selection</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-50/70 border border-emerald-100 text-emerald-900 font-semibold">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span className="truncate">Custom Paan Bar</span>
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-800 font-semibold">
+                  <TrendingDown className="w-3 h-3 text-amber-600 shrink-0" />
+                  <span className="truncate">Store Expenses</span>
                 </div>
               </div>
 
-              {/* Login Credentials reminder */}
-              <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200/80 text-xs text-emerald-900 space-y-1">
-                <div className="flex items-center justify-between font-bold text-emerald-950">
-                  <span>POS Credentials:</span>
-                  <span className="text-[10px] font-mono text-emerald-700">/pos</span>
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600">
+                <div className="flex items-center justify-between font-bold text-slate-800">
+                  <span>Store Branch Login:</span>
+                  <span className="text-[10px] font-mono text-slate-500">/store-admin</span>
                 </div>
-                <div className="flex items-center gap-2 font-mono text-[11px] text-emerald-950">
-                  <span>User: <strong className="text-emerald-950">ADMIN</strong></span>
-                  <span>•</span>
-                  <span>Pass: <strong className="text-emerald-950">RRPOSadmin</strong></span>
+                <div className="font-mono text-[10px] text-slate-700 mt-0.5">
+                  ID: <strong className="text-amber-600">admin_bopal</strong> • Pass: <strong className="text-slate-900">RRbopal</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              {isStoreAdminAuthenticated ? (
+                <button
+                  type="button"
+                  onClick={handleStoreAdminClick}
+                  className="w-full py-2.5 px-3 bg-[#e17100] hover:bg-[#c66400] text-white rounded-xl font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-200" />
+                  <span>Enter Store Admin (Active)</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleStoreAdminClick}
+                  className="w-full py-2.5 px-3 bg-[#e17100] hover:bg-[#c66400] text-white rounded-xl font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-amber-200" />
+                  <span>Login to Store Admin</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* OPTION 4: POS DESK BILLING */}
+        {/* ========================================================================= */}
+        <div className="bg-white border border-slate-200 hover:border-amber-500 rounded-2xl shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col justify-between group">
+          <div className="bg-[#1E293B] p-5 text-white relative">
+            <div className="flex items-start justify-between">
+              <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 text-amber-400 flex items-center justify-center shadow-xs">
+                <CreditCard className="w-5 h-5" />
+              </div>
+              <span className="px-2 py-0.5 rounded-md bg-amber-400/10 border border-amber-400/20 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
+                Counter Desk
+              </span>
+            </div>
+            <div className="mt-3">
+              <h2 className="text-base font-bold tracking-tight text-white flex items-center gap-2">
+                <span>POS Dashboard</span>
+              </h2>
+              <p className="text-xs text-slate-300 mt-1 line-clamp-2">
+                Rapid counter billing, pan menu, barcode scan, split cash/UPI & receipts.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-4 space-y-3 flex-1 flex flex-col justify-between bg-white">
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-800 font-semibold">
+                  <Receipt className="w-3 h-3 text-amber-600 shrink-0" />
+                  <span className="truncate">Rapid Bills</span>
+                </div>
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-800 font-semibold">
+                  <CreditCard className="w-3 h-3 text-amber-600 shrink-0" />
+                  <span className="truncate">Cash & UPI</span>
+                </div>
+              </div>
+
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600">
+                <div className="flex items-center justify-between font-bold text-slate-800">
+                  <span>POS Credentials:</span>
+                  <span className="text-[10px] font-mono text-slate-500">/pos</span>
+                </div>
+                <div className="font-mono text-[10px] text-slate-700 mt-0.5">
+                  User: <strong className="text-amber-600">ADMIN</strong> • Pass: <strong className="text-slate-900">RRPOSadmin</strong>
                 </div>
               </div>
             </div>
@@ -291,21 +352,20 @@ export const LandingPortal: React.FC<LandingPortalProps> = ({
                 <button
                   type="button"
                   onClick={onSelectPOS}
-                  className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-2.5 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-                  <span>Enter POS Terminal (Active)</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Enter POS (Active)</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={onSelectPOS}
-                  className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer group-hover:bg-emerald-700"
+                  className="w-full py-2.5 px-3 bg-[#1E293B] hover:bg-slate-700 text-white rounded-xl font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <KeyRound className="w-4 h-4 text-emerald-200" />
+                  <KeyRound className="w-3.5 h-3.5 text-amber-400" />
                   <span>Login to POS</span>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
@@ -313,33 +373,34 @@ export const LandingPortal: React.FC<LandingPortalProps> = ({
         </div>
       </div>
 
-      {/* Distinct & Separate Customer Portal Section */}
+      {/* Customer Ordering & Loyalty Portal Card */}
       <div className="max-w-4xl mx-auto w-full">
-        <div className="p-5 sm:p-6 bg-gradient-to-r from-purple-50 via-slate-50 to-purple-50 rounded-2xl border border-purple-200/80 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
-          <div className="flex items-center gap-3.5 text-center sm:text-left">
-            <div className="w-12 h-12 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-md">
-              <ShoppingBag className="w-6 h-6 text-purple-100" />
+        <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs hover:border-amber-500 transition-colors">
+          <div className="flex items-center gap-3 text-center sm:text-left">
+            <div className="w-10 h-10 rounded-xl bg-[#1E293B] text-amber-400 flex items-center justify-center shrink-0 shadow-xs border border-slate-700">
+              <ShoppingBag className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2 justify-center sm:justify-start">
-                <h3 className="text-sm font-bold text-purple-950">Customer Ordering & Loyalty Portal</h3>
-                <span className="text-[10px] font-mono bg-purple-200/80 text-purple-800 px-2 py-0.5 rounded-md font-bold">
+                <h3 className="text-xs sm:text-sm font-bold text-slate-900">Customer Ordering & Loyalty Portal</h3>
+                <span className="text-[10px] font-mono bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded-md font-bold">
                   /customer
                 </span>
               </div>
-              <p className="text-xs text-purple-900/80 mt-0.5">
-                Kept strictly separate from staff management. Customers order from the luxury menu using their 10-digit mobile number.
+              <p className="text-xs text-slate-600 mt-0.5">
+                Customers order luxury paans and check rewards using their 10-digit mobile number.
               </p>
             </div>
           </div>
 
+          {/* Styled Pill Button */}
           <button
             type="button"
             onClick={onSelectCustomer}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-[#1E293B] hover:bg-slate-700 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
           >
             <span>Open Customer Page</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>
           </button>
         </div>
       </div>

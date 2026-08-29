@@ -27,7 +27,7 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
 
   const defaultWh = warehouses[0] || {
     id: 'wh-central-amd',
-    name: 'Richie Rich Central Master Warehouse (Ahmedabad Hub)',
+    name: 'Central Warehouse',
   };
 
   const [locationType, setLocationType] = useState<'warehouse' | 'store'>('warehouse');

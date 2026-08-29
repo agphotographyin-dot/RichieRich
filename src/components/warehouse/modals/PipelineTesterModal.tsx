@@ -178,7 +178,7 @@ export const PipelineTesterModal: React.FC<PipelineTesterModalProps> = ({
       supplierName: sup.name,
       supplierGstin: sup.gstin,
       destinationWarehouseId: 'wh-central-amd',
-      destinationWarehouseName: 'Ahmedabad Central Master Warehouse (Gota Hub)',
+      destinationWarehouseName: 'Central Warehouse',
       orderDate: new Date().toISOString().split('T')[0],
       expectedDeliveryDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
         .toISOString()
@@ -244,7 +244,7 @@ export const PipelineTesterModal: React.FC<PipelineTesterModalProps> = ({
       supplierId: sup.id,
       supplierName: sup.name,
       warehouseId: 'wh-central-amd',
-      warehouseName: 'Ahmedabad Central Master Warehouse (Gota Hub)',
+      warehouseName: 'Central Warehouse',
       supplierInvoiceNo: `INV-TEST-${Date.now().toString().slice(-4)}`,
       billDate: new Date().toISOString().split('T')[0],
       receivedDate: new Date().toISOString().split('T')[0],
@@ -319,7 +319,7 @@ export const PipelineTesterModal: React.FC<PipelineTesterModalProps> = ({
       type: 'warehouse_to_store',
       sourceType: 'warehouse',
       sourceId: 'wh-central-amd',
-      sourceName: 'Ahmedabad Central Master Warehouse (Gota Hub)',
+      sourceName: 'Central Warehouse',
       destinationType: 'store',
       destinationId: targetStore.id,
       destinationName: targetStore.name,

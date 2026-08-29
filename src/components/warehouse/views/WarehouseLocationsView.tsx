@@ -37,7 +37,7 @@ export const WarehouseLocationsView: React.FC<WarehouseLocationsViewProps> = ({
   const centralWh = warehouses[0] || {
     id: 'wh-central-amd',
     code: 'WH-AMD-01',
-    name: 'Richie Rich Central Master Warehouse (Ahmedabad Hub)',
+    name: 'Central Warehouse',
     type: 'central_hub',
     address: 'Survey 142/B, Gota-Godhavi Logistics Park, SG Highway',
     city: 'Ahmedabad',
@@ -201,7 +201,7 @@ export const WarehouseLocationsView: React.FC<WarehouseLocationsViewProps> = ({
               <span>Connected Store Outlets (Replenished by Central Hub)</span>
             </h2>
             <p className="text-xs text-slate-500">
-              Live stock levels & POS terminals served directly from Ahmedabad Central Warehouse
+              Live stock levels & POS terminals served directly from Central Warehouse
             </p>
           </div>
         </div>

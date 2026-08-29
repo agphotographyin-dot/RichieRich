@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   FileSpreadsheet,
   Building2,
-  DollarSign,
+  IndianRupee,
   Plus,
   Search,
   CheckCircle2,
@@ -195,7 +195,7 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
               onClick={() => onOpenRecordPayment(suppliers[0]?.id || '')}
               className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
             >
-              <DollarSign className="w-3.5 h-3.5" />
+              <IndianRupee className="w-3.5 h-3.5" />
               <span>Record Supplier Payment</span>
             </button>
           )}

@@ -16,7 +16,7 @@ import { Header } from './components/common/Header';
 import { BarcodeScannerModal } from './components/common/BarcodeScannerModal';
 import { NotificationDrawer } from './components/common/NotificationDrawer';
 
-// Landing Page Portal Chooser (Two options: Admin Dashboard & POS Dashboard, separate Customer page)
+// Landing Page Portal Chooser
 import { LandingPortal } from './components/auth/LandingPortal';
 
 // Authentication Login Screens
@@ -24,6 +24,7 @@ import { AdminLogin } from './components/auth/AdminLogin';
 import { POSLogin } from './components/auth/POSLogin';
 import { CustomerLogin } from './components/auth/CustomerLogin';
 import { WarehouseLogin } from './components/auth/WarehouseLogin';
+import { StoreAdminLogin } from './components/auth/StoreAdminLogin';
 
 // Admin views
 import { AdminDashboard } from './components/admin/AdminDashboard';
@@ -33,6 +34,9 @@ import { AdminAnalytics } from './components/admin/AdminAnalytics';
 import { AdminOrders } from './components/admin/AdminOrders';
 import { AdminLoyaltyPromos } from './components/admin/AdminLoyaltyPromos';
 import { AdminBackupsSecurity } from './components/admin/AdminBackupsSecurity';
+
+// Store Admin view (NEW)
+import { StoreAdminDashboard } from './components/storeAdmin/StoreAdminDashboard';
 
 // POS view
 import { POSTerminal } from './components/pos/POSTerminal';
@@ -55,6 +59,9 @@ export const App: React.FC = () => {
   // Per-Portal Authentication States
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(
     authService.isAdminAuthenticated()
+  );
+  const [isStoreAdminAuthenticated, setIsStoreAdminAuthenticated] = useState<boolean>(
+    authService.isStoreAdminAuthenticated()
   );
   const [isPOSAuthenticated, setIsPOSAuthenticated] = useState<boolean>(
     authService.isPOSAuthenticated()
@@ -131,7 +138,6 @@ export const App: React.FC = () => {
 
     if (found) {
       if (currentRole === 'pos') {
-        // Dispatch custom global event so active POS Terminal immediately adds item to cart
         window.dispatchEvent(
           new CustomEvent('pos_barcode_scanned', {
             detail: { barcode: code, item: found },
@@ -185,6 +191,18 @@ export const App: React.FC = () => {
     setIsAdminAuthenticated(false);
   };
 
+  // Auth Handler: Store Admin
+  const handleStoreAdminLoginSuccess = (storeId?: string) => {
+    setIsStoreAdminAuthenticated(true);
+    navigateToRole('store_admin');
+  };
+
+  const handleStoreAdminLogout = () => {
+    authService.logoutStoreAdmin();
+    setIsStoreAdminAuthenticated(false);
+    navigateToRole('landing');
+  };
+
   // Auth Handler: POS
   const handlePOSLoginSuccess = () => {
     setIsPOSAuthenticated(true);
@@ -220,6 +238,7 @@ export const App: React.FC = () => {
   // Get active logout handler for current portal
   const getActiveLogoutHandler = () => {
     if (currentRole === 'admin' && isAdminAuthenticated) return handleAdminLogout;
+    if (currentRole === 'store_admin' && isStoreAdminAuthenticated) return handleStoreAdminLogout;
     if (currentRole === 'pos' && isPOSAuthenticated) return handlePOSLogout;
     if (currentRole === 'warehouse' && isWarehouseAuthenticated) return handleWarehouseLogout;
     if (currentRole === 'customer' && isCustomerAuthenticated) return handleCustomerLogout;
@@ -245,17 +264,18 @@ export const App: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* ================================================================= */}
-        {/* LANDING PAGE: 2 LOGIN OPTIONS (Admin Dashboard & POS Dashboard)   */}
-        {/* + Warehouse Hub and Separate Customer Page Link                   */}
+        {/* LANDING PAGE: 4 Operational Portals Grid + Customer Portal        */}
         {/* ================================================================= */}
         {currentRole === 'landing' && (
           <div className="animate-in fade-in duration-200">
             <LandingPortal
               onSelectAdmin={() => navigateToRole('admin')}
+              onSelectStoreAdmin={(storeId) => navigateToRole('store_admin')}
               onSelectPOS={() => navigateToRole('pos')}
               onSelectWarehouse={() => navigateToRole('warehouse')}
               onSelectCustomer={() => navigateToRole('customer')}
               isAdminAuthenticated={isAdminAuthenticated}
+              isStoreAdminAuthenticated={isStoreAdminAuthenticated}
               isPOSAuthenticated={isPOSAuthenticated}
               isWarehouseAuthenticated={isWarehouseAuthenticated}
             />
@@ -263,7 +283,7 @@ export const App: React.FC = () => {
         )}
 
         {/* ================================================================= */}
-        {/* INTERFACE 1: ADMIN MANAGEMENT DASHBOARD (URL: /admin)            */}
+        {/* INTERFACE 1: MASTER ADMIN MANAGEMENT DASHBOARD (URL: /admin)      */}
         {/* ================================================================= */}
         {currentRole === 'admin' && (
           <>
@@ -287,7 +307,9 @@ export const App: React.FC = () => {
                 )}
 
                 {activeAdminTab === 'staff_counters' && (
-                  <AdminStaffCounters />
+                  <AdminStaffCounters
+                    onNavigateToStoreAdmin={(storeId) => navigateToRole('store_admin')}
+                  />
                 )}
 
                 {activeAdminTab === 'analytics' && (
@@ -309,7 +331,29 @@ export const App: React.FC = () => {
         )}
 
         {/* ================================================================= */}
-        {/* INTERFACE 2: POINT OF SALE (POS) DASHBOARD (URL: /pos)           */}
+        {/* INTERFACE 2: STORE ADMIN DASHBOARD (URL: /store-admin)            */}
+        {/* ================================================================= */}
+        {currentRole === 'store_admin' && (
+          <>
+            {!isStoreAdminAuthenticated ? (
+              <StoreAdminLogin
+                onLoginSuccess={handleStoreAdminLoginSuccess}
+                onBackToLanding={() => navigateToRole('landing')}
+              />
+            ) : (
+              <div className="animate-in fade-in duration-150">
+                <StoreAdminDashboard
+                  onLogout={handleStoreAdminLogout}
+                  onNavigateToWarehouse={() => navigateToRole('warehouse')}
+                  onNavigateToAdmin={() => navigateToRole('admin')}
+                />
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ================================================================= */}
+        {/* INTERFACE 3: POINT OF SALE (POS) DASHBOARD (URL: /pos)           */}
         {/* ================================================================= */}
         {currentRole === 'pos' && (
           <>
@@ -332,7 +376,7 @@ export const App: React.FC = () => {
         )}
 
         {/* ================================================================= */}
-        {/* INTERFACE 3: WAREHOUSE & INVENTORY HUB (URL: /warehouse)          */}
+        {/* INTERFACE 4: WAREHOUSE & INVENTORY HUB (URL: /warehouse)          */}
         {/* ================================================================= */}
         {currentRole === 'warehouse' && (
           <>
@@ -350,7 +394,7 @@ export const App: React.FC = () => {
         )}
 
         {/* ================================================================= */}
-        {/* INTERFACE 4: SEPARATE CUSTOMER ORDERING PORTAL (URL: /customer)   */}
+        {/* INTERFACE 5: SEPARATE CUSTOMER ORDERING PORTAL (URL: /customer)   */}
         {/* ================================================================= */}
         {currentRole === 'customer' && (
           <>

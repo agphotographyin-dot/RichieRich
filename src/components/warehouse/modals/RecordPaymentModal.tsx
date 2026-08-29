@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, DollarSign, CreditCard, Building2 } from 'lucide-react';
+import { X, IndianRupee, CreditCard, Building2 } from 'lucide-react';
 import { Supplier } from '../../../types/warehouse';
 import { CURRENCY } from '../../../services/storage';
 import { warehouseStorage } from '../../../services/warehouseStorage';

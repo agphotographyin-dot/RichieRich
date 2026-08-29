@@ -806,4 +806,91 @@ export const pdfReportService = {
     addPageFooters(doc);
     doc.save(`Richie_Rich_Audit_Trail_${new Date().toISOString().split('T')[0]}.pdf`);
   },
+
+  /**
+   * 10. STORE FINANCIAL STATEMENT & P&L REPORT
+   */
+  exportStoreFinancialStatementPDF(
+    store: StoreLocation,
+    summary: any,
+    orders: Order[],
+    expenses: any[]
+  ) {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const todayStr = new Date().toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    let currentY = addBrandHeader(
+      doc,
+      `Store Financial Statement & P&L Ledger`,
+      `Outlet: ${store.name} (${store.id})  |  Generated: ${todayStr}`
+    );
+
+    // Summary Scorecards Table
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Store Financial Metric', 'Value', 'Classification / Remarks']],
+      body: [
+        ['Total POS Store Sales (Credit)', formatCurrency(summary.totalSales || summary.totalSalesCredit || 0), `${summary.orderCount || summary.totalOrdersCount || 0} Billed Orders`],
+        ['• Cash Register Sales', formatCurrency(summary.salesByMode?.cash || 0), 'Physical Cash Handover'],
+        ['• UPI / BharatQR Digital Sales', formatCurrency(summary.salesByMode?.upi || summary.salesByPayment?.upi_qr || 0), 'Instant Bank Settlement'],
+        ['• Card / POS Swipe Sales', formatCurrency(summary.salesByMode?.card || summary.salesByPayment?.card || 0), 'EDC Terminal Settled'],
+        ['Total Store Expenses (Debit)', formatCurrency(summary.totalExpenses || summary.totalExpensesDebit || 0), `${expenses.length} Logged Expense Entries`],
+        ['• Cash Outflows (Drawer)', formatCurrency(summary.expensesByMode?.cash || summary.expensesByPayment?.cash || 0), 'Petty Cash Payments'],
+        ['• Online / Bank Outflows', formatCurrency(summary.expensesByMode?.online || 0), 'Digital / Vendor Transfers'],
+        ['NET STORE BALANCE', formatCurrency(summary.netStoreBalance || 0), (summary.netStoreBalance || 0) >= 0 ? 'Surplus / Operating Profit' : 'Deficit'],
+        ['Expected Cash In Drawer', formatCurrency(summary.expectedCashInDrawer || 0), 'Physical Cash Audit Check'],
+        ['Average Order Value (AOV)', formatCurrency(summary.averageOrderValue || 0), 'Per Customer Spend Average'],
+        ['GST Collected', formatCurrency(summary.totalGSTCollected || 0), 'Statutory Tax Liability (CGST+SGST)'],
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontSize: 8.5, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 70 },
+        1: { fontStyle: 'bold', halign: 'right', cellWidth: 45 },
+        2: { fontSize: 7.5, textColor: [100, 116, 139] },
+      },
+      margin: { left: 14, right: 14 },
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+
+    // Expense Breakdown Table
+    if (expenses.length > 0) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(30, 41, 59);
+      doc.text('STORE EXPENSE LEDGER DETAILS', 14, currentY);
+      currentY += 4;
+
+      const expenseRows = expenses.map((exp) => [
+        exp.date || (exp.createdAt ? exp.createdAt.split('T')[0] : '-'),
+        (exp.category || 'misc').replace(/_/g, ' ').toUpperCase(),
+        exp.title || exp.description || '-',
+        exp.paidToOrRecipient || exp.paidTo || '-',
+        (exp.paymentMode || exp.paymentMethod || 'cash').toUpperCase(),
+        formatCurrency(exp.amount || 0),
+      ]);
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [['Date', 'Category', 'Expense Title', 'Recipient', 'Mode', 'Amount']],
+        body: expenseRows,
+        theme: 'striped',
+        headStyles: { fillColor: [180, 83, 9], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 7.5, textColor: [51, 65, 85] },
+        columnStyles: {
+          5: { fontStyle: 'bold', halign: 'right' },
+        },
+        margin: { left: 14, right: 14 },
+      });
+    }
+
+    addPageFooters(doc);
+    doc.save(`Richie_Rich_Store_Statement_${store.shortName || store.id}_${new Date().toISOString().split('T')[0]}.pdf`);
+  },
 };

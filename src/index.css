@@ -15,8 +15,25 @@
   #printable-manifest,
   #printable-manifest *,
   #printable-receipt,
-  #printable-receipt * {
+  #printable-receipt *,
+  #printable-store-statement,
+  #printable-store-statement * {
     visibility: visible;
+  }
+
+  #printable-store-statement {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
   }
 
   #printable-manifest {

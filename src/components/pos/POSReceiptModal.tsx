@@ -46,11 +46,11 @@ export const POSReceiptModal: React.FC<POSReceiptModalProps> = ({
             {/* Store Crest */}
             <div className="text-center space-y-0.5 border-b border-dashed border-slate-300 pb-3">
               <div className="font-black text-sm uppercase tracking-wider text-slate-900">
-                ★ RICHIE RICH PAN HOUSE ★
+                ★ RICHIE RICH ★
               </div>
-              <p className="text-[10px] text-slate-600">Royal Pan Lounge & Confectioneries</p>
+              <p className="text-[10px] text-slate-700 font-bold tracking-tight">Pan | Coffee | Essentials | 24x7</p>
               <p className="text-[9px] text-slate-500">GSTIN: 27AABCR1234F1Z8 • Ph: +91 98201 99882</p>
-              <p className="text-[9px] text-slate-500">MG Road, Heritage Pan Square, Mumbai</p>
+              <p className="text-[9px] text-slate-500">Ahmedabad Chain Outlets • Gujarat</p>
             </div>
 
             {/* Order Meta */}

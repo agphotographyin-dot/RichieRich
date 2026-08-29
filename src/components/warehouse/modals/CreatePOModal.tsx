@@ -27,7 +27,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
 
   const defaultWh = warehouses[0] || {
     id: 'wh-central-amd',
-    name: 'Richie Rich Central Master Warehouse (Ahmedabad Hub)',
+    name: 'Central Warehouse',
     city: 'Ahmedabad',
   };
 
