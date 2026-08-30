@@ -162,9 +162,14 @@ export interface InventoryItem {
   barcode: string;
   name: string;
   category: string;
+  brand?: string;          // Brand / Manufacturer name
+  vendors?: string[];      // Associated Vendors/Suppliers (names or IDs)
+  vendor?: string;         // Primary vendor
+  priceType?: 'fixed' | 'variable'; // 'fixed' (default) or 'variable' (POS price enters manually)
+  status?: 'active' | 'inactive' | 'draft'; // Product Status (default 'active')
   description: string;
-  costPrice: number;       // Cost to store in currency (₹)
-  sellingPrice: number;    // Retail price
+  costPrice: number;       // Cost to store in currency (₹) / Purchase price
+  sellingPrice: number;    // Retail price (0 for variable price products)
   stockQuantity: number;   // Total in-stock quantity across all counters
   lowStockThreshold: number; // Alert triggers when stock <= this
   unit: string;            // 'pieces', 'boxes', 'bottles', 'grams', etc.
@@ -201,6 +206,9 @@ export interface OrderItem {
   price: number;
   costPrice: number;
   quantity: number;
+  priceType?: 'fixed' | 'variable';
+  isVariablePrice?: boolean;
+  manualPriceEntered?: boolean;
   customization?: string;
   subtotal: number;
   profit: number;

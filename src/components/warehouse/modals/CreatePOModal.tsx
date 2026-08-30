@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Plus, Trash2, FileSpreadsheet, Building2, Calendar, AlertCircle } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { X, Plus, Trash2, FileSpreadsheet, Building2, Calendar, AlertCircle, Filter, CheckCircle2 } from 'lucide-react';
 import { Supplier, Warehouse, PurchaseOrderItem } from '../../../types/warehouse';
 import { InventoryItem } from '../../../types';
 import { CURRENCY } from '../../../services/storage';
@@ -32,12 +32,33 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
   };
 
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id || '');
+  const [filterByVendorOnly, setFilterByVendorOnly] = useState(true);
   const [expectedDate, setExpectedDate] = useState(
     new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
   const [notes, setNotes] = useState('');
   const [includeGst, setIncludeGst] = useState<boolean>(false);
   const [taxPercent, setTaxPercent] = useState<number>(5);
+
+  const selectedSupplier = suppliers.find((s) => s.id === supplierId);
+
+  // Filter inventory by active status and selected vendor
+  const activeInventory = useMemo(() => {
+    return inventory.filter((item) => item.status !== 'inactive');
+  }, [inventory]);
+
+  const vendorSpecificInventory = useMemo(() => {
+    if (!selectedSupplier) return activeInventory;
+    const sName = selectedSupplier.name.toLowerCase();
+    const matches = activeInventory.filter((item) => {
+      const v1 = (item.vendor || '').toLowerCase();
+      const vList = (item.vendors || []).map((v) => v.toLowerCase());
+      return v1.includes(sName) || sName.includes(v1) || vList.some((v) => v.includes(sName) || sName.includes(v));
+    });
+    return matches.length > 0 ? matches : activeInventory;
+  }, [activeInventory, selectedSupplier]);
+
+  const displayedCatalog = filterByVendorOnly ? vendorSpecificInventory : activeInventory;
 
   const [items, setItems] = useState<
     Array<{
@@ -49,20 +70,23 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
       unitPrice: number;
       unit: string;
     }>
-  >([
-    {
-      itemId: inventory[0]?.id || 'item-101',
-      name: inventory[0]?.name || 'Royal Maghai Meetha Paan',
-      sku: inventory[0]?.sku || 'PAN-MAG-01',
-      category: inventory[0]?.category || 'Paan',
-      quantity: 50,
-      unitPrice: inventory[0]?.costPrice || 20,
-      unit: inventory[0]?.unit || 'pieces',
-    },
-  ]);
+  >(() => {
+    const firstItem = displayedCatalog[0] || activeInventory[0];
+    return [
+      {
+        itemId: firstItem?.id || 'item-101',
+        name: firstItem?.name || 'Royal Maghai Meetha Paan',
+        sku: firstItem?.sku || 'PAN-MAG-01',
+        category: firstItem?.category || 'Paan',
+        quantity: 50,
+        unitPrice: firstItem?.costPrice || 20,
+        unit: firstItem?.unit || 'pieces',
+      },
+    ];
+  });
 
   const handleAddItem = () => {
-    const defaultItem = inventory[0] || {
+    const defaultItem = displayedCatalog[0] || activeInventory[0] || {
       id: `item-${Date.now()}`,
       name: '',
       sku: 'SKU-NEW',
@@ -117,7 +141,6 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const selectedSupplier = suppliers.find((s) => s.id === supplierId);
 
     const poItems: PurchaseOrderItem[] = items.map((it) => {
       const qty = Number(it.quantity) || 1;
@@ -212,17 +235,43 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-              Expected Delivery Date
-            </label>
-            <input
-              type="date"
-              required
-              value={expectedDate}
-              onChange={(e) => setExpectedDate(e.target.value)}
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                Expected Delivery Date
+              </label>
+              <input
+                type="date"
+                required
+                value={expectedDate}
+                onChange={(e) => setExpectedDate(e.target.value)}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+              />
+            </div>
+
+            {/* Vendor catalog filter banner */}
+            <div className="flex items-end">
+              <div className="w-full p-2.5 bg-indigo-50/70 border border-indigo-100 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                    <Filter className="w-3.5 h-3.5 text-indigo-600" />
+                    Vendor-Associated Catalog
+                  </span>
+                  <span className="text-[11px] text-indigo-700 block">
+                    {vendorSpecificInventory.length} products associated with {selectedSupplier?.name || 'this vendor'}
+                  </span>
+                </div>
+                <label className="flex items-center gap-1.5 text-xs font-bold text-indigo-900 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={filterByVendorOnly}
+                    onChange={(e) => setFilterByVendorOnly(e.target.checked)}
+                    className="rounded text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>Filter</span>
+                </label>
+              </div>
+            </div>
           </div>
 
           {/* Items Section with Search/History Autocomplete Type Box */}
@@ -233,7 +282,9 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
                   Order Line Items
                 </span>
                 <span className="block text-[11px] text-slate-500 font-normal">
-                  Type item name (history suggestions appear automatically)
+                  {filterByVendorOnly
+                    ? `Showing ${displayedCatalog.length} items from ${selectedSupplier?.name}`
+                    : 'Showing all active catalog items'}
                 </span>
               </div>
               <button
@@ -258,7 +309,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
                       <ItemAutocompleteInput
                         value={row.name}
                         placeholder="Type item name..."
-                        inventory={inventory}
+                        inventory={displayedCatalog}
                         onSelect={(sel) => handleItemSelect(idx, sel)}
                         onChange={(val) => handleFieldChange(idx, 'name', val)}
                         inputClassName="bg-white"

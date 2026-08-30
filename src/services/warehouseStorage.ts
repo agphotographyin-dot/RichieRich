@@ -58,8 +58,93 @@ export const INITIAL_WAREHOUSES: Warehouse[] = [
   },
 ];
 
-// Clean initial seed lists (empty for fresh production usage)
-export const INITIAL_SUPPLIERS: Supplier[] = [];
+// Initial Authentic Suppliers Seed
+export const INITIAL_SUPPLIERS: Supplier[] = [
+  {
+    id: 'sup-101',
+    code: 'SUP-GUJ-01',
+    name: 'Gujarat Betel Traders',
+    category: 'raw_materials',
+    contactPerson: 'Ramesh Patel',
+    phone: '+91 98250 88710',
+    email: 'orders@gujaratbetel.in',
+    gstin: '24AABCG1234F1Z1',
+    panNumber: 'AABCG1234F',
+    address: 'Plot 44, APMC Market Yard, Jamalpur',
+    city: 'Ahmedabad',
+    state: 'Gujarat',
+    paymentTerms: 'net_15',
+    creditLimit: 500000,
+    currentOutstanding: 14500,
+    totalPurchases: 285000,
+    totalPaid: 270500,
+    rating: 4.9,
+    isActive: true,
+  },
+  {
+    id: 'sup-102',
+    code: 'SUP-SHR-02',
+    name: 'Shreeji Spices & Supari',
+    category: 'spices_mukhwas',
+    contactPerson: 'Paresh Shah',
+    phone: '+91 98251 44520',
+    email: 'sales@shreejispices.in',
+    gstin: '24AABCS5678G1Z2',
+    panNumber: 'AABCS5678G',
+    address: '108, Ring Road Spice Market',
+    city: 'Surat',
+    state: 'Gujarat',
+    paymentTerms: 'net_30',
+    creditLimit: 350000,
+    currentOutstanding: 8200,
+    totalPurchases: 195000,
+    totalPaid: 186800,
+    rating: 4.8,
+    isActive: true,
+  },
+  {
+    id: 'sup-103',
+    code: 'SUP-APX-03',
+    name: 'Apex Cafe & Beverage Distributors',
+    category: 'cafe_beverages',
+    contactPerson: 'Amit Joshi',
+    phone: '+91 98252 66730',
+    email: 'supply@apexbeverages.in',
+    gstin: '24AABCA9012H1Z3',
+    panNumber: 'AABCA9012H',
+    address: 'B-12, GIDC Estate, Changodar',
+    city: 'Ahmedabad',
+    state: 'Gujarat',
+    paymentTerms: 'net_15',
+    creditLimit: 400000,
+    currentOutstanding: 22000,
+    totalPurchases: 340000,
+    totalPaid: 318000,
+    rating: 4.7,
+    isActive: true,
+  },
+  {
+    id: 'sup-104',
+    code: 'SUP-ROY-04',
+    name: 'Royal Luxury Packaging & Vark',
+    category: 'packaging',
+    contactPerson: 'Narendra Soni',
+    phone: '+91 98253 99840',
+    email: 'contact@royalvarkworks.in',
+    gstin: '24AABCR3456J1Z4',
+    panNumber: 'AABCR3456J',
+    address: '77, Soni Bazaar, Manek Chowk',
+    city: 'Ahmedabad',
+    state: 'Gujarat',
+    paymentTerms: 'immediate',
+    creditLimit: 200000,
+    currentOutstanding: 0,
+    totalPurchases: 120000,
+    totalPaid: 120000,
+    rating: 4.9,
+    isActive: true,
+  },
+];
 export const INITIAL_LEDGER_ENTRIES: SupplierLedgerEntry[] = [];
 export const INITIAL_PURCHASE_ORDERS: PurchaseOrder[] = [];
 export const INITIAL_PURCHASE_BILLS: PurchaseBill[] = [];
@@ -268,7 +353,12 @@ export const warehouseStorage = {
         this.saveSuppliers(INITIAL_SUPPLIERS);
         return INITIAL_SUPPLIERS;
       }
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        this.saveSuppliers(INITIAL_SUPPLIERS);
+        return INITIAL_SUPPLIERS;
+      }
+      return parsed;
     } catch {
       return INITIAL_SUPPLIERS;
     }

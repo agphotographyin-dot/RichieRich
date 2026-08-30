@@ -37,11 +37,15 @@ import {
   QrCode,
   Store,
   Eye,
+  Building,
 } from 'lucide-react';
 import { InventoryItem, Category } from '../../../types';
 import { BatchRecord, Warehouse } from '../../../types/warehouse';
 import { CURRENCY, storage } from '../../../services/storage';
+import { warehouseStorage } from '../../../services/warehouseStorage';
 import { pdfReportService } from '../../../services/pdfReportService';
+import { excelInventoryService } from '../../../services/excelInventoryService';
+import { ExcelImportModal } from '../modals/ExcelImportModal';
 import { BarcodeVisualizer } from '../../common/BarcodeVisualizer';
 import { soundEffects } from '../../../services/audio';
 
@@ -84,9 +88,13 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
   const [stockStatusFilter, setStockStatusFilter] = useState<
     'all' | 'low' | 'critical' | 'out_of_stock' | 'healthy' | 'high_margin' | 'tax_exempt'
   >('all');
+  const [priceTypeFilter, setPriceTypeFilter] = useState<'all' | 'fixed' | 'variable'>('all');
+  const [vendorFilter, setVendorFilter] = useState<string>('all');
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [valuationType, setValuationType] = useState<'fifo' | 'avg'>('fifo');
   const [localSearch, setLocalSearch] = useState('');
+  const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   
   // Sorting
   const [sortBy, setSortBy] = useState<'name' | 'stock' | 'profit' | 'margin' | 'valuation'>('name');
@@ -96,6 +104,15 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [printingLabelItem, setPrintingLabelItem] = useState<InventoryItem | null>(null);
   const [zoomPhotoItem, setZoomPhotoItem] = useState<InventoryItem | null>(null);
+
+  // Suppliers from warehouse storage
+  const suppliers = warehouseStorage.getSuppliers();
+  const allVendorsList = Array.from(
+    new Set([
+      ...suppliers.map((s) => s.name),
+      ...inventory.flatMap((i) => i.vendors || (i.vendor ? [i.vendor] : [])),
+    ])
+  ).filter(Boolean);
 
   // Categories extraction
   const categoriesList = propCategories && propCategories.length > 0 
@@ -110,9 +127,20 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
       item.name.toLowerCase().includes(effectiveSearch) ||
       item.sku.toLowerCase().includes(effectiveSearch) ||
       item.barcode.includes(effectiveSearch) ||
-      item.category.toLowerCase().includes(effectiveSearch);
+      item.category.toLowerCase().includes(effectiveSearch) ||
+      (item.brand && item.brand.toLowerCase().includes(effectiveSearch)) ||
+      (item.vendor && item.vendor.toLowerCase().includes(effectiveSearch)) ||
+      (item.vendors && item.vendors.some((v) => v.toLowerCase().includes(effectiveSearch)));
 
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+
+    const matchesPriceType =
+      priceTypeFilter === 'all' || (item.priceType || 'fixed') === priceTypeFilter;
+
+    const matchesVendor =
+      vendorFilter === 'all' ||
+      item.vendor === vendorFilter ||
+      (item.vendors && item.vendors.includes(vendorFilter));
 
     let matchesStatus = true;
     if (stockStatusFilter === 'low') {
@@ -129,7 +157,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
       matchesStatus = item.isTaxApplicable === false;
     }
 
-    return matchesSearch && matchesCategory && matchesStatus;
+    return matchesSearch && matchesCategory && matchesPriceType && matchesVendor && matchesStatus;
   });
 
   // Sort
@@ -232,6 +260,124 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
 
         {/* Global Action Toolbar */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Excel Import Button */}
+          <button
+            onClick={() => setIsExcelImportOpen(true)}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+            title="Import or update products via Excel (.xlsx) or CSV file with auto-fix"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-white" />
+            <span>Import Excel / CSV</span>
+          </button>
+
+          {/* Export Dropdown Menu */}
+          <div className="relative">
+            <button
+              onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              title="Export options: Excel, CSV, PDF, and editable templates"
+            >
+              <Download className="w-4 h-4 text-emerald-400" />
+              <span>Export</span>
+              <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+            </button>
+
+            {isExportMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsExportMenuOpen(false)}
+                />
+                <div className="absolute right-0 mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 animate-in fade-in text-xs">
+                  <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                    Master Inventory Exports
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      excelInventoryService.exportInventory(inventory);
+                      setIsExportMenuOpen(false);
+                      soundEffects.playClick();
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-emerald-50 text-slate-800 flex items-center gap-2 font-medium cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <div>
+                      <span className="font-bold block text-slate-900">Export Excel (.xlsx)</span>
+                      <span className="text-[10px] text-slate-500">Full catalog + valuation summary</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      excelInventoryService.exportTemplateWithExistingData(inventory);
+                      setIsExportMenuOpen(false);
+                      soundEffects.playClick();
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-amber-50 text-slate-800 flex items-center gap-2 font-medium cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 text-amber-600 shrink-0" />
+                    <div>
+                      <span className="font-bold block text-slate-900">Download Editable Template</span>
+                      <span className="text-[10px] text-slate-500">Pre-filled with current products</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      excelInventoryService.downloadTemplate();
+                      setIsExportMenuOpen(false);
+                      soundEffects.playClick();
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-800 flex items-center gap-2 font-medium cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-slate-500 shrink-0" />
+                    <div>
+                      <span className="font-bold block text-slate-900">Blank Sample Template (.xlsx)</span>
+                      <span className="text-[10px] text-slate-500">Empty template with instructions</span>
+                    </div>
+                  </button>
+
+                  <div className="border-t border-slate-100 my-1" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      excelInventoryService.exportInventoryCSV(inventory);
+                      setIsExportMenuOpen(false);
+                      soundEffects.playClick();
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-800 flex items-center gap-2 font-medium cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 text-slate-600 shrink-0" />
+                    <div>
+                      <span className="font-bold block text-slate-900">Export CSV (.csv)</span>
+                      <span className="text-[10px] text-slate-500">Universal plain text format</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleExportPDF();
+                      setIsExportMenuOpen(false);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-rose-50 text-slate-800 flex items-center gap-2 font-medium cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 text-rose-600 shrink-0" />
+                    <div>
+                      <span className="font-bold block text-slate-900">Export PDF Report (.pdf)</span>
+                      <span className="text-[10px] text-slate-500">Executive valuation matrix</span>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
           {onOpenRegisterBarcode && (
             <button
               onClick={() => onOpenRegisterBarcode()}
@@ -245,34 +391,17 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
           {onOpenScanner && (
             <button
               onClick={onOpenScanner}
-              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
             >
               <Scan className="w-3.5 h-3.5 text-amber-400" />
               <span>Scan Barcode</span>
             </button>
           )}
 
-          <button
-            onClick={handleExportPDF}
-            className="px-3.5 py-2 bg-linear-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-            title="Export master inventory catalog and valuation matrix as PDF"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Export PDF Report</span>
-          </button>
-
-          <button
-            onClick={handleExportCSV}
-            className="px-2.5 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 text-xs font-bold rounded-xl flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
-            title="Export Raw CSV Data"
-          >
-            <span>CSV</span>
-          </button>
-
           {onOpenAddItem && (
             <button
               onClick={onOpenAddItem}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Add New Product</span>
@@ -370,8 +499,9 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
           )}
         </div>
 
-        {/* Category Pills & Stock Condition Filters */}
+        {/* Category Pills, Vendor & Price Type Filters */}
         <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+          {/* Category Selector */}
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
@@ -383,6 +513,33 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                 {c}
               </option>
             ))}
+          </select>
+
+          {/* Vendor Filter */}
+          {allVendorsList.length > 0 && (
+            <select
+              value={vendorFilter}
+              onChange={(e) => setVendorFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-200 text-xs text-slate-700 font-bold rounded-xl px-3 py-2 focus:outline-hidden focus:border-indigo-400 cursor-pointer max-w-[150px] truncate"
+            >
+              <option value="all">All Vendors</option>
+              {allVendorsList.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Price Type Filter */}
+          <select
+            value={priceTypeFilter}
+            onChange={(e) => setPriceTypeFilter(e.target.value as any)}
+            className="bg-slate-50 border border-slate-200 text-xs text-slate-700 font-bold rounded-xl px-3 py-2 focus:outline-hidden focus:border-indigo-400 cursor-pointer"
+          >
+            <option value="all">All Price Types</option>
+            <option value="fixed">Fixed Price</option>
+            <option value="variable">Variable Price (POS Override)</option>
           </select>
 
           <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs shrink-0">
@@ -459,7 +616,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  sortedInventory.map((item) => {
+                  sortedInventory.map((item, idx) => {
                     const margin = item.marginPercentage || 
                       (item.sellingPrice > 0 ? Math.round(((item.sellingPrice - item.costPrice) / item.sellingPrice) * 100) : 0);
                     
@@ -472,7 +629,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                     const centralWHStock = Math.max(0, item.stockQuantity - storesSum);
 
                     return (
-                      <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                      <tr key={item.id ? `${item.id}-${idx}` : `inv-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                         {/* Product Photo & Details */}
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
@@ -499,18 +656,42 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                             )}
 
                             <div>
-                              <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                              <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5 flex-wrap">
                                 <span>{item.name}</span>
+                                {item.priceType === 'variable' && (
+                                  <span className="text-[10px] bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.5 rounded-md font-bold">
+                                    Variable Price (POS)
+                                  </span>
+                                )}
+                                {item.status === 'inactive' && (
+                                  <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-md font-bold">
+                                    Inactive
+                                  </span>
+                                )}
                                 {item.isAvailableForOnline === false && (
                                   <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.2 rounded font-normal">
                                     Offline Only
                                   </span>
                                 )}
                               </div>
-                              <div className="flex items-center gap-2 font-mono text-[11px] text-slate-500 mt-0.5">
+                              <div className="flex items-center gap-2 font-mono text-[11px] text-slate-500 mt-0.5 flex-wrap">
                                 <span>SKU: <strong className="text-slate-700">{item.sku}</strong></span>
+                                {item.brand && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-indigo-600 font-semibold">{item.brand}</span>
+                                  </>
+                                )}
+                                {(item.vendor || (item.vendors && item.vendors.length > 0)) && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-slate-600 font-sans">
+                                      Vendor: {item.vendor || item.vendors?.join(', ')}
+                                    </span>
+                                  </>
+                                )}
                                 <span>•</span>
-                                <span>Min Safety: {item.lowStockThreshold} {item.unit}</span>
+                                <span>Min: {item.lowStockThreshold} {item.unit}</span>
                               </div>
                             </div>
                           </div>
@@ -559,7 +740,14 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
 
                         {/* Selling Price */}
                         <td className="py-3 px-3 font-mono font-bold text-slate-900">
-                          {CURRENCY}{item.sellingPrice}
+                          {item.priceType === 'variable' ? (
+                            <div className="flex flex-col">
+                              <span className="text-purple-700 font-extrabold text-xs">Variable</span>
+                              <span className="text-[10px] text-slate-400 font-sans">Set at POS</span>
+                            </div>
+                          ) : (
+                            <span>{CURRENCY}{item.sellingPrice}</span>
+                          )}
                         </td>
 
                         {/* Gross Margin */}
@@ -773,7 +961,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono">
-                {sortedInventory.map((item) => {
+                {sortedInventory.map((item, idx) => {
                   const alloc = item.storeAllocations || {};
                   const gota = alloc['gota'] || 0;
                   const bopal = alloc['bopal'] || 0;
@@ -783,7 +971,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                   const central = Math.max(0, item.stockQuantity - storesSum);
 
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50">
+                    <tr key={item.id ? `${item.id}-${idx}` : `alloc-${idx}`} className="hover:bg-slate-50">
                       <td className="py-2.5 px-3 font-sans">
                         <div className="font-bold text-slate-900">{item.name}</div>
                         <div className="text-[10px] text-slate-400 font-mono">SKU: {item.sku}</div>
@@ -830,9 +1018,9 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {sortedInventory.map((item) => (
+            {sortedInventory.map((item, idx) => (
               <div
-                key={item.id}
+                key={item.id ? `${item.id}-${idx}` : `lbl-${idx}`}
                 onClick={() => setPrintingLabelItem(item)}
                 className="p-4 border border-slate-200 rounded-xl hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer bg-slate-50/50 flex flex-col items-center text-center space-y-2 group"
               >
@@ -891,6 +1079,17 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                 </div>
 
                 <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Brand</label>
+                  <input
+                    type="text"
+                    value={editingItem.brand || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, brand: e.target.value })}
+                    placeholder="e.g. Richie Rich Signature, Banarasi Special..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
                   <select
                     value={editingItem.category}
@@ -900,6 +1099,54 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                     {categoriesList.filter(c => c !== 'all').map((cat) => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Price Configuration</label>
+                  <select
+                    value={editingItem.priceType || 'fixed'}
+                    onChange={(e) => setEditingItem({ ...editingItem, priceType: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white"
+                  >
+                    <option value="fixed">Fixed Price (Default)</option>
+                    <option value="variable">Variable Price (Prompt Cashier at POS)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Primary Vendor / Supplier</label>
+                  <input
+                    type="text"
+                    list="suppliers-list"
+                    value={editingItem.vendor || (editingItem.vendors && editingItem.vendors[0]) || ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEditingItem({
+                        ...editingItem,
+                        vendor: val,
+                        vendors: val ? [val] : [],
+                      });
+                    }}
+                    placeholder="e.g. Gujarat Betel Traders"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white"
+                  />
+                  <datalist id="suppliers-list">
+                    {allVendorsList.map((v) => (
+                      <option key={v} value={v} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Catalog Status</label>
+                  <select
+                    value={editingItem.status || 'active'}
+                    onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white"
+                  >
+                    <option value="active">Active (Available for POS & POs)</option>
+                    <option value="inactive">Inactive / Archived</option>
                   </select>
                 </div>
 
@@ -939,12 +1186,14 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Selling Price ({CURRENCY})</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Selling Price ({CURRENCY}) {editingItem.priceType === 'variable' && '(Optional Base)'}
+                  </label>
                   <input
                     type="number"
                     min="0"
                     step="0.5"
-                    required
+                    required={editingItem.priceType !== 'variable'}
                     value={editingItem.sellingPrice}
                     onChange={(e) => setEditingItem({ ...editingItem, sellingPrice: parseFloat(e.target.value) || 0 })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white"
@@ -1146,6 +1395,18 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: EXCEL IMPORT MODAL                                              */}
+      {/* ========================================================================= */}
+      <ExcelImportModal
+        isOpen={isExcelImportOpen}
+        onClose={() => setIsExcelImportOpen(false)}
+        existingInventory={inventory}
+        onImportComplete={() => {
+          setIsExcelImportOpen(false);
+        }}
+      />
     </div>
   );
 };

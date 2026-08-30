@@ -24,6 +24,8 @@ import {
   LogOut,
   ShoppingBag,
   Layers,
+  Edit3,
+  SlidersHorizontal,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { InventoryItem, Category, Customer, Order, OrderItem, PaymentMethod, POSSession } from '../../types';
@@ -43,6 +45,7 @@ interface POSTerminalProps {
 
 interface CartItem extends OrderItem {
   stockAvailable: number;
+  priceType?: 'fixed' | 'variable';
 }
 
 export const POSTerminal: React.FC<POSTerminalProps> = ({
@@ -58,6 +61,17 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+
+  // Variable price modal state
+  const [variablePriceModal, setVariablePriceModal] = useState<{
+    item: InventoryItem;
+    cartIndex?: number;
+    isEditMode?: boolean;
+    initialPrice: number;
+    note?: string;
+  } | null>(null);
+  const [customPriceInput, setCustomPriceInput] = useState<string>('');
+  const [customNoteInput, setCustomNoteInput] = useState<string>('');
 
   // Customer Loyalty state
   const [customerPhone, setCustomerPhone] = useState('');
@@ -83,8 +97,8 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
     timestamp: number;
   } | null>(null);
 
-  // Cart operations
-  const addToCart = (item: InventoryItem, customPref?: string) => {
+  // Commit item to cart with determined price
+  const commitAddToCart = (item: InventoryItem, priceToUse: number, customPref?: string) => {
     const availableStock = getItemStoreStock(item);
 
     if (availableStock <= 0) {
@@ -98,12 +112,14 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
     setLastScannedFeedback({
       name: item.name,
       barcode: item.barcode,
-      price: item.sellingPrice,
+      price: priceToUse,
       timestamp: Date.now(),
     });
 
     setCart((prev) => {
-      const existing = prev.find((ci) => ci.itemId === item.id && ci.customization === (customPref || undefined));
+      const existing = prev.find(
+        (ci) => ci.itemId === item.id && ci.price === priceToUse && ci.customization === (customPref || undefined)
+      );
       if (existing) {
         if (existing.quantity >= availableStock) {
           alert(`Cannot add more than available branch stock (${availableStock} units).`);
@@ -126,18 +142,103 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
             itemId: item.id,
             name: item.name,
             sku: item.sku,
-            price: item.sellingPrice,
+            price: priceToUse,
             costPrice: item.costPrice,
             quantity: 1,
             customization: customPref,
-            subtotal: item.sellingPrice,
-            profit: item.profitPerUnit || item.sellingPrice - item.costPrice,
+            subtotal: priceToUse,
+            profit: priceToUse - item.costPrice,
             stockAvailable: availableStock,
             isTaxApplicable: item.isTaxApplicable !== false,
+            priceType: item.priceType || 'fixed',
           },
         ];
       }
     });
+  };
+
+  // Cart operations
+  const addToCart = (item: InventoryItem, customPref?: string) => {
+    // If product has variable price, ask cashier to specify the unit price
+    if (item.priceType === 'variable' || (item.sellingPrice <= 0 && !item.priceType)) {
+      setVariablePriceModal({
+        item,
+        initialPrice: item.sellingPrice || 0,
+        isEditMode: false,
+        note: customPref || '',
+      });
+      setCustomPriceInput(item.sellingPrice > 0 ? String(item.sellingPrice) : '');
+      setCustomNoteInput(customPref || '');
+      return;
+    }
+
+    commitAddToCart(item, item.sellingPrice, customPref);
+  };
+
+  // Open price override modal for existing cart item
+  const openCartPriceOverride = (cartIndex: number) => {
+    const target = cart[cartIndex];
+    if (!target) return;
+    const invItem = inventory.find((i) => i.id === target.itemId) || {
+      id: target.itemId,
+      name: target.name,
+      sku: target.sku,
+      sellingPrice: target.price,
+      costPrice: target.costPrice,
+      barcode: '',
+      category: 'Paan',
+      unit: 'pieces',
+      stockQuantity: target.stockAvailable,
+      storeAllocations: {},
+      isTaxApplicable: target.isTaxApplicable,
+      lowStockThreshold: 10,
+      createdAt: '',
+      updatedAt: '',
+    };
+
+    setVariablePriceModal({
+      item: invItem as InventoryItem,
+      cartIndex,
+      isEditMode: true,
+      initialPrice: target.price,
+      note: target.customization || '',
+    });
+    setCustomPriceInput(String(target.price));
+    setCustomNoteInput(target.customization || '');
+  };
+
+  const handleSaveVariablePrice = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!variablePriceModal) return;
+
+    const parsedPrice = parseFloat(customPriceInput);
+    if (isNaN(parsedPrice) || parsedPrice < 0) {
+      alert('Please enter a valid price amount (>= 0)');
+      return;
+    }
+
+    if (variablePriceModal.isEditMode && variablePriceModal.cartIndex !== undefined) {
+      // Update existing item in cart
+      setCart((prev) =>
+        prev.map((ci, idx) => {
+          if (idx === variablePriceModal.cartIndex) {
+            return {
+              ...ci,
+              price: parsedPrice,
+              subtotal: ci.quantity * parsedPrice,
+              profit: ci.quantity * (parsedPrice - ci.costPrice),
+              customization: customNoteInput.trim() || undefined,
+            };
+          }
+          return ci;
+        })
+      );
+    } else {
+      // Add new item with custom price
+      commitAddToCart(variablePriceModal.item, parsedPrice, customNoteInput.trim() || undefined);
+    }
+
+    setVariablePriceModal(null);
   };
 
   // Direct Barcode Scan Handler -> Auto Adds to Cart
@@ -247,13 +348,15 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
     return item.stockQuantity;
   };
 
-  // Filter products
+  // Filter products (active only)
   const filteredProducts = inventory.filter((item) => {
+    if (item.status === 'inactive') return false;
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     const matchesSearch =
       item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.barcode.includes(searchTerm);
+      item.barcode.includes(searchTerm) ||
+      (item.brand && item.brand.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesCategory && matchesSearch;
   });
 
@@ -574,14 +677,14 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
 
           {/* Product Cards Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[640px] overflow-y-auto pr-1">
-            {filteredProducts.map((item) => {
+            {filteredProducts.map((item, idx) => {
               const storeStock = getItemStoreStock(item);
               const isLow = storeStock <= item.lowStockThreshold && storeStock > 0;
               const isOut = storeStock === 0;
 
               return (
                 <div
-                  key={item.id}
+                  key={item.id ? `${item.id}-${idx}` : `pos-item-${idx}`}
                   onClick={() => !isOut && addToCart(item)}
                   className={`bg-white border rounded-2xl p-3 flex flex-col justify-between transition-all group select-none relative ${
                     isOut
@@ -621,8 +724,19 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
                     <h4 className="font-bold text-xs text-slate-800 group-hover:text-amber-700 line-clamp-2 leading-tight">
                       {item.name}
                     </h4>
-                    <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <span className="text-[10px] font-mono text-slate-400">{item.sku}</span>
+                      {item.brand && (
+                        <span className="px-1.5 py-0.2 bg-indigo-50 text-indigo-700 text-[9px] font-semibold rounded-sm border border-indigo-100">
+                          {item.brand}
+                        </span>
+                      )}
+                      {item.priceType === 'variable' && (
+                        <span className="px-1.5 py-0.2 bg-amber-100 text-amber-900 text-[9px] font-bold rounded-sm border border-amber-300 flex items-center gap-0.5">
+                          <SlidersHorizontal className="w-2.5 h-2.5" />
+                          Variable Price
+                        </span>
+                      )}
                       {item.isTaxApplicable === false ? (
                         <span className="px-1.5 py-0.2 bg-slate-100 text-slate-600 text-[9px] font-bold rounded-sm border border-slate-200">
                           0% Exempt
@@ -636,9 +750,16 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
                   </div>
 
                   <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100">
-                    <span className="text-sm font-black text-slate-900">
-                      {CURRENCY}{item.sellingPrice.toFixed(2)}
-                    </span>
+                    {item.priceType === 'variable' ? (
+                      <span className="text-xs font-bold text-amber-700 flex items-center gap-1">
+                        <Edit3 className="w-3 h-3" />
+                        Custom Price
+                      </span>
+                    ) : (
+                      <span className="text-sm font-black text-slate-900">
+                        {CURRENCY}{item.sellingPrice.toFixed(2)}
+                      </span>
+                    )}
                     <button
                       type="button"
                       disabled={isOut}
@@ -738,8 +859,19 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
                   >
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-xs text-slate-800 truncate">{ci.name}</p>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
-                        <span>{CURRENCY}{ci.price.toFixed(2)} each</span>
+                      <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => openCartPriceOverride(idx)}
+                          className="hover:text-indigo-600 font-medium flex items-center gap-0.5 underline decoration-dotted cursor-pointer"
+                          title="Click to override / edit unit price"
+                        >
+                          <span>{CURRENCY}{ci.price.toFixed(2)} each</span>
+                          <Edit3 className="w-2.5 h-2.5 opacity-60" />
+                        </button>
+                        {ci.priceType === 'variable' && (
+                          <span className="bg-amber-100 text-amber-800 text-[8px] font-bold px-1 rounded">Var</span>
+                        )}
                         {ci.customization && <span className="text-slate-600 italic">[{ci.customization}]</span>}
                       </div>
                     </div>
@@ -1026,6 +1158,110 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
             >
               Close Register View
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Variable / Custom Price Modal */}
+      {variablePriceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+                  <SlidersHorizontal className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    {variablePriceModal.isEditMode ? 'Override Item Price' : 'Enter Custom Selling Price'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 truncate max-w-[260px]">
+                    {variablePriceModal.item.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVariablePriceModal(null)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveVariablePrice} className="space-y-4">
+              <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl flex items-center justify-between text-xs">
+                <span className="text-amber-900 font-medium">SKU: <strong className="font-mono">{variablePriceModal.item.sku}</strong></span>
+                <span className="text-amber-900 font-medium">Cost Ref: <strong>{CURRENCY}{variablePriceModal.item.costPrice || 0}</strong></span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Selling Price Per Unit ({CURRENCY}) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-3 text-slate-400 font-bold text-base">{CURRENCY}</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    autoFocus
+                    value={customPriceInput}
+                    onChange={(e) => setCustomPriceInput(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-base font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Quick Price Buttons */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-semibold text-slate-500">Quick Presets:</span>
+                <div className="flex gap-2 flex-wrap">
+                  {[20, 30, 50, 80, 100, 150, 200, 500].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setCustomPriceInput(String(amt))}
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-amber-100 hover:text-amber-900 hover:border-amber-300 border border-slate-200 text-xs font-mono font-bold rounded-lg transition-colors cursor-pointer"
+                    >
+                      {CURRENCY}{amt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                  Customization / Combo Note (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={customNoteInput}
+                  onChange={(e) => setCustomNoteInput(e.target.value)}
+                  placeholder="e.g. Extra Silver Vark, Custom Platter pack, Less Sweet"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setVariablePriceModal(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#1E293B] hover:bg-slate-900 text-white font-bold rounded-xl text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                  <span>{variablePriceModal.isEditMode ? 'Update Price' : 'Add to Bill'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

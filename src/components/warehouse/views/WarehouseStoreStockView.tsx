@@ -697,7 +697,7 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
                       </td>
                     </tr>
                   ) : (
-                    sortedItems.map((item) => {
+                    sortedItems.map((item, idx) => {
                       const alloc = item.storeAllocations || {};
                       const storeQty = alloc[currentStore.id] || 0;
                       const storeLowThreshold = Math.max(2, Math.round(item.lowStockThreshold * 0.4));
@@ -706,7 +706,7 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
                       const centralStock = item.stockQuantity; // Central WH available
 
                       return (
-                        <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                        <tr key={item.id ? `${item.id}-${idx}` : `store-stock-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                           {/* Item Name & SKU */}
                           <td className="py-3.5 px-4 font-medium text-slate-900">
                             <div className="flex items-center gap-3">

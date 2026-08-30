@@ -36,6 +36,60 @@ const STORAGE_KEYS = {
 
 export const CURRENCY = '₹';
 
+/**
+ * Normalizes any category string:
+ * - If category is Paan (or pan, cat-paan, etc.) -> 'Paan'
+ * - If category is Cafe (or cafe, coffee, shakes, beverages, etc.) -> 'Cafe'
+ * - If category is ANYTHING ELSE -> automatically keep in 'Essentials'
+ */
+export function normalizeProductCategory(rawCat?: string): 'Paan' | 'Cafe' | 'Essentials' {
+  if (!rawCat) return 'Essentials';
+  const clean = String(rawCat).trim().toLowerCase();
+
+  // Paan matches
+  if (
+    clean === 'paan' ||
+    clean === 'pan' ||
+    clean === 'cat-paan' ||
+    clean.includes('paan') ||
+    clean.includes('pan ') ||
+    clean.startsWith('pan-') ||
+    clean.startsWith('paan-') ||
+    clean === 'meetha paan' ||
+    clean === 'sada paan' ||
+    clean === 'specialty paan'
+  ) {
+    return 'Paan';
+  }
+
+  // Cafe matches
+  if (
+    clean === 'cafe' ||
+    clean === 'café' ||
+    clean === 'coffee' ||
+    clean === 'cat-coffee' ||
+    clean === 'cat-shakes' ||
+    clean === 'shakes' ||
+    clean === 'shake' ||
+    clean === 'beverages' ||
+    clean === 'beverage' ||
+    clean === 'tea' ||
+    clean === 'chai' ||
+    clean.includes('cafe') ||
+    clean.includes('café') ||
+    clean.includes('coffee') ||
+    clean.includes('espresso') ||
+    clean.includes('frappe') ||
+    clean.includes('shake') ||
+    clean.includes('falooda')
+  ) {
+    return 'Cafe';
+  }
+
+  // Any category other than Paan or Cafe is automatically kept in Essentials
+  return 'Essentials';
+}
+
 // Initial Store Admin Login Credentials
 export const INITIAL_STORE_ADMINS: StoreAdminCredential[] = [
   {
@@ -1186,14 +1240,6 @@ export class StorageService {
   private initDefaultData() {
     if (typeof window === 'undefined') return;
 
-    // Normalize category mapping helper
-    const mapCategory = (rawCat?: string): string => {
-      if (!rawCat) return 'Essentials';
-      if (rawCat === 'Paan' || rawCat === 'cat-paan') return 'Paan';
-      if (rawCat === 'Cafe' || rawCat === 'cat-coffee' || rawCat === 'cat-shakes') return 'Cafe';
-      return 'Essentials';
-    };
-
     // Check and seed/merge inventory
     const existingInventory = localStorage.getItem(STORAGE_KEYS.INVENTORY);
     const cleanedFlag = localStorage.getItem('rr_wh_cleaned_dummy_v1');
@@ -1201,6 +1247,7 @@ export class StorageService {
     if (!existingInventory) {
       const zeroStockInit = INITIAL_INVENTORY.map((item) => ({
         ...item,
+        category: normalizeProductCategory(item.category),
         stockQuantity: 0,
         storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
       }));
@@ -1220,9 +1267,38 @@ export class StorageService {
           localStorage.setItem('rr_wh_cleaned_dummy_v1', 'true');
         }
 
-        // Upgrade existing inventory items with 3 canonical categories and GST tax rates
-        parsed.forEach((item) => {
-          const normalizedCat = mapCategory(item.category);
+        // Deduplicate any items with duplicate IDs or duplicate SKUs
+        const seenIds = new Set<string>();
+        const seenSkus = new Set<string>();
+        const uniqueParsed: InventoryItem[] = [];
+
+        parsed.forEach((item, idx) => {
+          if (!item) return;
+          let id = item.id ? String(item.id).trim() : '';
+          const sku = item.sku ? String(item.sku).trim().toLowerCase() : '';
+
+          if (!id || seenIds.has(id)) {
+            id = `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${idx}`;
+            item.id = id;
+            hasChanges = true;
+          }
+          seenIds.add(id);
+
+          if (sku) {
+            if (seenSkus.has(sku)) {
+              // Disambiguate duplicate SKU
+              item.sku = `${item.sku}-${idx + 1}`;
+              hasChanges = true;
+            }
+            seenSkus.add(item.sku.trim().toLowerCase());
+          }
+
+          uniqueParsed.push(item);
+        });
+
+        // Upgrade existing inventory items with 3 canonical categories (Paan, Cafe, or Essentials), GST tax rates, vendors, brand, and price type
+        uniqueParsed.forEach((item) => {
+          const normalizedCat = normalizeProductCategory(item.category);
           if (item.category !== normalizedCat) {
             item.category = normalizedCat;
             hasChanges = true;
@@ -1232,14 +1308,45 @@ export class StorageService {
             item.taxRate = item.isTaxApplicable ? (item.category === 'Paan' ? 5 : item.category === 'Cafe' ? 5 : 18) : 0;
             hasChanges = true;
           }
+          if (!item.brand) {
+            item.brand = 'Richie Rich Signature';
+            hasChanges = true;
+          }
+          if (!item.priceType) {
+            item.priceType = item.sellingPrice === 0 ? 'variable' : 'fixed';
+            hasChanges = true;
+          }
+          if (!item.status) {
+            item.status = 'active';
+            hasChanges = true;
+          }
+          if (!item.vendors || item.vendors.length === 0) {
+            if (item.vendor) {
+              item.vendors = [item.vendor];
+            } else if (item.category === 'Paan') {
+              item.vendors = ['Gujarat Betel Traders', 'Royal Luxury Packaging & Vark'];
+              item.vendor = 'Gujarat Betel Traders';
+            } else if (item.category === 'Cafe') {
+              item.vendors = ['Apex Cafe & Beverage Distributors'];
+              item.vendor = 'Apex Cafe & Beverage Distributors';
+            } else {
+              item.vendors = ['Shreeji Spices & Supari'];
+              item.vendor = 'Shreeji Spices & Supari';
+            }
+            hasChanges = true;
+          } else if (!item.vendor) {
+            item.vendor = item.vendors[0];
+            hasChanges = true;
+          }
         });
 
         // Ensure catalog items exist
         INITIAL_INVENTORY.forEach((initItem) => {
-          const found = parsed.find((i) => i.id === initItem.id || i.sku === initItem.sku);
+          const found = uniqueParsed.find((i) => i.id === initItem.id || i.sku === initItem.sku);
           if (!found) {
-            parsed.push({
+            uniqueParsed.push({
               ...initItem,
+              category: normalizeProductCategory(initItem.category),
               stockQuantity: 0,
               storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
             });
@@ -1247,11 +1354,17 @@ export class StorageService {
           }
         });
 
-        if (hasChanges) {
-          localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(parsed));
+        if (hasChanges || uniqueParsed.length !== parsed.length) {
+          localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(uniqueParsed));
         }
-      } catch (e) {
-        console.error('Error merging inventory', e);
+      } catch {
+        const zeroStockInit = INITIAL_INVENTORY.map((item) => ({
+          ...item,
+          category: normalizeProductCategory(item.category),
+          stockQuantity: 0,
+          storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
+        }));
+        localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(zeroStockInit));
       }
     }
 
@@ -1541,34 +1654,105 @@ export class StorageService {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.INVENTORY);
       if (!data) return INITIAL_INVENTORY;
-      return JSON.parse(data);
+      const rawList: any = JSON.parse(data);
+      if (!Array.isArray(rawList)) return INITIAL_INVENTORY;
+
+      const seenIds = new Set<string>();
+      const seenSkus = new Set<string>();
+      const sanitized: InventoryItem[] = [];
+      let hadDuplicatesOrUnnormalized = false;
+
+      for (let i = 0; i < rawList.length; i++) {
+        const item = rawList[i];
+        if (!item || typeof item !== 'object') continue;
+
+        let itemId = item.id ? String(item.id).trim() : '';
+        const itemSku = item.sku ? String(item.sku).trim().toLowerCase() : '';
+
+        // If duplicate ID or empty ID
+        if (!itemId || seenIds.has(itemId)) {
+          itemId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${i}`;
+          item.id = itemId;
+          hadDuplicatesOrUnnormalized = true;
+        }
+
+        // If duplicate SKU, disambiguate
+        if (itemSku && seenSkus.has(itemSku)) {
+          item.sku = `${item.sku}-${i + 1}`;
+          hadDuplicatesOrUnnormalized = true;
+        }
+
+        // Normalize Category: Any category other than Paan or Cafe is automatically kept in Essentials
+        const normalizedCategory = normalizeProductCategory(item.category);
+        if (item.category !== normalizedCategory) {
+          item.category = normalizedCategory;
+          hadDuplicatesOrUnnormalized = true;
+        }
+
+        seenIds.add(itemId);
+        if (item.sku) seenSkus.add(item.sku.trim().toLowerCase());
+
+        sanitized.push(item);
+      }
+
+      if (hadDuplicatesOrUnnormalized && typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(sanitized));
+        } catch {
+          // ignore storage quota errors
+        }
+      }
+
+      return sanitized;
     } catch {
       return INITIAL_INVENTORY;
     }
   }
 
   saveInventory(items: InventoryItem[]) {
-    // calculate profit and margin on each item
-    const enriched = items.map((item) => {
+    // calculate profit and margin on each item and guarantee unique IDs & normalized categories
+    const seenIds = new Set<string>();
+    const seenSkus = new Set<string>();
+    const sanitized: InventoryItem[] = [];
+
+    items.forEach((item, idx) => {
+      let itemId = item.id ? String(item.id).trim() : '';
+      if (!itemId || seenIds.has(itemId)) {
+        itemId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${idx}`;
+      }
+      seenIds.add(itemId);
+
+      let itemSku = item.sku ? String(item.sku).trim() : `SKU-${idx + 1}`;
+      if (seenSkus.has(itemSku.toLowerCase())) {
+        itemSku = `${itemSku}-${idx + 1}`;
+      }
+      seenSkus.add(itemSku.toLowerCase());
+
+      const category = normalizeProductCategory(item.category);
       const profitPerUnit = item.sellingPrice - item.costPrice;
       const marginPercentage = item.sellingPrice > 0 ? (profitPerUnit / item.sellingPrice) * 100 : 0;
-      return {
+      sanitized.push({
         ...item,
+        id: itemId,
+        sku: itemSku,
+        category,
         profitPerUnit: Math.round(profitPerUnit * 100) / 100,
         marginPercentage: Math.round(marginPercentage * 10) / 10,
-      };
+      });
     });
 
-    localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(enriched));
-    this.checkAndTriggerLowStockAlerts(enriched);
+    localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(sanitized));
+    this.checkAndTriggerLowStockAlerts(sanitized);
     this.notify();
   }
 
   addInventoryItem(item: Omit<InventoryItem, 'id' | 'profitPerUnit' | 'marginPercentage'>): InventoryItem {
     const items = this.getInventory();
+    const normalizedCategory = normalizeProductCategory(item.category);
     const newItem: InventoryItem = {
       ...item,
-      id: `item-${Date.now()}`,
+      category: normalizedCategory,
+      id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       profitPerUnit: item.sellingPrice - item.costPrice,
       marginPercentage: Math.round(((item.sellingPrice - item.costPrice) / item.sellingPrice) * 1000) / 10,
     };
@@ -1584,6 +1768,9 @@ export class StorageService {
 
     const current = items[index];
     const updated: InventoryItem = { ...current, ...updates };
+    if (updates.category !== undefined) {
+      updated.category = normalizeProductCategory(updates.category);
+    }
     updated.profitPerUnit = updated.sellingPrice - updated.costPrice;
     updated.marginPercentage =
       updated.sellingPrice > 0
@@ -1603,6 +1790,157 @@ export class StorageService {
       return true;
     }
     return false;
+  }
+
+  importInventoryBatch(
+    parsedItems: Array<{
+      isUpdate: boolean;
+      existingId?: string;
+      name: string;
+      sku: string;
+      barcode: string;
+      category: string;
+      brand: string;
+      vendors: string[];
+      vendor: string;
+      priceType: 'fixed' | 'variable';
+      costPrice: number;
+      sellingPrice: number;
+      stockQuantity: number;
+      lowStockThreshold: number;
+      unit: string;
+      isTaxApplicable: boolean;
+      taxRate: number;
+      status: 'active' | 'inactive';
+      description: string;
+      imageUrl?: string;
+    }>,
+    options: { updateExisting: boolean } = { updateExisting: true }
+  ): { importedCount: number; updatedCount: number } {
+    const currentInventory = this.getInventory();
+    let importedCount = 0;
+    let updatedCount = 0;
+
+    // Track newly added/updated items during batch to avoid intra-batch duplicate creations
+    const skuIndexMap = new Map<string, number>();
+    const idIndexMap = new Map<string, number>();
+
+    currentInventory.forEach((item, idx) => {
+      if (item.id) idIndexMap.set(item.id, idx);
+      if (item.sku) skuIndexMap.set(item.sku.trim().toLowerCase(), idx);
+    });
+
+    parsedItems.forEach((row, rowIdx) => {
+      const cleanSku = row.sku ? row.sku.trim().toLowerCase() : '';
+      const normalizedCat = normalizeProductCategory(row.category);
+      let existingIndex = -1;
+
+      if (row.existingId && idIndexMap.has(row.existingId)) {
+        existingIndex = idIndexMap.get(row.existingId)!;
+      } else if (cleanSku && skuIndexMap.has(cleanSku)) {
+        existingIndex = skuIndexMap.get(cleanSku)!;
+      }
+
+      if (existingIndex >= 0 && existingIndex < currentInventory.length) {
+        if (options.updateExisting) {
+          const existing = currentInventory[existingIndex];
+          const profit = row.sellingPrice - row.costPrice;
+          const margin = row.sellingPrice > 0 ? Math.round((profit / row.sellingPrice) * 1000) / 10 : 0;
+
+          currentInventory[existingIndex] = {
+            ...existing,
+            name: row.name || existing.name,
+            sku: row.sku || existing.sku,
+            barcode: row.barcode || existing.barcode,
+            category: normalizedCat,
+            brand: row.brand || existing.brand,
+            vendors: row.vendors && row.vendors.length > 0 ? row.vendors : existing.vendors,
+            vendor: row.vendor || existing.vendor,
+            priceType: row.priceType,
+            costPrice: row.costPrice,
+            sellingPrice: row.priceType === 'variable' ? 0 : row.sellingPrice,
+            stockQuantity: row.stockQuantity > 0 ? row.stockQuantity : existing.stockQuantity,
+            lowStockThreshold: row.lowStockThreshold || existing.lowStockThreshold,
+            unit: row.unit || existing.unit,
+            isTaxApplicable: row.isTaxApplicable,
+            taxRate: row.taxRate,
+            status: row.status,
+            description: row.description || existing.description,
+            profitPerUnit: profit,
+            marginPercentage: margin,
+          };
+          updatedCount++;
+        }
+      } else {
+        const profit = row.sellingPrice - row.costPrice;
+        const margin = row.sellingPrice > 0 ? Math.round((profit / row.sellingPrice) * 1000) / 10 : 0;
+        const initialStock = row.stockQuantity || 0;
+
+        const storeAllocations = {
+          gota: Math.round(initialStock * 0.4),
+          bopal: Math.round(initialStock * 0.3),
+          sindhubhavan: Math.round(initialStock * 0.15),
+          sg_highway: Math.round(initialStock * 0.15),
+        };
+
+        const newItemId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${rowIdx}`;
+
+        const newItem: InventoryItem = {
+          id: newItemId,
+          name: row.name,
+          sku: row.sku,
+          barcode: row.barcode || `890100${Math.floor(1000 + Math.random() * 9000)}`,
+          category: normalizedCat,
+          brand: row.brand || 'Richie Rich Signature',
+          vendors: row.vendors && row.vendors.length > 0 ? row.vendors : [row.vendor || 'Central Supply'],
+          vendor: row.vendor || 'Central Supply',
+          priceType: row.priceType || 'fixed',
+          costPrice: row.costPrice,
+          sellingPrice: row.priceType === 'variable' ? 0 : row.sellingPrice,
+          stockQuantity: initialStock,
+          lowStockThreshold: row.lowStockThreshold || 5,
+          unit: row.unit || 'pieces',
+          isTaxApplicable: row.isTaxApplicable !== false,
+          taxRate: row.taxRate ?? (normalizedCat === 'Paan' ? 5 : normalizedCat === 'Cafe' ? 5 : 18),
+          status: row.status || 'active',
+          isAvailableForOnline: true,
+          description: row.description || `${row.name} - Catalog Product`,
+          ingredients: ['Artisanal Spices', 'Premium Quality Ingredients'],
+          tags: row.priceType === 'variable' ? ['Variable Price', 'New Import'] : ['New Import'],
+          imageUrl: row.imageUrl || '',
+          profitPerUnit: profit,
+          marginPercentage: margin,
+          storeAllocations,
+        };
+
+        currentInventory.unshift(newItem);
+        idIndexMap.set(newItemId, 0);
+        if (cleanSku) skuIndexMap.set(cleanSku, 0);
+
+        // Re-index map keys because of unshift
+        idIndexMap.clear();
+        skuIndexMap.clear();
+        currentInventory.forEach((it, idx) => {
+          if (it.id) idIndexMap.set(it.id, idx);
+          if (it.sku) skuIndexMap.set(it.sku.trim().toLowerCase(), idx);
+        });
+
+        importedCount++;
+      }
+    });
+
+    this.saveInventory(currentInventory);
+
+    this.addNotification({
+      title: `📊 Excel Inventory Import Completed`,
+      message: `Successfully processed ${parsedItems.length} records (${importedCount} new products added, ${updatedCount} existing products updated).`,
+      type: 'order_update',
+      targetRole: 'admin',
+      read: false,
+      linkTab: 'inventory',
+    });
+
+    return { importedCount, updatedCount };
   }
 
   findItemByBarcode(barcode: string): InventoryItem | undefined {
