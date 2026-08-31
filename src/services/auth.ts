@@ -1,5 +1,6 @@
 import { Customer, StoreAdminAuthState } from '../types';
 import { storage } from './storage';
+import { safeStorage } from '../utils/safeStorage';
 
 const ADMIN_STORAGE_KEY = 'rr_auth_admin';
 const POS_STORAGE_KEY = 'rr_auth_pos';
@@ -39,7 +40,7 @@ export const authService = {
   // =========================================================================
   isAdminAuthenticated(): boolean {
     try {
-      const data = localStorage.getItem(ADMIN_STORAGE_KEY);
+      const data = safeStorage.getItem(ADMIN_STORAGE_KEY);
       if (!data) return false;
       const parsed: AdminAuthState = JSON.parse(data);
       return parsed.isAuthenticated === true;
@@ -65,12 +66,12 @@ export const authService = {
       username: 'ADMIN',
       loginTime: new Date().toISOString(),
     };
-    localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(state));
+    safeStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(state));
     return { success: true };
   },
 
   logoutAdmin(): void {
-    localStorage.removeItem(ADMIN_STORAGE_KEY);
+    safeStorage.removeItem(ADMIN_STORAGE_KEY);
   },
 
   // =========================================================================
@@ -78,7 +79,7 @@ export const authService = {
   // =========================================================================
   isPOSAuthenticated(): boolean {
     try {
-      const data = localStorage.getItem(POS_STORAGE_KEY);
+      const data = safeStorage.getItem(POS_STORAGE_KEY);
       if (!data) return false;
       const parsed: POSAuthState = JSON.parse(data);
       return parsed.isAuthenticated === true;
@@ -104,12 +105,12 @@ export const authService = {
       username: 'ADMIN',
       loginTime: new Date().toISOString(),
     };
-    localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(state));
+    safeStorage.setItem(POS_STORAGE_KEY, JSON.stringify(state));
     return { success: true };
   },
 
   logoutPOS(): void {
-    localStorage.removeItem(POS_STORAGE_KEY);
+    safeStorage.removeItem(POS_STORAGE_KEY);
   },
 
   // =========================================================================
@@ -117,7 +118,7 @@ export const authService = {
   // =========================================================================
   isCustomerAuthenticated(): boolean {
     try {
-      const data = localStorage.getItem(CUSTOMER_STORAGE_KEY);
+      const data = safeStorage.getItem(CUSTOMER_STORAGE_KEY);
       if (!data) return false;
       const parsed: CustomerAuthState = JSON.parse(data);
       return parsed.isAuthenticated === true && Boolean(parsed.phone);
@@ -128,7 +129,7 @@ export const authService = {
 
   getCurrentCustomer(): Customer | null {
     try {
-      const data = localStorage.getItem(CUSTOMER_STORAGE_KEY);
+      const data = safeStorage.getItem(CUSTOMER_STORAGE_KEY);
       if (!data) return null;
       const parsed: CustomerAuthState = JSON.parse(data);
       if (!parsed.isAuthenticated || !parsed.phone) return null;
@@ -206,13 +207,13 @@ export const authService = {
       phone: cleanPhone,
       customerName: existingCustomer.name,
     };
-    localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(authState));
+    safeStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(authState));
 
     return { success: true, customer: existingCustomer };
   },
 
   logoutCustomer(): void {
-    localStorage.removeItem(CUSTOMER_STORAGE_KEY);
+    safeStorage.removeItem(CUSTOMER_STORAGE_KEY);
   },
 
   // =========================================================================
@@ -220,7 +221,7 @@ export const authService = {
   // =========================================================================
   isWarehouseAuthenticated(): boolean {
     try {
-      const data = localStorage.getItem(WAREHOUSE_STORAGE_KEY);
+      const data = safeStorage.getItem(WAREHOUSE_STORAGE_KEY);
       if (!data) return false;
       const parsed: WarehouseAuthState = JSON.parse(data);
       return parsed.isAuthenticated === true;
@@ -231,7 +232,7 @@ export const authService = {
 
   getWarehouseAuthState(): WarehouseAuthState | null {
     try {
-      const data = localStorage.getItem(WAREHOUSE_STORAGE_KEY);
+      const data = safeStorage.getItem(WAREHOUSE_STORAGE_KEY);
       if (!data) return null;
       return JSON.parse(data);
     } catch {
@@ -257,12 +258,12 @@ export const authService = {
       subRole,
       loginTime: new Date().toISOString(),
     };
-    localStorage.setItem(WAREHOUSE_STORAGE_KEY, JSON.stringify(state));
+    safeStorage.setItem(WAREHOUSE_STORAGE_KEY, JSON.stringify(state));
     return { success: true };
   },
 
   logoutWarehouse(): void {
-    localStorage.removeItem(WAREHOUSE_STORAGE_KEY);
+    safeStorage.removeItem(WAREHOUSE_STORAGE_KEY);
   },
 
   // =========================================================================
@@ -270,7 +271,7 @@ export const authService = {
   // =========================================================================
   isStoreAdminAuthenticated(): boolean {
     try {
-      const data = localStorage.getItem(STORE_ADMIN_STORAGE_KEY);
+      const data = safeStorage.getItem(STORE_ADMIN_STORAGE_KEY);
       if (!data) return false;
       const parsed: StoreAdminAuthState = JSON.parse(data);
       return parsed.isAuthenticated === true && Boolean(parsed.storeId);
@@ -281,7 +282,7 @@ export const authService = {
 
   getStoreAdminAuthState(): StoreAdminAuthState | null {
     try {
-      const data = localStorage.getItem(STORE_ADMIN_STORAGE_KEY);
+      const data = safeStorage.getItem(STORE_ADMIN_STORAGE_KEY);
       if (!data) return null;
       return JSON.parse(data);
     } catch {
@@ -361,11 +362,11 @@ export const authService = {
       loginTime: new Date().toISOString(),
     };
 
-    localStorage.setItem(STORE_ADMIN_STORAGE_KEY, JSON.stringify(authState));
+    safeStorage.setItem(STORE_ADMIN_STORAGE_KEY, JSON.stringify(authState));
     return { success: true, session: authState };
   },
 
   logoutStoreAdmin(): void {
-    localStorage.removeItem(STORE_ADMIN_STORAGE_KEY);
+    safeStorage.removeItem(STORE_ADMIN_STORAGE_KEY);
   },
 };

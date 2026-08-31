@@ -4,16 +4,20 @@ class SoundEffects {
 
   private getContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
-    if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioCtx) {
-        this.ctx = new AudioCtx();
+    try {
+      if (!this.ctx) {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          this.ctx = new AudioCtx();
+        }
       }
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
+      }
+      return this.ctx;
+    } catch {
+      return null;
     }
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
-    return this.ctx;
   }
 
   // Play crisp barcode scan beep
@@ -35,7 +39,7 @@ class SoundEffects {
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + 0.08);
     } catch (e) {
-      console.warn('Audio play error', e);
+      // Audio playback safely suppressed
     }
   }
 
@@ -68,7 +72,7 @@ class SoundEffects {
       osc2.start(now + 0.08);
       osc2.stop(now + 0.35);
     } catch (e) {
-      console.warn('Audio play error', e);
+      // Audio playback safely suppressed
     }
   }
 
@@ -91,7 +95,7 @@ class SoundEffects {
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + 0.04);
     } catch (e) {
-      console.warn('Audio play error', e);
+      // Audio playback safely suppressed
     }
   }
 
@@ -120,7 +124,7 @@ class SoundEffects {
       osc.start(now);
       osc.stop(now + 0.3);
     } catch (e) {
-      console.warn('Audio play error', e);
+      // Audio playback safely suppressed
     }
   }
 
@@ -145,7 +149,7 @@ class SoundEffects {
       osc.start(now);
       osc.stop(now + 0.25);
     } catch (e) {
-      console.warn('Audio play error', e);
+      // Audio playback safely suppressed
     }
   }
 

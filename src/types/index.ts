@@ -128,6 +128,8 @@ export interface StoreLocation {
   name: string;
   shortName: string;
   area: string;
+  city?: string;
+  timings?: string;
   countersCount: number;
   counters: CounterInfo[];
   address: string;

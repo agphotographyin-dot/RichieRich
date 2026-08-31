@@ -43,10 +43,13 @@ import { InventoryItem, Order, Customer, StoreFinancialStats, AdminTab, UserRole
 import { CURRENCY, storage } from '../../services/storage';
 import { warehouseStorage } from '../../services/warehouseStorage';
 import { pdfReportService } from '../../services/pdfReportService';
+import { isToday, getLocalDateString } from '../../utils/dateUtils';
 import { Warehouse, Supplier, PurchaseOrder, PurchaseBill, BatchRecord, StockTransfer } from '../../types/warehouse';
 import { CreatePOModal } from '../warehouse/modals/CreatePOModal';
 import { InwardBillModal } from '../warehouse/modals/InwardBillModal';
 import { CreateTransferModal } from '../warehouse/modals/CreateTransferModal';
+
+import { safeStorage } from '../../utils/safeStorage';
 
 interface AdminDashboardProps {
   inventory: InventoryItem[];
@@ -124,6 +127,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     ? orders
     : orders.filter((o) => (o.storeId || 'gota') === selectedStoreFilter);
 
+  // Filter orders strictly for today (resets at 12:00 AM midnight)
+  const todayOrders = filteredOrders.filter((o) => isToday(o.createdAt));
+  const todaySalesTotal = todayOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+
   // Compute chart data for revenue vs profit over orders
   const revenueChartData = filteredOrders.slice(0, 10).reverse().map((o) => ({
     name: o.orderNumber.replace('RR-2026-', '#'),
@@ -161,6 +168,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Calculate live statistics per store
   const getStoreSummary = (store: StoreLocation) => {
     const storeOrders = orders.filter((o) => (o.storeId || 'gota') === store.id);
+    const storeOrdersToday = storeOrders.filter((o) => isToday(o.createdAt));
+    const storeSalesToday = storeOrdersToday.reduce((sum, o) => sum + o.grandTotal, 0);
     const storeSales = storeOrders.reduce((sum, o) => sum + o.grandTotal, 0);
 
     let storeUnits = 0;
@@ -188,6 +197,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return {
       storeOrdersCount: storeOrders.length,
       storeSales,
+      storeOrdersTodayCount: storeOrdersToday.length,
+      storeSalesToday,
       storeUnits,
       storeRetailValuation,
       storeLowStockCount,
@@ -248,12 +259,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleLaunchStorePOS = (storeId: string) => {
     try {
-      localStorage.setItem('richie_rich_selected_store', storeId);
+      safeStorage.setItem('richie_rich_selected_store', storeId);
     } catch {}
     if (onNavigateRole) {
       onNavigateRole('pos');
     } else {
-      window.location.hash = '#pos';
+      try {
+        window.location.hash = '#pos';
+      } catch {}
     }
   };
 
@@ -398,7 +411,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <option value="all">★ All Stores (Consolidated Overview)</option>
               {stores.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name} ({s.city})
+                  {s.name} ({s.city || s.area || 'Ahmedabad'})
                 </option>
               ))}
             </select>
@@ -433,7 +446,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                       <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                         <MapPin className="w-3 h-3 text-slate-400" />
-                        <span>{store.city} • {store.shortName}</span>
+                        <span>{store.city || store.area || 'Ahmedabad'} • {store.shortName}</span>
                       </div>
                       {store.phone && (
                         <div className="text-[11px] text-slate-500 flex items-center gap-1">
@@ -454,9 +467,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="p-2 bg-white rounded-xl border border-slate-200/80">
                       <span className="text-[10px] text-slate-500 font-semibold block">Today's Sales</span>
                       <span className="font-mono font-bold text-slate-900 text-sm">
-                        {CURRENCY}{summary.storeSales.toLocaleString('en-IN')}
+                        {CURRENCY}{summary.storeSalesToday.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
-                      <span className="text-[10px] text-slate-400 block">{summary.storeOrdersCount} Orders</span>
+                      <span className="text-[10px] text-slate-400 block">{summary.storeOrdersTodayCount} Bills Today</span>
                     </div>
 
                     <div className="p-2 bg-white rounded-xl border border-slate-200/80">
@@ -617,14 +630,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
           <div className="text-2xl font-bold text-slate-900 font-mono">
             {CURRENCY}
-            {(selectedStoreFilter === 'all'
-              ? orders.filter(o => o.createdAt.split('T')[0] === new Date().toISOString().split('T')[0]).reduce((s, o) => s + o.grandTotal, 0) || globalStats.totalRevenue
-              : filteredOrders.reduce((sum, o) => sum + o.grandTotal, 0)
-            ).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {todaySalesTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-xs font-semibold text-amber-800 mt-2 flex items-center justify-between">
             <span className="flex items-center gap-1 text-emerald-700">
-              <TrendingUp className="w-3 h-3" /> Live Collection Ledger
+              <TrendingUp className="w-3 h-3" /> {todayOrders.length} {todayOrders.length === 1 ? 'Bill' : 'Bills'} Today (Since 12am)
             </span>
             <span className="text-[10px] text-amber-700 underline font-bold group-hover:text-amber-900">
               Open Ledger →

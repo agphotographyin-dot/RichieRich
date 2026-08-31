@@ -31,17 +31,18 @@ import { CURRENCY, storage } from '../../services/storage';
 import { pdfReportService } from '../../services/pdfReportService';
 import { DocumentManifestModal } from '../common/DocumentManifestModal';
 import { DailyCollectionModal } from './DailyCollectionModal';
+import { isToday, getLocalDateString, isSameDay } from '../../utils/dateUtils';
 
 interface AdminOrdersProps {
   orders: Order[];
 }
 
 export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString(new Date());
   const yesterdayStr = (() => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    return d.toISOString().split('T')[0];
+    return getLocalDateString(d);
   })();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,10 +67,10 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
     ])
   ) as string[];
 
-  // Compute Today's metrics specifically for executive collection cards
+  // Compute Today's metrics specifically for executive collection cards (strictly resets after 12:00 AM midnight)
   const todayOrders = useMemo(() => {
-    return orders.filter((o) => o.createdAt.split('T')[0] === todayStr);
-  }, [orders, todayStr]);
+    return orders.filter((o) => isToday(o.createdAt));
+  }, [orders]);
 
   const totalSaleToday = useMemo(() => {
     return todayOrders.reduce((sum, o) => sum + o.grandTotal, 0);
@@ -114,12 +115,12 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
   // Filtered Orders for the Master Ledger Table
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
-      const orderDateStr = o.createdAt.split('T')[0];
+      const orderDateStr = getLocalDateString(o.createdAt);
 
       // Date matching
       let matchesDate = true;
       if (dateFilter === 'today') {
-        matchesDate = orderDateStr === todayStr;
+        matchesDate = isToday(o.createdAt);
       } else if (dateFilter === 'yesterday') {
         matchesDate = orderDateStr === yesterdayStr;
       } else if (dateFilter === '7days') {

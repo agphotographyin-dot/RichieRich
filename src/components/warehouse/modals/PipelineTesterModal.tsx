@@ -40,8 +40,6 @@ export const PipelineTesterModal: React.FC<PipelineTesterModalProps> = ({
   onClose,
   onNavigateTab,
 }) => {
-  if (!isOpen) return null;
-
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<'Paan' | 'Cafe' | 'Essentials'>('Paan');
@@ -91,6 +89,8 @@ export const PipelineTesterModal: React.FC<PipelineTesterModalProps> = ({
       details: 'Verify live Central Master Warehouse stock vs individual store allocations across all branches.',
     },
   ]);
+
+  if (!isOpen) return null;
 
   const updateStepStatus = (
     stepNum: number,

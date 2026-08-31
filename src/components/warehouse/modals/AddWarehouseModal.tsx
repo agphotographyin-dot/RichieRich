@@ -13,8 +13,6 @@ export const AddWarehouseModal: React.FC<AddWarehouseModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  if (!isOpen) return null;
-
   const [name, setName] = useState('');
   const [managerName, setManagerName] = useState('');
   const [phone, setPhone] = useState('');
@@ -22,6 +20,8 @@ export const AddWarehouseModal: React.FC<AddWarehouseModalProps> = ({
   const [address, setAddress] = useState('');
   const [capacitySqFt, setCapacitySqFt] = useState<number>(5000);
   const [isCentral, setIsCentral] = useState(false);
+
+  if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

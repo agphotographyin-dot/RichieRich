@@ -8,6 +8,8 @@ interface NotificationDrawerProps {
   onClose: () => void;
   notifications: PushNotification[];
   onNavigateTab?: (tab: string) => void;
+  onMarkAllAsRead?: () => void;
+  onClearAll?: () => void;
 }
 
 export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
@@ -15,6 +17,8 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
   onClose,
   notifications,
   onNavigateTab,
+  onMarkAllAsRead,
+  onClearAll,
 }) => {
   if (!isOpen) return null;
 
@@ -42,17 +46,21 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
   };
 
   const requestBrowserPermission = async () => {
-    if ('Notification' in window) {
-      const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        storage.addNotification({
-          title: '🔔 Push Notifications Enabled!',
-          message: 'You will now receive instant alerts for low-stock triggers, POS transactions, and customer orders.',
-          type: 'discount_promo',
-          targetRole: 'all',
-          read: false,
-        });
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          storage.addNotification({
+            title: '🔔 Push Notifications Enabled!',
+            message: 'You will now receive instant alerts for low-stock triggers, POS transactions, and customer orders.',
+            type: 'discount_promo',
+            targetRole: 'all',
+            read: false,
+          });
+        }
       }
+    } catch {
+      // safely handle permission error
     }
   };
 

@@ -31,6 +31,7 @@ import confetti from 'canvas-confetti';
 import { InventoryItem, Category, Customer, Order, OrderItem, PaymentMethod, POSSession } from '../../types';
 import { CURRENCY, storage } from '../../services/storage';
 import { soundEffects } from '../../services/audio';
+import { isToday } from '../../utils/dateUtils';
 import { POSReceiptModal } from './POSReceiptModal';
 import { POSStoreCounterLogin } from './POSStoreCounterLogin';
 import { BarcodeScannerModal } from '../common/BarcodeScannerModal';
@@ -90,6 +91,16 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
 
   const [showShiftSummary, setShowShiftSummary] = useState(false);
   const [localScannerOpen, setLocalScannerOpen] = useState(false);
+  const [, setOrderSyncTrigger] = useState(0);
+
+  // Subscribe to storage changes for live shift & order sync
+  useEffect(() => {
+    const unsubscribe = storage.subscribe(() => {
+      setOrderSyncTrigger((prev) => prev + 1);
+    });
+    return () => unsubscribe();
+  }, []);
+
   const [lastScannedFeedback, setLastScannedFeedback] = useState<{
     name: string;
     barcode: string;
@@ -540,14 +551,19 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
     setAppliedDiscount(null);
   };
 
-  // Shift summary calculations for current store and counter
+  // Shift summary calculations for current store and counter (resets after 12:00 AM midnight)
   const allOrders = storage.getOrders();
-  const posOrdersToday = allOrders.filter(
-    (o) => o.source === 'pos_counter' && o.storeId === posSession.storeId
+  const storeOrdersToday = allOrders.filter(
+    (o) => o.storeId === posSession.storeId && isToday(o.createdAt)
+  );
+  const posOrdersToday = storeOrdersToday.filter(
+    (o) => o.source === 'pos_counter' && (o.counterNumber === posSession.counterNumber || !o.counterNumber)
   );
   const totalShiftRevenue = posOrdersToday.reduce((s, o) => s + o.grandTotal, 0);
   const totalShiftCash = posOrdersToday.filter((o) => o.paymentMethod === 'cash').reduce((s, o) => s + o.grandTotal, 0);
   const totalShiftUPI = posOrdersToday.filter((o) => o.paymentMethod === 'upi_qr').reduce((s, o) => s + o.grandTotal, 0);
+  const totalShiftCard = posOrdersToday.filter((o) => o.paymentMethod === 'card').reduce((s, o) => s + o.grandTotal, 0);
+  const totalStoreSalesToday = storeOrdersToday.reduce((s, o) => s + o.grandTotal, 0);
 
   const totalCartCount = cart.reduce((s, i) => s + i.quantity, 0);
 
@@ -1134,21 +1150,36 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
             </div>
 
             <div className="space-y-2 text-xs">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center">
-                <span className="text-slate-600 font-medium">Total Shift Sales:</span>
-                <span className="font-black text-slate-900 text-sm">{CURRENCY}{totalShiftRevenue.toFixed(2)}</span>
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 flex justify-between items-center">
+                <span className="text-amber-900 font-semibold">Counter #{posSession.counterNumber} Sales Today:</span>
+                <span className="font-black text-amber-950 text-base">{CURRENCY}{totalShiftRevenue.toFixed(2)}</span>
               </div>
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center">
-                <span className="text-slate-600 font-medium">Cash in Register:</span>
+                <span className="text-slate-600 font-medium">Cash in Drawer (Counter #{posSession.counterNumber}):</span>
                 <span className="font-bold text-slate-800">{CURRENCY}{totalShiftCash.toFixed(2)}</span>
               </div>
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center">
-                <span className="text-slate-600 font-medium">UPI / Card Digital:</span>
+                <span className="text-slate-600 font-medium">UPI / QR (Counter #{posSession.counterNumber}):</span>
                 <span className="font-bold text-slate-800">{CURRENCY}{totalShiftUPI.toFixed(2)}</span>
               </div>
+              {totalShiftCard > 0 && (
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center">
+                  <span className="text-slate-600 font-medium">Card POS (Counter #{posSession.counterNumber}):</span>
+                  <span className="font-bold text-slate-800">{CURRENCY}{totalShiftCard.toFixed(2)}</span>
+                </div>
+              )}
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center">
-                <span className="text-slate-600 font-medium">Total Store Bills:</span>
+                <span className="text-slate-600 font-medium">Counter #{posSession.counterNumber} Bills Today:</span>
                 <span className="font-bold text-slate-800">{posOrdersToday.length} transactions</span>
+              </div>
+              <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100 flex justify-between items-center">
+                <span className="text-indigo-900 font-medium">Store-Wide Sales Today:</span>
+                <span className="font-bold text-indigo-950">{CURRENCY}{totalStoreSalesToday.toFixed(2)} ({storeOrdersToday.length} bills)</span>
+              </div>
+              <div className="text-center pt-1">
+                <span className="text-[10px] text-slate-400 font-medium flex items-center justify-center gap-1">
+                  <Clock className="w-3 h-3 text-slate-400" /> Resets automatically at 12:00 AM local midnight
+                </span>
               </div>
             </div>
 

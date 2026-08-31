@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   KeyRound,
@@ -96,6 +96,13 @@ export const AdminStaffCounters: React.FC<AdminStaffCountersProps> = ({
     setStores(storage.getStores());
     setStoreAdmins(storage.getStoreAdmins());
   };
+
+  useEffect(() => {
+    const unsub = storage.subscribe(() => {
+      refreshData();
+    });
+    return () => unsub();
+  }, []);
 
   const togglePinReveal = (uniqueKey: string) => {
     setRevealedPins((prev) => ({

@@ -33,11 +33,14 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) {
-      stopCamera();
+      stopCamera().catch(() => {});
       setLastScanned(null);
       setManualCode('');
       setCameraError(null);
     }
+    return () => {
+      stopCamera().catch(() => {});
+    };
   }, [isOpen]);
 
   const startCamera = async () => {
@@ -62,19 +65,20 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
       );
       setCameraActive(true);
     } catch (err: any) {
-      console.warn('Camera start error:', err);
       setCameraError('Camera access not granted or unavailable. You can use the instant barcode simulator below!');
       setCameraActive(false);
     }
   };
 
   const stopCamera = async () => {
-    if (scannerRef.current && cameraActive) {
+    if (scannerRef.current) {
       try {
-        await scannerRef.current.stop();
+        if (scannerRef.current.isScanning) {
+          await scannerRef.current.stop();
+        }
         scannerRef.current.clear();
       } catch (e) {
-        console.warn('Camera stop error:', e);
+        // safely handled
       }
       setCameraActive(false);
     }

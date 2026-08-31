@@ -15,6 +15,7 @@ import {
   PackagePlus,
   Store,
   ArrowDownLeft,
+  Sparkles,
 } from 'lucide-react';
 import { WarehouseTab, WarehouseSubRole } from '../../types/warehouse';
 
@@ -36,6 +37,8 @@ interface WarehouseHeaderProps {
   inTransitCount: number;
   lowStockCount: number;
   overdueBillsCount: number;
+  layoutMode?: 'modern' | 'classic';
+  onToggleLayoutMode?: () => void;
 }
 
 export const WarehouseHeader: React.FC<WarehouseHeaderProps> = ({
@@ -55,6 +58,8 @@ export const WarehouseHeader: React.FC<WarehouseHeaderProps> = ({
   inTransitCount,
   lowStockCount,
   overdueBillsCount,
+  layoutMode = 'classic',
+  onToggleLayoutMode,
 }) => {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -82,7 +87,6 @@ export const WarehouseHeader: React.FC<WarehouseHeaderProps> = ({
   const secondaryTabs: { id: WarehouseTab; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
     { id: 'store_stock', label: 'Store Stock Allocation', icon: Store },
     { id: 'adjustments', label: 'Adjustments & Scrap', icon: AlertTriangle, badge: nearExpiryCount || undefined },
-    { id: 'locations', label: 'Warehouses & Locations', icon: Building2 },
     { id: 'audit_trail', label: 'Movement Audit Trail', icon: History },
     { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
   ];
@@ -131,6 +135,19 @@ export const WarehouseHeader: React.FC<WarehouseHeaderProps> = ({
               <option value="accountant" className="bg-[#1E293B] text-white">Accountant</option>
             </select>
           </div>
+
+          {/* Layout Mode Switcher */}
+          {onToggleLayoutMode && (
+            <button
+              type="button"
+              onClick={onToggleLayoutMode}
+              className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-xs transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+              title="Toggle to Modern Workspace Layout"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Modern UI</span>
+            </button>
+          )}
 
           {/* Quick Actions */}
           {(subRole === 'admin' || subRole === 'warehouse_manager') && onOpenAddItem && (

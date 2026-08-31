@@ -16,16 +16,16 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
   transfer,
   onSuccess,
 }) => {
-  if (!isOpen || !transfer) return null;
-
-  const [otpInput, setOtpInput] = useState(transfer.otpOrPin || '');
+  const [otpInput, setOtpInput] = useState(transfer?.otpOrPin || '');
   const [receivedItems, setReceivedItems] = useState(
-    transfer.items.map((it) => ({
-      itemId: it.itemId,
-      dispatchedQty: it.dispatchedQty,
-      receivedQty: it.dispatchedQty,
-      damagedQty: 0,
-    }))
+    transfer
+      ? transfer.items.map((it) => ({
+          itemId: it.itemId,
+          dispatchedQty: it.dispatchedQty,
+          receivedQty: it.dispatchedQty,
+          damagedQty: 0,
+        }))
+      : []
   );
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +45,8 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
       setError(null);
     }
   }, [transfer]);
+
+  if (!isOpen || !transfer) return null;
 
   const handleQtyChange = (index: number, field: 'receivedQty' | 'damagedQty', val: number) => {
     const next = [...receivedItems];

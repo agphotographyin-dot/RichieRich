@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, PackagePlus, Building2, Calendar, FileText, Link2, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Plus, Trash2, PackagePlus, Building2, Calendar, FileText, Link2, CheckCircle2, Package, Layers } from 'lucide-react';
 import { Supplier, Warehouse, PurchaseBillItem, PurchaseOrder } from '../../../types/warehouse';
 import { InventoryItem } from '../../../types';
 import { CURRENCY } from '../../../services/storage';
 import { warehouseStorage } from '../../../services/warehouseStorage';
 import { ItemAutocompleteInput } from '../../common/ItemAutocompleteInput';
+import { getSupplierProducts } from '../../../utils/supplierProductMatching';
 
 interface InwardBillModalProps {
   isOpen: boolean;
@@ -27,8 +28,6 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
   initialPO = null,
   onSuccess,
 }) => {
-  if (!isOpen) return null;
-
   const defaultWh = warehouses[0] || {
     id: 'wh-central-amd',
     name: 'Central Warehouse',
@@ -42,6 +41,11 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
   const [notes, setNotes] = useState('');
   const [includeGst, setIncludeGst] = useState<boolean>(initialPO ? (initialPO.taxTotal > 0) : false);
   const [taxPercent, setTaxPercent] = useState<number>(initialPO?.items[0]?.taxPercent || 5);
+
+  const selectedSupplier = suppliers.find((s) => s.id === supplierId);
+  const supplierProducts = useMemo(() => {
+    return getSupplierProducts(selectedSupplier, inventory);
+  }, [selectedSupplier, inventory]);
 
   const [items, setItems] = useState<
     Array<{
@@ -86,6 +90,8 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
       },
     ];
   });
+
+  if (!isOpen) return null;
 
   // Handle PO selection change to load exact ordered items & units
   const handleSelectPO = (poId: string) => {
@@ -384,8 +390,8 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
                       </label>
                       <ItemAutocompleteInput
                         value={row.name}
-                        placeholder="Type item name or SKU..."
-                        inventory={inventory}
+                        placeholder={`Search ${supplierProducts.length} items from ${selectedSupplier?.name || 'supplier'}...`}
+                        inventory={supplierProducts}
                         onSelect={(sel) => handleItemSelect(idx, sel)}
                         onChange={(val) => handleFieldChange(idx, 'name', val)}
                         inputClassName="bg-white"

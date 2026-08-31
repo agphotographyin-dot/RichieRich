@@ -13,8 +13,6 @@ export const AddSupplierModal: React.FC<AddSupplierModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  if (!isOpen) return null;
-
   const [name, setName] = useState('');
   const [category, setCategory] = useState<'Paan' | 'Cafe' | 'Essentials'>('Paan');
   const [contactPerson, setContactPerson] = useState('');
@@ -25,6 +23,8 @@ export const AddSupplierModal: React.FC<AddSupplierModalProps> = ({
   const [gstin, setGstin] = useState('');
   const [paymentTerms, setPaymentTerms] = useState('Net 30 Days');
   const [openingBalance, setOpeningBalance] = useState<number>(0);
+
+  if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

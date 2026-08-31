@@ -169,6 +169,7 @@ export interface BatchRecord {
   itemId: string;
   sku: string;
   name: string;
+  itemName?: string;
   category: string;
   batchNumber: string;
   warehouseId: string;
@@ -189,6 +190,7 @@ export interface TransferItem {
   itemId: string;
   sku: string;
   name: string;
+  category?: string;
   unit: string;
   batchNumber?: string;
   requestedQty: number;

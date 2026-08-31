@@ -25,6 +25,7 @@ import {
 import { Order, StoreLocation } from '../../types';
 import { CURRENCY, storage } from '../../services/storage';
 import { pdfReportService } from '../../services/pdfReportService';
+import { getLocalDateString, isSameDay } from '../../utils/dateUtils';
 
 interface DailyCollectionModalProps {
   isOpen: boolean;
@@ -43,17 +44,15 @@ export const DailyCollectionModal: React.FC<DailyCollectionModalProps> = ({
   initialDate,
   onSelectPaymentFilter,
 }) => {
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString(new Date());
   const [selectedDate, setSelectedDate] = useState<string>(initialDate || todayStr);
   const [selectedStoreId, setSelectedStoreId] = useState<string>('all');
   const [copied, setCopied] = useState(false);
   const [activePaymentTab, setActivePaymentTab] = useState<'all' | 'cash' | 'upi_qr' | 'card'>('all');
 
-  if (!isOpen) return null;
-
   // Filter orders for the selected date and store
   const dayOrders = orders.filter((o) => {
-    const orderDate = o.createdAt.split('T')[0];
+    const orderDate = getLocalDateString(o.createdAt);
     const matchesDate = orderDate === selectedDate;
     const matchesStore = selectedStoreId === 'all' || o.storeId === selectedStoreId;
     return matchesDate && matchesStore;
@@ -129,6 +128,8 @@ export const DailyCollectionModal: React.FC<DailyCollectionModalProps> = ({
     if (activePaymentTab === 'card') return cardOrders;
     return dayOrders;
   }, [activePaymentTab, dayOrders, cashOrders, upiOrders, cardOrders]);
+
+  if (!isOpen) return null;
 
   // Copy Settlement text to clipboard for WhatsApp or quick messaging
   const handleCopySummary = () => {
@@ -271,7 +272,7 @@ _Generated via Richie Rich POS Management System_`;
                 onClick={() => {
                   const y = new Date();
                   y.setDate(y.getDate() - 1);
-                  setSelectedDate(y.toISOString().split('T')[0]);
+                  setSelectedDate(getLocalDateString(y));
                 }}
                 className="px-2.5 py-1 rounded-md text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
               >

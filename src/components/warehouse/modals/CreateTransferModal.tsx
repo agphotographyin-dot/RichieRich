@@ -26,15 +26,13 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
   initialData,
   onSuccess,
 }) => {
-  if (!isOpen) return null;
-
   const defaultWh = warehouses[0] || {
     id: 'wh-central-amd',
     name: 'Central Warehouse',
   };
 
-  const [transferType, setTransferType] = useState<'warehouse_to_store' | 'store_to_warehouse_return'>(
-    initialData?.type === 'store_to_warehouse_return' ? 'store_to_warehouse_return' : 'warehouse_to_store'
+  const [transferType, setTransferType] = useState<'warehouse_to_store' | 'store_to_warehouse_return' | 'warehouse_to_warehouse'>(
+    initialData?.type || 'warehouse_to_store'
   );
   const [destStoreId, setDestStoreId] = useState(
     initialData?.destinationId || stores[0]?.id || 'bopal'
@@ -112,6 +110,8 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
       }
     }
   }, [isOpen, initialData, stores, batches]);
+
+  if (!isOpen) return null;
 
   const handleAddItem = () => {
     const defaultItem = inventory[0] || {

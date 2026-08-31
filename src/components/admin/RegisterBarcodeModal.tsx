@@ -58,8 +58,11 @@ export const RegisterBarcodeModal: React.FC<RegisterBarcodeModalProps> = ({
       setDuplicateWarning(null);
       setCameraError(null);
     } else {
-      stopCamera();
+      stopCamera().catch(() => {});
     }
+    return () => {
+      stopCamera().catch(() => {});
+    };
   }, [isOpen, preselectedItem, inventory]);
 
   const selectedItem = inventory.find((i) => i.id === selectedItemId) || inventory[0];
@@ -126,12 +129,14 @@ export const RegisterBarcodeModal: React.FC<RegisterBarcodeModalProps> = ({
   };
 
   const stopCamera = async () => {
-    if (scannerRef.current && isCameraActive) {
+    if (scannerRef.current) {
       try {
-        await scannerRef.current.stop();
+        if (scannerRef.current.isScanning) {
+          await scannerRef.current.stop();
+        }
         scannerRef.current.clear();
       } catch (e) {
-        console.warn('Camera stop error:', e);
+        // safely handled
       }
       setIsCameraActive(false);
     }

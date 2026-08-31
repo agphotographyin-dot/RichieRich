@@ -98,8 +98,11 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
       setIsCameraScanning(false);
       setCameraError(null);
     } else {
-      stopCamera();
+      stopCamera().catch(() => {});
     }
+    return () => {
+      stopCamera().catch(() => {});
+    };
   }, [isOpen, categories]);
 
   const autoGenerateSkuBarcode = () => {
@@ -139,12 +142,14 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
   };
 
   const stopCamera = async () => {
-    if (scannerRef.current && isCameraScanning) {
+    if (scannerRef.current) {
       try {
-        await scannerRef.current.stop();
+        if (scannerRef.current.isScanning) {
+          await scannerRef.current.stop();
+        }
         scannerRef.current.clear();
       } catch (e) {
-        console.warn('Camera stop error:', e);
+        // safely handled
       }
       setIsCameraScanning(false);
     }

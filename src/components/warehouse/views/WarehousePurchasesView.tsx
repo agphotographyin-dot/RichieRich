@@ -172,7 +172,7 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
 
           {activeTab === 'bills' && (
             <button
-              onClick={onOpenInwardBill}
+              onClick={() => onOpenInwardBill()}
               className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
             >
               <PackagePlus className="w-3.5 h-3.5" />

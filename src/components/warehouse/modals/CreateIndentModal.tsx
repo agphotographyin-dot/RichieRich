@@ -22,8 +22,6 @@ export const CreateIndentModal: React.FC<CreateIndentModalProps> = ({
   inventory,
   onSuccess,
 }) => {
-  if (!isOpen) return null;
-
   const defaultWh = warehouses[0] || {
     id: 'wh-central-amd',
     name: 'Central Warehouse',
@@ -54,6 +52,8 @@ export const CreateIndentModal: React.FC<CreateIndentModalProps> = ({
       threshold: inventory[0]?.lowStockThreshold || 15,
     },
   ]);
+
+  if (!isOpen) return null;
 
   const handleAddItem = () => {
     const defaultItem = inventory[0] || {

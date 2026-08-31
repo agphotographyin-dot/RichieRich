@@ -6,6 +6,7 @@ interface BarcodeVisualizerProps {
   width?: number;
   height?: number;
   showText?: boolean;
+  fontSize?: number;
 }
 
 export const BarcodeVisualizer: React.FC<BarcodeVisualizerProps> = ({
@@ -14,6 +15,7 @@ export const BarcodeVisualizer: React.FC<BarcodeVisualizerProps> = ({
   width = 140,
   height = 36,
   showText = true,
+  fontSize,
 }) => {
   // Generate deterministic bar widths from value string
   const bars: number[] = [];

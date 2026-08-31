@@ -17,6 +17,7 @@ import {
   Home,
   Building2,
   Store,
+  Sparkles,
 } from 'lucide-react';
 import { Role, PushNotification, AdminTab, Customer } from '../../types';
 import { RichieRichLogo } from './RichieRichLogo';
@@ -32,6 +33,8 @@ interface HeaderProps {
   onLogout?: () => void;
   currentCustomer?: Customer | null;
   onNavigateLanding?: () => void;
+  warehouseLayoutMode?: 'modern' | 'classic';
+  onToggleWarehouseLayoutMode?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -45,6 +48,8 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   currentCustomer,
   onNavigateLanding,
+  warehouseLayoutMode,
+  onToggleWarehouseLayoutMode,
 }) => {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -178,6 +183,19 @@ export const Header: React.FC<HeaderProps> = ({
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}
+              </button>
+            )}
+
+            {/* Warehouse Layout Mode Toggle (Modern / Classic) */}
+            {currentRole === 'warehouse' && onToggleWarehouseLayoutMode && (
+              <button
+                type="button"
+                onClick={onToggleWarehouseLayoutMode}
+                title={`Switch to ${warehouseLayoutMode === 'modern' ? 'Classic UI' : 'Modern UI'}`}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all cursor-pointer shadow-xs"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>{warehouseLayoutMode === 'modern' ? 'Modern UI' : 'Classic UI'}</span>
               </button>
             )}
 

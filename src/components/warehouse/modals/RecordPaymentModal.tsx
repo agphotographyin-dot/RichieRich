@@ -19,8 +19,6 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   suppliers,
   onSuccess,
 }) => {
-  if (!isOpen) return null;
-
   const [selectedSupId, setSelectedSupId] = useState(supplierId || suppliers[0]?.id || '');
   const supplier = suppliers.find((s) => s.id === selectedSupId) || suppliers[0];
 
@@ -28,6 +26,8 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   const [paymentMode, setPaymentMode] = useState<'NEFT' | 'RTGS' | 'UPI' | 'Cheque' | 'Cash'>('NEFT');
   const [refNumber, setRefNumber] = useState(`UTR-${Math.floor(10000000 + Math.random() * 90000000)}`);
   const [notes, setNotes] = useState('');
+
+  if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

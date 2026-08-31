@@ -1,3 +1,4 @@
+import { safeStorage } from "../utils/safeStorage";
 import {
   Warehouse,
   Supplier,
@@ -157,18 +158,18 @@ export const INITIAL_AUDIT_TRAIL: StockMovementAudit[] = [];
 // Automatic one-time cleanup of any previous dummy seed items in localStorage
 export function cleanWarehouseDummyData(): void {
   try {
-    const cleanFlag = localStorage.getItem('rr_wh_dummy_cleaned_v2');
+    const cleanFlag = safeStorage.getItem('rr_wh_dummy_cleaned_v2');
     if (!cleanFlag) {
-      localStorage.setItem(WH_KEYS.SUPPLIERS, JSON.stringify([]));
-      localStorage.setItem(WH_KEYS.SUPPLIER_LEDGER, JSON.stringify([]));
-      localStorage.setItem(WH_KEYS.PURCHASE_ORDERS, JSON.stringify([]));
-      localStorage.setItem(WH_KEYS.PURCHASE_BILLS, JSON.stringify([]));
-      localStorage.setItem(WH_KEYS.BATCHES, JSON.stringify([]));
-      localStorage.setItem(WH_KEYS.TRANSFERS, JSON.stringify([]));
-      localStorage.setItem(WH_KEYS.INDENTS, JSON.stringify([]));
-      localStorage.setItem(WH_KEYS.ADJUSTMENTS, JSON.stringify([]));
-      localStorage.setItem(WH_KEYS.AUDIT_TRAIL, JSON.stringify([]));
-      localStorage.setItem('rr_wh_dummy_cleaned_v2', 'true');
+      safeStorage.setItem(WH_KEYS.SUPPLIERS, JSON.stringify([]));
+      safeStorage.setItem(WH_KEYS.SUPPLIER_LEDGER, JSON.stringify([]));
+      safeStorage.setItem(WH_KEYS.PURCHASE_ORDERS, JSON.stringify([]));
+      safeStorage.setItem(WH_KEYS.PURCHASE_BILLS, JSON.stringify([]));
+      safeStorage.setItem(WH_KEYS.BATCHES, JSON.stringify([]));
+      safeStorage.setItem(WH_KEYS.TRANSFERS, JSON.stringify([]));
+      safeStorage.setItem(WH_KEYS.INDENTS, JSON.stringify([]));
+      safeStorage.setItem(WH_KEYS.ADJUSTMENTS, JSON.stringify([]));
+      safeStorage.setItem(WH_KEYS.AUDIT_TRAIL, JSON.stringify([]));
+      safeStorage.setItem('rr_wh_dummy_cleaned_v2', 'true');
     }
   } catch (e) {
     console.error('Error cleaning dummy warehouse data', e);
@@ -177,6 +178,17 @@ export function cleanWarehouseDummyData(): void {
 cleanWarehouseDummyData();
 
 const warehouseListeners: Set<() => void> = new Set();
+
+// Synchronize storage service events with warehouse listeners for real-time reactivity
+storage.subscribe(() => {
+  warehouseListeners.forEach((cb) => {
+    try {
+      cb();
+    } catch (e) {
+      console.error('Error in warehouse listener', e);
+    }
+  });
+});
 
 export const warehouseStorage = {
   subscribe(callback: () => void): () => void {
@@ -187,7 +199,13 @@ export const warehouseStorage = {
   },
 
   notifySubscribers(): void {
-    warehouseListeners.forEach((cb) => cb());
+    warehouseListeners.forEach((cb) => {
+      try {
+        cb();
+      } catch (e) {
+        console.error('Error notifying warehouse listener', e);
+      }
+    });
     storage.notifySubscribers();
   },
 
@@ -196,7 +214,7 @@ export const warehouseStorage = {
   // =========================================================================
   getActiveSubRole(): WarehouseSubRole {
     try {
-      const saved = localStorage.getItem(WH_KEYS.SUB_ROLE) as WarehouseSubRole | null;
+      const saved = safeStorage.getItem(WH_KEYS.SUB_ROLE) as WarehouseSubRole | null;
       return saved || 'admin';
     } catch {
       return 'admin';
@@ -205,8 +223,8 @@ export const warehouseStorage = {
 
   setActiveSubRole(role: WarehouseSubRole): void {
     try {
-      localStorage.setItem(WH_KEYS.SUB_ROLE, role);
-      storage.notifySubscribers();
+      safeStorage.setItem(WH_KEYS.SUB_ROLE, role);
+      this.notifySubscribers();
     } catch (e) {
       console.error(e);
     }
@@ -217,7 +235,7 @@ export const warehouseStorage = {
   // =========================================================================
   getWarehouses(): Warehouse[] {
     try {
-      const data = localStorage.getItem(WH_KEYS.WAREHOUSES);
+      const data = safeStorage.getItem(WH_KEYS.WAREHOUSES);
       if (!data) {
         this.saveWarehouses(INITIAL_WAREHOUSES);
         return INITIAL_WAREHOUSES;
@@ -307,8 +325,8 @@ export const warehouseStorage = {
 
   saveWarehouses(list: Warehouse[]): void {
     try {
-      localStorage.setItem(WH_KEYS.WAREHOUSES, JSON.stringify(list));
-      storage.notifySubscribers();
+      safeStorage.setItem(WH_KEYS.WAREHOUSES, JSON.stringify(list));
+      this.notifySubscribers();
     } catch (e) {
       console.error(e);
     }
@@ -348,7 +366,7 @@ export const warehouseStorage = {
   // =========================================================================
   getSuppliers(): Supplier[] {
     try {
-      const data = localStorage.getItem(WH_KEYS.SUPPLIERS);
+      const data = safeStorage.getItem(WH_KEYS.SUPPLIERS);
       if (!data) {
         this.saveSuppliers(INITIAL_SUPPLIERS);
         return INITIAL_SUPPLIERS;
@@ -366,8 +384,8 @@ export const warehouseStorage = {
 
   saveSuppliers(list: Supplier[]): void {
     try {
-      localStorage.setItem(WH_KEYS.SUPPLIERS, JSON.stringify(list));
-      storage.notifySubscribers();
+      safeStorage.setItem(WH_KEYS.SUPPLIERS, JSON.stringify(list));
+      this.notifySubscribers();
     } catch (e) {
       console.error(e);
     }
@@ -443,7 +461,7 @@ export const warehouseStorage = {
   // =========================================================================
   getSupplierLedger(): SupplierLedgerEntry[] {
     try {
-      const data = localStorage.getItem(WH_KEYS.SUPPLIER_LEDGER);
+      const data = safeStorage.getItem(WH_KEYS.SUPPLIER_LEDGER);
       if (!data) {
         this.saveSupplierLedger(INITIAL_LEDGER_ENTRIES);
         return INITIAL_LEDGER_ENTRIES;
@@ -456,8 +474,8 @@ export const warehouseStorage = {
 
   saveSupplierLedger(list: SupplierLedgerEntry[]): void {
     try {
-      localStorage.setItem(WH_KEYS.SUPPLIER_LEDGER, JSON.stringify(list));
-      storage.notifySubscribers();
+      safeStorage.setItem(WH_KEYS.SUPPLIER_LEDGER, JSON.stringify(list));
+      this.notifySubscribers();
     } catch (e) {
       console.error(e);
     }
@@ -468,7 +486,7 @@ export const warehouseStorage = {
   // =========================================================================
   getPurchaseOrders(): PurchaseOrder[] {
     try {
-      const data = localStorage.getItem(WH_KEYS.PURCHASE_ORDERS);
+      const data = safeStorage.getItem(WH_KEYS.PURCHASE_ORDERS);
       if (!data) {
         this.savePurchaseOrders(INITIAL_PURCHASE_ORDERS);
         return INITIAL_PURCHASE_ORDERS;
@@ -481,8 +499,8 @@ export const warehouseStorage = {
 
   savePurchaseOrders(list: PurchaseOrder[]): void {
     try {
-      localStorage.setItem(WH_KEYS.PURCHASE_ORDERS, JSON.stringify(list));
-      storage.notifySubscribers();
+      safeStorage.setItem(WH_KEYS.PURCHASE_ORDERS, JSON.stringify(list));
+      this.notifySubscribers();
     } catch (e) {
       console.error(e);
     }
@@ -523,7 +541,7 @@ export const warehouseStorage = {
   // =========================================================================
   getPurchaseBills(): PurchaseBill[] {
     try {
-      const data = localStorage.getItem(WH_KEYS.PURCHASE_BILLS);
+      const data = safeStorage.getItem(WH_KEYS.PURCHASE_BILLS);
       if (!data) {
         this.savePurchaseBills(INITIAL_PURCHASE_BILLS);
         return INITIAL_PURCHASE_BILLS;
@@ -536,8 +554,8 @@ export const warehouseStorage = {
 
   savePurchaseBills(list: PurchaseBill[]): void {
     try {
-      localStorage.setItem(WH_KEYS.PURCHASE_BILLS, JSON.stringify(list));
-      storage.notifySubscribers();
+      safeStorage.setItem(WH_KEYS.PURCHASE_BILLS, JSON.stringify(list));
+      this.notifySubscribers();
     } catch (e) {
       console.error(e);
     }
@@ -661,7 +679,7 @@ export const warehouseStorage = {
   // =========================================================================
   getBatches(): BatchRecord[] {
     try {
-      const data = localStorage.getItem(WH_KEYS.BATCHES);
+      const data = safeStorage.getItem(WH_KEYS.BATCHES);
       if (!data) {
         this.saveBatches(INITIAL_BATCHES);
         return INITIAL_BATCHES;
@@ -687,8 +705,8 @@ export const warehouseStorage = {
         return { ...b, daysToExpiry: days, status };
       });
 
-      localStorage.setItem(WH_KEYS.BATCHES, JSON.stringify(updated));
-      storage.notifySubscribers();
+      safeStorage.setItem(WH_KEYS.BATCHES, JSON.stringify(updated));
+      this.notifySubscribers();
     } catch (e) {
       console.error(e);
     }
@@ -699,7 +717,7 @@ export const warehouseStorage = {
   // =========================================================================
   getStockTransfers(): StockTransfer[] {
     try {
-      const data = localStorage.getItem(WH_KEYS.TRANSFERS);
+      const data = safeStorage.getItem(WH_KEYS.TRANSFERS);
       if (!data) {
         this.saveStockTransfers(INITIAL_TRANSFERS);
         return INITIAL_TRANSFERS;
@@ -712,8 +730,8 @@ export const warehouseStorage = {
 
   saveStockTransfers(list: StockTransfer[]): void {
     try {
-      localStorage.setItem(WH_KEYS.TRANSFERS, JSON.stringify(list));
-      storage.notifySubscribers();
+      safeStorage.setItem(WH_KEYS.TRANSFERS, JSON.stringify(list));
+      this.notifySubscribers();
     } catch (e) {
       console.error(e);
     }
@@ -826,7 +844,10 @@ export const warehouseStorage = {
     transfer.receivedDate = new Date().toISOString().split('T')[0];
     transfer.receivedBy = receivedBy;
 
+    const inventory = storage.getInventory();
+    let inventoryModified = false;
     let hasPartial = false;
+
     transfer.items.forEach((item) => {
       const receivedQty = itemReceivedMap[item.itemId] !== undefined ? itemReceivedMap[item.itemId] : item.dispatchedQty;
       item.receivedQty = receivedQty;
@@ -836,13 +857,12 @@ export const warehouseStorage = {
       }
 
       // Add stock to store allocations in storage
-      const inventory = storage.getInventory();
       const invItem = inventory.find((i) => i.id === item.itemId);
       if (invItem) {
         if (!invItem.storeAllocations) invItem.storeAllocations = {};
         const destStoreKey = transfer.destinationId;
         invItem.storeAllocations[destStoreKey] = (invItem.storeAllocations[destStoreKey] || 0) + receivedQty;
-        storage.saveInventory(inventory);
+        inventoryModified = true;
       }
 
       this.addAuditRecord({
@@ -865,6 +885,10 @@ export const warehouseStorage = {
       });
     });
 
+    if (inventoryModified) {
+      storage.saveInventory(inventory);
+    }
+
     transfer.status = hasPartial ? 'partially_received' : 'completed';
     this.saveStockTransfers(transfers);
 
@@ -884,7 +908,7 @@ export const warehouseStorage = {
   // =========================================================================
   getStoreIndents(): StoreStockIndent[] {
     try {
-      const data = localStorage.getItem(WH_KEYS.INDENTS);
+      const data = safeStorage.getItem(WH_KEYS.INDENTS);
       if (!data) {
         this.saveStoreIndents(INITIAL_INDENTS);
         return INITIAL_INDENTS;
@@ -897,8 +921,8 @@ export const warehouseStorage = {
 
   saveStoreIndents(list: StoreStockIndent[]): void {
     try {
-      localStorage.setItem(WH_KEYS.INDENTS, JSON.stringify(list));
-      storage.notifySubscribers();
+      safeStorage.setItem(WH_KEYS.INDENTS, JSON.stringify(list));
+      this.notifySubscribers();
     } catch (e) {
       console.error(e);
     }
@@ -972,7 +996,7 @@ export const warehouseStorage = {
   // =========================================================================
   getStockAdjustments(): StockAdjustment[] {
     try {
-      const data = localStorage.getItem(WH_KEYS.ADJUSTMENTS);
+      const data = safeStorage.getItem(WH_KEYS.ADJUSTMENTS);
       if (!data) {
         this.saveStockAdjustments(INITIAL_ADJUSTMENTS);
         return INITIAL_ADJUSTMENTS;
@@ -985,8 +1009,8 @@ export const warehouseStorage = {
 
   saveStockAdjustments(list: StockAdjustment[]): void {
     try {
-      localStorage.setItem(WH_KEYS.ADJUSTMENTS, JSON.stringify(list));
-      storage.notifySubscribers();
+      safeStorage.setItem(WH_KEYS.ADJUSTMENTS, JSON.stringify(list));
+      this.notifySubscribers();
     } catch (e) {
       console.error(e);
     }
@@ -1110,7 +1134,7 @@ export const warehouseStorage = {
   // =========================================================================
   getAuditTrail(): StockMovementAudit[] {
     try {
-      const data = localStorage.getItem(WH_KEYS.AUDIT_TRAIL);
+      const data = safeStorage.getItem(WH_KEYS.AUDIT_TRAIL);
       if (!data) {
         this.saveAuditTrail(INITIAL_AUDIT_TRAIL);
         return INITIAL_AUDIT_TRAIL;
@@ -1123,8 +1147,8 @@ export const warehouseStorage = {
 
   saveAuditTrail(list: StockMovementAudit[]): void {
     try {
-      localStorage.setItem(WH_KEYS.AUDIT_TRAIL, JSON.stringify(list));
-      storage.notifySubscribers();
+      safeStorage.setItem(WH_KEYS.AUDIT_TRAIL, JSON.stringify(list));
+      this.notifySubscribers();
     } catch (e) {
       console.error(e);
     }

@@ -230,7 +230,7 @@ export const WarehouseLocationsView: React.FC<WarehouseLocationsViewProps> = ({
                       STORE #{st.id.toUpperCase()}
                     </span>
                     <h3 className="font-bold text-slate-900 text-sm mt-1">{st.name}</h3>
-                    <p className="text-xs text-slate-500">{st.city} • {st.area || 'Retail Lounge'}</p>
+                    <p className="text-xs text-slate-500">{st.city || st.area || 'Ahmedabad'} • {st.area || 'Retail Lounge'}</p>
                   </div>
                   <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
                     <Store className="w-4 h-4" />

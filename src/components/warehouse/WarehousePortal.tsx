@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { WarehouseHeader } from './WarehouseHeader';
+import { WarehouseSidebar } from './WarehouseSidebar';
 import { WarehouseDashboardView } from './views/WarehouseDashboardView';
+import { WarehouseModernDashboardView } from './views/WarehouseModernDashboardView';
 import { WarehouseInventoryView } from './views/WarehouseInventoryView';
 import { WarehouseStoreStockView } from './views/WarehouseStoreStockView';
 import { WarehouseTransfersView } from './views/WarehouseTransfersView';
@@ -45,15 +47,66 @@ import { storage } from '../../services/storage';
 interface WarehousePortalProps {
   currentTab?: WarehouseTab;
   onTabChange?: (tab: WarehouseTab) => void;
+  layoutMode?: 'modern' | 'classic';
+  onToggleLayoutMode?: () => void;
 }
 
 export const WarehousePortal: React.FC<WarehousePortalProps> = ({
   currentTab = 'dashboard',
   onTabChange,
+  layoutMode: externalLayoutMode,
+  onToggleLayoutMode: externalToggleLayoutMode,
 }) => {
   const [activeTab, setActiveTab] = useState<WarehouseTab>(currentTab);
   const [subRole, setSubRole] = useState<WarehouseSubRole>(warehouseStorage.getActiveSubRole());
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Internal layout mode state (syncs with external if provided)
+  const [internalLayoutMode, setInternalLayoutMode] = useState<'modern' | 'classic'>(() => {
+    try {
+      const saved = localStorage.getItem('rr_wh_layout_mode');
+      return saved === 'classic' ? 'classic' : 'modern';
+    } catch {
+      return 'modern';
+    }
+  });
+
+  const layoutMode = externalLayoutMode ?? internalLayoutMode;
+
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('rr_wh_sidebar_collapsed');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('wh-central-amd');
+
+  const toggleLayoutMode = () => {
+    if (externalToggleLayoutMode) {
+      externalToggleLayoutMode();
+      return;
+    }
+    const next = layoutMode === 'modern' ? 'classic' : 'modern';
+    setInternalLayoutMode(next);
+    try {
+      localStorage.setItem('rr_wh_layout_mode', next);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const toggleSidebarCollapse = () => {
+    const next = !isSidebarCollapsed;
+    setIsSidebarCollapsed(next);
+    try {
+      localStorage.setItem('rr_wh_sidebar_collapsed', String(next));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // State entities
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -149,31 +202,31 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
   const lowStockCount = inventory.filter((i) => i.stockQuantity <= i.lowStockThreshold).length;
   const overdueBillsCount = purchaseBills.filter((b) => b.dueAmount > 0).length;
 
-  return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4">
-      {/* Navigation and Top Bar */}
-      <WarehouseHeader
-        activeTab={activeTab}
-        onSelectTab={handleSelectTab}
-        subRole={subRole}
-        onChangeSubRole={handleSubRoleChange}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onOpenNewPO={() => setIsPOModalOpen(true)}
-        onOpenInwardBill={() => setIsInwardModalOpen(true)}
-        onOpenTransfer={() => setIsTransferModalOpen(true)}
-        onOpenIndent={() => setIsIndentModalOpen(true)}
-        onOpenAdjustment={() => setIsAdjustmentModalOpen(true)}
-        onOpenAddItem={() => setIsAddItemOpen(true)}
-        onOpenPipelineTester={() => setIsPipelineTesterOpen(true)}
-        nearExpiryCount={nearExpiryCount}
-        inTransitCount={inTransitCount}
-        lowStockCount={lowStockCount}
-        overdueBillsCount={overdueBillsCount}
-      />
-
-      {/* Render Active View */}
-      {activeTab === 'dashboard' && (
+  const renderActiveView = (mode: 'modern' | 'classic') => {
+    if (activeTab === 'dashboard') {
+      if (mode === 'modern') {
+        return (
+          <WarehouseModernDashboardView
+            stats={stats}
+            warehouses={warehouses}
+            stores={stores}
+            inventory={inventory}
+            batches={batches}
+            transfers={transfers}
+            indents={indents}
+            bills={purchaseBills}
+            auditTrail={auditTrail}
+            onNavigateTab={handleSelectTab}
+            onOpenNewPO={() => setIsPOModalOpen(true)}
+            onOpenInwardBill={() => setIsInwardModalOpen(true)}
+            onOpenTransfer={() => setIsTransferModalOpen(true)}
+            onOpenIndent={() => setIsIndentModalOpen(true)}
+            onOpenAdjustment={() => setIsAdjustmentModalOpen(true)}
+            onOpenPipelineTester={() => setIsPipelineTesterOpen(true)}
+          />
+        );
+      }
+      return (
         <WarehouseDashboardView
           stats={stats}
           warehouses={warehouses}
@@ -192,9 +245,11 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           onOpenAdjustment={() => setIsAdjustmentModalOpen(true)}
           onOpenPipelineTester={() => setIsPipelineTesterOpen(true)}
         />
-      )}
+      );
+    }
 
-      {activeTab === 'inventory' && (
+    if (activeTab === 'inventory') {
+      return (
         <WarehouseInventoryView
           inventory={inventory}
           batches={batches}
@@ -213,9 +268,11 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           }}
           onOpenScanner={() => setIsScannerOpen(true)}
         />
-      )}
+      );
+    }
 
-      {activeTab === 'store_stock' && (
+    if (activeTab === 'store_stock') {
+      return (
         <WarehouseStoreStockView
           stores={stores}
           inventory={inventory}
@@ -227,9 +284,11 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           }}
           onOpenIndentModal={() => setIsIndentModalOpen(true)}
         />
-      )}
+      );
+    }
 
-      {activeTab === 'transfers' && (
+    if (activeTab === 'transfers') {
+      return (
         <WarehouseTransfersView
           transfers={transfers}
           indents={indents}
@@ -240,9 +299,11 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           onOpenIndentModal={() => setIsIndentModalOpen(true)}
           onOpenReceiveModal={(tr) => setReceivingTransfer(tr)}
         />
-      )}
+      );
+    }
 
-      {activeTab === 'purchases' && (
+    if (activeTab === 'purchases') {
+      return (
         <WarehousePurchasesView
           suppliers={suppliers}
           purchaseOrders={purchaseOrders}
@@ -261,9 +322,11 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           }}
           onOpenAddSupplier={() => setIsAddSupplierModalOpen(true)}
         />
-      )}
+      );
+    }
 
-      {activeTab === 'locations' && (
+    if (activeTab === 'locations') {
+      return (
         <WarehouseLocationsView
           warehouses={warehouses}
           stores={stores}
@@ -272,25 +335,31 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           onOpenTransfer={() => setIsTransferModalOpen(true)}
           onNavigateTab={handleSelectTab}
         />
-      )}
+      );
+    }
 
-      {activeTab === 'adjustments' && (
+    if (activeTab === 'adjustments') {
+      return (
         <WarehouseAdjustmentsView
           adjustments={adjustments}
           warehouses={warehouses}
           searchQuery={searchQuery}
           onOpenAdjustmentModal={() => setIsAdjustmentModalOpen(true)}
         />
-      )}
+      );
+    }
 
-      {activeTab === 'audit_trail' && (
+    if (activeTab === 'audit_trail') {
+      return (
         <WarehouseAuditTrailView
           auditTrail={auditTrail}
           searchQuery={searchQuery}
         />
-      )}
+      );
+    }
 
-      {activeTab === 'reports' && (
+    if (activeTab === 'reports') {
+      return (
         <WarehouseReportsView
           stats={stats}
           inventory={inventory}
@@ -301,6 +370,74 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           warehouses={warehouses}
           stores={stores}
         />
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <div className="w-full">
+      {layoutMode === 'modern' ? (
+        /* ================= MODERN WORKSPACE LAYOUT ================= */
+        <div className="space-y-3.5 animate-in fade-in duration-200">
+          {/* Body Frame: Left Sidebar + Central Workspace */}
+          <div className="flex bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden min-h-[calc(100vh-8rem)]">
+            <WarehouseSidebar
+              activeTab={activeTab}
+              onSelectTab={handleSelectTab}
+              subRole={subRole}
+              onChangeSubRole={handleSubRoleChange}
+              isCollapsed={isSidebarCollapsed}
+              onToggleCollapse={toggleSidebarCollapse}
+              onOpenNewPO={() => setIsPOModalOpen(true)}
+              onOpenInwardBill={() => setIsInwardModalOpen(true)}
+              onOpenTransfer={() => setIsTransferModalOpen(true)}
+              onOpenIndent={() => setIsIndentModalOpen(true)}
+              onOpenAdjustment={() => setIsAdjustmentModalOpen(true)}
+              onOpenAddItem={() => setIsAddItemOpen(true)}
+              onOpenPipelineTester={() => setIsPipelineTesterOpen(true)}
+              nearExpiryCount={nearExpiryCount}
+              inTransitCount={inTransitCount}
+              lowStockCount={lowStockCount}
+              overdueBillsCount={overdueBillsCount}
+              layoutMode="modern"
+              onToggleLayoutMode={toggleLayoutMode}
+            />
+
+            {/* Central Workspace Container */}
+            <div className="flex-1 p-3 sm:p-5 lg:p-6 bg-[#F8FAFC] overflow-y-auto min-w-0">
+              {renderActiveView('modern')}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ================= CLASSIC TABBED LAYOUT ================= */
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <WarehouseHeader
+            activeTab={activeTab}
+            onSelectTab={handleSelectTab}
+            subRole={subRole}
+            onChangeSubRole={handleSubRoleChange}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onOpenNewPO={() => setIsPOModalOpen(true)}
+            onOpenInwardBill={() => setIsInwardModalOpen(true)}
+            onOpenTransfer={() => setIsTransferModalOpen(true)}
+            onOpenIndent={() => setIsIndentModalOpen(true)}
+            onOpenAdjustment={() => setIsAdjustmentModalOpen(true)}
+            onOpenAddItem={() => setIsAddItemOpen(true)}
+            onOpenPipelineTester={() => setIsPipelineTesterOpen(true)}
+            nearExpiryCount={nearExpiryCount}
+            inTransitCount={inTransitCount}
+            lowStockCount={lowStockCount}
+            overdueBillsCount={overdueBillsCount}
+            layoutMode="classic"
+            onToggleLayoutMode={toggleLayoutMode}
+          />
+
+          <div>{renderActiveView('classic')}</div>
+        </div>
       )}
 
       {/* Modals */}

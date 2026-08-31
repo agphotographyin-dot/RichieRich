@@ -59,13 +59,16 @@ export const WarehouseReportsView: React.FC<WarehouseReportsViewProps> = ({
     } else if (reportType === 'health') {
       pdfReportService.exportLowStockHealthPDF(inventory);
     } else if (reportType === 'scrap') {
-      const logs = adjustments.map(a => ({
-        timestamp: a.createdAt,
-        action: `SCRAP / ADJUSTMENT (${a.type.toUpperCase()})`,
-        entity: `SKU: ${a.sku}`,
-        user: a.adjustedByName || 'Warehouse Staff',
-        details: `${a.quantityChange > 0 ? '+' : ''}${a.quantityChange} units | Reason: ${a.reason} | Cost Impact: Rs. ${a.totalCostImpact || 0}`,
-      }));
+      const logs = adjustments.map((a) => {
+        const itemNames = a.items.map((it) => `${it.name} (${it.adjustedQty})`).join(', ');
+        return {
+          timestamp: a.date,
+          action: `SCRAP / ADJUSTMENT (${a.reason.toUpperCase()})`,
+          entity: `Ref: ${a.adjustmentNumber}`,
+          user: a.authorizedBy || 'Warehouse Staff',
+          details: `Items: ${itemNames} | Location: ${a.locationName} | Loss Impact: Rs. ${a.totalLossValue || 0}`,
+        };
+      });
       pdfReportService.exportAuditTrailPDF(logs);
     }
   };
@@ -315,18 +318,26 @@ export const WarehouseReportsView: React.FC<WarehouseReportsViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono">
-                {adjustments.map((a) => (
-                  <tr key={a.id} className="hover:bg-slate-50">
-                    <td className="py-2.5 px-3 text-slate-600">{a.date}</td>
-                    <td className="py-2.5 px-3 font-sans font-bold text-slate-900">{a.itemName}</td>
-                    <td className="py-2.5 px-3 font-sans capitalize">{a.reason.replace(/_/g, ' ')}</td>
-                    <td className="py-2.5 px-3 font-sans">{a.locationName}</td>
-                    <td className="py-2.5 px-3 text-center text-rose-600 font-bold">{a.quantityAdjusted} units</td>
-                    <td className="py-2.5 px-3 text-right font-bold text-rose-600">
-                      -{CURRENCY}{Math.abs(a.valuationImpact).toLocaleString('en-IN')}
-                    </td>
-                  </tr>
-                ))}
+                {adjustments.map((a) => {
+                  const primaryItem = a.items[0];
+                  const totalQty = a.items.reduce((s, it) => s + it.adjustedQty, 0);
+                  const itemCount = a.items.length;
+                  return (
+                    <tr key={a.id} className="hover:bg-slate-50">
+                      <td className="py-2.5 px-3 text-slate-600">{a.date}</td>
+                      <td className="py-2.5 px-3 font-sans font-bold text-slate-900">
+                        {primaryItem ? primaryItem.name : 'Stock Adjustment'}
+                        {itemCount > 1 && ` (+${itemCount - 1} more)`}
+                      </td>
+                      <td className="py-2.5 px-3 font-sans capitalize">{a.reason.replace(/_/g, ' ')}</td>
+                      <td className="py-2.5 px-3 font-sans">{a.locationName}</td>
+                      <td className="py-2.5 px-3 text-center text-rose-600 font-bold">{totalQty} units</td>
+                      <td className="py-2.5 px-3 text-right font-bold text-rose-600">
+                        -{CURRENCY}{Math.abs(a.totalLossValue || 0).toLocaleString('en-IN')}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

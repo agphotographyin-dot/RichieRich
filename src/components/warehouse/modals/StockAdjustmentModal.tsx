@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, AlertTriangle, Building2, Store, Trash2 } from 'lucide-react';
-import { Warehouse } from '../../../types/warehouse';
+import { Warehouse, BatchRecord } from '../../../types/warehouse';
 import { InventoryItem, StoreLocation } from '../../../types';
 import { CURRENCY } from '../../../services/storage';
 import { warehouseStorage } from '../../../services/warehouseStorage';
@@ -12,6 +12,7 @@ interface StockAdjustmentModalProps {
   warehouses: Warehouse[];
   stores: StoreLocation[];
   inventory: InventoryItem[];
+  batches?: BatchRecord[];
   onSuccess: () => void;
 }
 
@@ -21,10 +22,9 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
   warehouses,
   stores,
   inventory,
+  batches = [],
   onSuccess,
 }) => {
-  if (!isOpen) return null;
-
   const defaultWh = warehouses[0] || {
     id: 'wh-central-amd',
     name: 'Central Warehouse',
@@ -46,6 +46,8 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
   >('damage_in_transit');
   const [quantity, setQuantity] = useState(5);
   const [remarks, setRemarks] = useState('');
+
+  if (!isOpen) return null;
 
   const valuationLoss = quantity * itemCost;
 

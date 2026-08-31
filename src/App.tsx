@@ -90,6 +90,28 @@ export const App: React.FC = () => {
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] = useState(false);
 
+  // Warehouse Layout mode ('modern' | 'classic')
+  const [warehouseLayoutMode, setWarehouseLayoutMode] = useState<'modern' | 'classic'>(() => {
+    try {
+      const saved = localStorage.getItem('rr_wh_layout_mode');
+      return saved === 'classic' ? 'classic' : 'modern';
+    } catch {
+      return 'modern';
+    }
+  });
+
+  const toggleWarehouseLayoutMode = () => {
+    setWarehouseLayoutMode((prev) => {
+      const next = prev === 'modern' ? 'classic' : 'modern';
+      try {
+        localStorage.setItem('rr_wh_layout_mode', next);
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+  };
+
   // Sync URL on initial mount
   useEffect(() => {
     const route = parseCurrentRoute();
@@ -259,6 +281,8 @@ export const App: React.FC = () => {
         onLogout={getActiveLogoutHandler()}
         currentCustomer={currentCustomer}
         onNavigateLanding={() => navigateToRole('landing')}
+        warehouseLayoutMode={warehouseLayoutMode}
+        onToggleWarehouseLayoutMode={toggleWarehouseLayoutMode}
       />
 
       {/* Main Content Area */}
@@ -387,7 +411,10 @@ export const App: React.FC = () => {
               />
             ) : (
               <div className="animate-in fade-in duration-150">
-                <WarehousePortal />
+                <WarehousePortal
+                  layoutMode={warehouseLayoutMode}
+                  onToggleLayoutMode={toggleWarehouseLayoutMode}
+                />
               </div>
             )}
           </>

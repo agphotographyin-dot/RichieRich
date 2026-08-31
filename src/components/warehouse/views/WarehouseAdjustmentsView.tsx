@@ -33,20 +33,20 @@ export const WarehouseAdjustmentsView: React.FC<WarehouseAdjustmentsViewProps> =
 
   const filteredAdjustments = adjustments.filter((adj) => {
     const q = searchQuery.toLowerCase();
+    const itemsMatched = adj.items.some(
+      (it) => it.name.toLowerCase().includes(q) || it.sku.toLowerCase().includes(q) || it.batchNumber?.toLowerCase().includes(q)
+    );
     const matchesSearch =
       !q ||
       adj.adjustmentNumber.toLowerCase().includes(q) ||
-      adj.itemName.toLowerCase().includes(q) ||
-      adj.batchNumber?.toLowerCase().includes(q) ||
+      itemsMatched ||
       adj.locationName.toLowerCase().includes(q);
 
     const matchesReason = reasonFilter === 'all' || adj.reason === reasonFilter;
     return matchesSearch && matchesReason;
   });
 
-  const totalLoss = adjustments
-    .filter((a) => a.type === 'decrease_damage' || a.type === 'decrease_expired' || a.type === 'decrease_shrinkage')
-    .reduce((sum, a) => sum + Math.abs(a.valuationImpact), 0);
+  const totalLoss = adjustments.reduce((sum, a) => sum + Math.abs(a.totalLossValue || 0), 0);
 
   return (
     <div className="space-y-5">
@@ -123,33 +123,41 @@ export const WarehouseAdjustmentsView: React.FC<WarehouseAdjustmentsViewProps> =
                   </td>
                 </tr>
               ) : (
-                filteredAdjustments.map((adj) => (
-                  <tr key={adj.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-4 font-bold text-slate-900">{adj.adjustmentNumber}</td>
-                    <td className="py-3 px-4 font-sans">
-                      <div className="font-semibold text-slate-900">{adj.itemName}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">
-                        {adj.batchNumber ? `Batch: ${adj.batchNumber}` : 'General Stock'}
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 font-sans text-slate-600">{adj.locationName}</td>
-                    <td className="py-3 px-3 font-sans text-slate-700 capitalize">
-                      {adj.reason.replace(/_/g, ' ')}
-                    </td>
-                    <td className="py-3 px-3 text-center font-bold text-rose-600">
-                      {adj.quantityAdjusted} units
-                    </td>
-                    <td className="py-3 px-3 text-right font-bold text-rose-600">
-                      -{CURRENCY}{Math.abs(adj.valuationImpact).toLocaleString('en-IN')}
-                    </td>
-                    <td className="py-3 px-3 font-sans text-slate-600">{adj.approvedBy}</td>
-                    <td className="py-3 px-4 text-center font-sans">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                        {adj.status.toUpperCase()}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                filteredAdjustments.map((adj) => {
+                  const primaryItem = adj.items[0];
+                  const totalQty = adj.items.reduce((s, it) => s + it.adjustedQty, 0);
+                  const itemCount = adj.items.length;
+                  return (
+                    <tr key={adj.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-4 font-bold text-slate-900">{adj.adjustmentNumber}</td>
+                      <td className="py-3 px-4 font-sans">
+                        <div className="font-semibold text-slate-900">
+                          {primaryItem ? primaryItem.name : 'Stock Adjustment'}
+                          {itemCount > 1 && ` (+${itemCount - 1} more)`}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono">
+                          {primaryItem?.batchNumber ? `Batch: ${primaryItem.batchNumber}` : 'General Stock'}
+                        </div>
+                      </td>
+                      <td className="py-3 px-3 font-sans text-slate-600">{adj.locationName}</td>
+                      <td className="py-3 px-3 font-sans text-slate-700 capitalize">
+                        {adj.reason.replace(/_/g, ' ')}
+                      </td>
+                      <td className="py-3 px-3 text-center font-bold text-rose-600">
+                        {totalQty} units
+                      </td>
+                      <td className="py-3 px-3 text-right font-bold text-rose-600">
+                        -{CURRENCY}{Math.abs(adj.totalLossValue || 0).toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-3 px-3 font-sans text-slate-600">{adj.authorizedBy}</td>
+                      <td className="py-3 px-4 text-center font-sans">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                          {adj.status.toUpperCase()}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

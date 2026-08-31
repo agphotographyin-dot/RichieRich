@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
-import { X, Plus, Trash2, FileSpreadsheet, Building2, Calendar, AlertCircle, Filter, CheckCircle2 } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { X, Plus, Trash2, FileSpreadsheet, Building2, Calendar, AlertCircle, Filter, CheckCircle2, Package, Sparkles, Layers } from 'lucide-react';
 import { Supplier, Warehouse, PurchaseOrderItem } from '../../../types/warehouse';
 import { InventoryItem } from '../../../types';
 import { CURRENCY } from '../../../services/storage';
 import { warehouseStorage } from '../../../services/warehouseStorage';
 import { ItemAutocompleteInput } from '../../common/ItemAutocompleteInput';
+import { getSupplierProducts } from '../../../utils/supplierProductMatching';
 
 interface CreatePOModalProps {
   isOpen: boolean;
@@ -23,8 +24,6 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
   inventory,
   onSuccess,
 }) => {
-  if (!isOpen) return null;
-
   const defaultWh = warehouses[0] || {
     id: 'wh-central-amd',
     name: 'Central Warehouse',
@@ -33,6 +32,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
 
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id || '');
   const [filterByVendorOnly, setFilterByVendorOnly] = useState(true);
+  const [showQuickAddShelf, setShowQuickAddShelf] = useState(true);
   const [expectedDate, setExpectedDate] = useState(
     new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
@@ -42,20 +42,14 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId);
 
-  // Filter inventory by active status and selected vendor
+  // Filter inventory by active status
   const activeInventory = useMemo(() => {
     return inventory.filter((item) => item.status !== 'inactive');
   }, [inventory]);
 
+  // Comprehensive supplier product matching
   const vendorSpecificInventory = useMemo(() => {
-    if (!selectedSupplier) return activeInventory;
-    const sName = selectedSupplier.name.toLowerCase();
-    const matches = activeInventory.filter((item) => {
-      const v1 = (item.vendor || '').toLowerCase();
-      const vList = (item.vendors || []).map((v) => v.toLowerCase());
-      return v1.includes(sName) || sName.includes(v1) || vList.some((v) => v.includes(sName) || sName.includes(v));
-    });
-    return matches.length > 0 ? matches : activeInventory;
+    return getSupplierProducts(selectedSupplier, activeInventory);
   }, [activeInventory, selectedSupplier]);
 
   const displayedCatalog = filterByVendorOnly ? vendorSpecificInventory : activeInventory;
@@ -84,6 +78,87 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
       },
     ];
   });
+
+  if (!isOpen) return null;
+
+  // When supplier changes, sync the first item if it was untouched default
+  const handleSupplierChange = (newSupId: string) => {
+    setSupplierId(newSupId);
+    const newSup = suppliers.find((s) => s.id === newSupId);
+    const newProducts = getSupplierProducts(newSup, activeInventory);
+    if (newProducts.length > 0) {
+      if (items.length === 1 && (!items[0].name || items[0].name === activeInventory[0]?.name || items[0].name === 'Royal Maghai Meetha Paan')) {
+        const first = newProducts[0];
+        setItems([
+          {
+            itemId: first.id,
+            name: first.name,
+            sku: first.sku,
+            category: first.category,
+            quantity: 50,
+            unitPrice: first.costPrice || 20,
+            unit: first.unit || 'pieces',
+          },
+        ]);
+      }
+    }
+  };
+
+  const handleQuickAddProduct = (prod: InventoryItem) => {
+    // Check if already in list
+    const existingIndex = items.findIndex((it) => it.itemId === prod.id || it.name.toLowerCase() === prod.name.toLowerCase());
+    if (existingIndex >= 0) {
+      // Increase quantity by 25
+      const next = [...items];
+      next[existingIndex].quantity = (Number(next[existingIndex].quantity) || 0) + 25;
+      setItems(next);
+      return;
+    }
+
+    // If only one item and it's empty, replace it
+    if (items.length === 1 && !items[0].name) {
+      setItems([
+        {
+          itemId: prod.id,
+          name: prod.name,
+          sku: prod.sku,
+          category: prod.category,
+          quantity: 50,
+          unitPrice: prod.costPrice || 20,
+          unit: prod.unit || 'pieces',
+        },
+      ]);
+      return;
+    }
+
+    // Otherwise append
+    setItems([
+      ...items,
+      {
+        itemId: prod.id,
+        name: prod.name,
+        sku: prod.sku,
+        category: prod.category,
+        quantity: 50,
+        unitPrice: prod.costPrice || 20,
+        unit: prod.unit || 'pieces',
+      },
+    ]);
+  };
+
+  const handleAddAllSupplierProducts = () => {
+    if (vendorSpecificInventory.length === 0) return;
+    const allRows = vendorSpecificInventory.map((prod) => ({
+      itemId: prod.id,
+      name: prod.name,
+      sku: prod.sku,
+      category: prod.category,
+      quantity: 50,
+      unitPrice: prod.costPrice || 20,
+      unit: prod.unit || 'pieces',
+    }));
+    setItems(allRows);
+  };
 
   const handleAddItem = () => {
     const defaultItem = displayedCatalog[0] || activeInventory[0] || {
@@ -213,7 +288,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
               </label>
               <select
                 value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value)}
+                onChange={(e) => handleSupplierChange(e.target.value)}
                 className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 {suppliers.map((s) => (
@@ -255,24 +330,90 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
                 <div>
                   <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
                     <Filter className="w-3.5 h-3.5 text-indigo-600" />
-                    Vendor-Associated Catalog
+                    Supplier Product Filter
                   </span>
                   <span className="text-[11px] text-indigo-700 block">
-                    {vendorSpecificInventory.length} products associated with {selectedSupplier?.name || 'this vendor'}
+                    <strong>{vendorSpecificInventory.length} products</strong> available from {selectedSupplier?.name || 'selected supplier'}
                   </span>
                 </div>
-                <label className="flex items-center gap-1.5 text-xs font-bold text-indigo-900 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={filterByVendorOnly}
-                    onChange={(e) => setFilterByVendorOnly(e.target.checked)}
-                    className="rounded text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span>Filter</span>
-                </label>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-indigo-900 cursor-pointer bg-white/80 px-2 py-1 rounded-lg border border-indigo-200">
+                    <input
+                      type="checkbox"
+                      checked={filterByVendorOnly}
+                      onChange={(e) => setFilterByVendorOnly(e.target.checked)}
+                      className="rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>Supplier Only</span>
+                  </label>
+                </div>
               </div>
             </div>
           </div>
+
+          {/* Supplier Products Quick Shelf */}
+          {vendorSpecificInventory.length > 0 && (
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-indigo-100 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Package className="w-4 h-4 text-indigo-600" />
+                  <span className="text-xs font-bold text-slate-900">
+                    All Products of {selectedSupplier?.name || 'Supplier'} ({vendorSpecificInventory.length})
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAddAllSupplierProducts}
+                    className="text-[11px] bg-indigo-600 text-white hover:bg-indigo-700 font-bold px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 shadow-xs"
+                  >
+                    <Layers className="w-3 h-3" />
+                    <span>+ Add All ({vendorSpecificInventory.length}) Products</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickAddShelf(!showQuickAddShelf)}
+                    className="text-[10px] text-slate-500 hover:text-slate-700 font-semibold px-1.5 py-0.5"
+                  >
+                    {showQuickAddShelf ? 'Collapse' : 'Expand'}
+                  </button>
+                </div>
+              </div>
+
+              {showQuickAddShelf && (
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 bg-white rounded-lg border border-slate-200/80">
+                  {vendorSpecificInventory.map((prod) => {
+                    const isAdded = items.some((it) => it.itemId === prod.id || it.name.toLowerCase() === prod.name.toLowerCase());
+                    return (
+                      <button
+                        key={prod.id}
+                        type="button"
+                        onClick={() => handleQuickAddProduct(prod)}
+                        className={`text-left text-xs p-1.5 rounded-lg border transition-all flex items-center gap-2 ${
+                          isAdded
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-950 font-semibold'
+                            : 'bg-slate-50 hover:bg-indigo-50 border-slate-200 hover:border-indigo-200 text-slate-800'
+                        }`}
+                      >
+                        <span className="font-semibold">{prod.name}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">({CURRENCY}{prod.costPrice || prod.sellingPrice})</span>
+                        {isAdded ? (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            Added
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-1.5 py-0.2 rounded">
+                            + Add
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Items Section with Search/History Autocomplete Type Box */}
           <div className="space-y-3 pt-2 border-t border-slate-100">
@@ -283,8 +424,8 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
                 </span>
                 <span className="block text-[11px] text-slate-500 font-normal">
                   {filterByVendorOnly
-                    ? `Showing ${displayedCatalog.length} items from ${selectedSupplier?.name}`
-                    : 'Showing all active catalog items'}
+                    ? `Showing all ${displayedCatalog.length} products from ${selectedSupplier?.name}`
+                    : `Showing all ${displayedCatalog.length} products in master catalog`}
                 </span>
               </div>
               <button
@@ -293,7 +434,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
                 className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Add Item</span>
+                <span>Add Custom / Blank Row</span>
               </button>
             </div>
 
@@ -303,12 +444,13 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
                     {/* Item Autocomplete Input Box */}
                     <div className="sm:col-span-6">
-                      <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
-                        Item Name / Search Catalog & History
+                      <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block flex items-center justify-between">
+                        <span>Product Name (Click to see all {displayedCatalog.length} products)</span>
+                        <span className="text-[9px] text-indigo-600 font-normal">Instant Search</span>
                       </label>
                       <ItemAutocompleteInput
                         value={row.name}
-                        placeholder="Type item name..."
+                        placeholder={`Search ${displayedCatalog.length} products from ${selectedSupplier?.name || 'supplier'}...`}
                         inventory={displayedCatalog}
                         onSelect={(sel) => handleItemSelect(idx, sel)}
                         onChange={(val) => handleFieldChange(idx, 'name', val)}

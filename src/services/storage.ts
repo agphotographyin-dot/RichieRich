@@ -17,6 +17,8 @@ import {
 } from '../types';
 import { soundEffects } from './audio';
 import { validateAndSanitizeBackupPayload } from './backupIntegrityService';
+import { safeStorage } from '../utils/safeStorage';
+import { getLocalDateString, isToday, isSameDay } from '../utils/dateUtils';
 
 const STORAGE_KEYS = {
   INVENTORY: 'rr_panhouse_inventory',
@@ -1231,7 +1233,7 @@ export class StorageService {
 
     // Also listen to storage event as fallback
     window.addEventListener('storage', (e) => {
-      if (e.key && Object.values(STORAGE_KEYS).includes(e.key)) {
+      if (e.key && (Object.values(STORAGE_KEYS).includes(e.key) || e.key.startsWith('rr_'))) {
         this.listeners.forEach((cb) => cb());
       }
     });
@@ -1241,8 +1243,8 @@ export class StorageService {
     if (typeof window === 'undefined') return;
 
     // Check and seed/merge inventory
-    const existingInventory = localStorage.getItem(STORAGE_KEYS.INVENTORY);
-    const cleanedFlag = localStorage.getItem('rr_wh_cleaned_dummy_v1');
+    const existingInventory = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
+    const cleanedFlag = safeStorage.getItem('rr_wh_cleaned_dummy_v1');
 
     if (!existingInventory) {
       const zeroStockInit = INITIAL_INVENTORY.map((item) => ({
@@ -1251,7 +1253,7 @@ export class StorageService {
         stockQuantity: 0,
         storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
       }));
-      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(zeroStockInit));
+      safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(zeroStockInit));
     } else {
       try {
         const parsed: InventoryItem[] = JSON.parse(existingInventory);
@@ -1264,7 +1266,7 @@ export class StorageService {
             item.storeAllocations = { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 };
           });
           hasChanges = true;
-          localStorage.setItem('rr_wh_cleaned_dummy_v1', 'true');
+          safeStorage.setItem('rr_wh_cleaned_dummy_v1', 'true');
         }
 
         // Deduplicate any items with duplicate IDs or duplicate SKUs
@@ -1355,7 +1357,7 @@ export class StorageService {
         });
 
         if (hasChanges || uniqueParsed.length !== parsed.length) {
-          localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(uniqueParsed));
+          safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(uniqueParsed));
         }
       } catch {
         const zeroStockInit = INITIAL_INVENTORY.map((item) => ({
@@ -1364,26 +1366,26 @@ export class StorageService {
           stockQuantity: 0,
           storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
         }));
-        localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(zeroStockInit));
+        safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(zeroStockInit));
       }
     }
 
     // Always ensure categories are Paan, Cafe, Essentials
-    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
+    safeStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
 
-    if (!localStorage.getItem(STORAGE_KEYS.CUSTOMERS)) {
-      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(INITIAL_CUSTOMERS));
+    if (!safeStorage.getItem(STORAGE_KEYS.CUSTOMERS)) {
+      safeStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(INITIAL_CUSTOMERS));
     }
-    if (!localStorage.getItem(STORAGE_KEYS.ORDERS)) {
-      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(INITIAL_ORDERS));
+    if (!safeStorage.getItem(STORAGE_KEYS.ORDERS)) {
+      safeStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(INITIAL_ORDERS));
     }
-    if (!localStorage.getItem(STORAGE_KEYS.PROMOTIONS)) {
-      localStorage.setItem(STORAGE_KEYS.PROMOTIONS, JSON.stringify(INITIAL_PROMOTIONS));
+    if (!safeStorage.getItem(STORAGE_KEYS.PROMOTIONS)) {
+      safeStorage.setItem(STORAGE_KEYS.PROMOTIONS, JSON.stringify(INITIAL_PROMOTIONS));
     }
-    if (!localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS)) {
-      localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(INITIAL_NOTIFICATIONS));
+    if (!safeStorage.getItem(STORAGE_KEYS.NOTIFICATIONS)) {
+      safeStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(INITIAL_NOTIFICATIONS));
     }
-    if (!localStorage.getItem(STORAGE_KEYS.BACKUPS)) {
+    if (!safeStorage.getItem(STORAGE_KEYS.BACKUPS)) {
       // Seed initial baseline backup
       const baselineBackup: BackupSnapshot = {
         id: 'backup-init-1',
@@ -1401,23 +1403,23 @@ export class StorageService {
           promotions: INITIAL_PROMOTIONS,
         }),
       };
-      localStorage.setItem(STORAGE_KEYS.BACKUPS, JSON.stringify([baselineBackup]));
+      safeStorage.setItem(STORAGE_KEYS.BACKUPS, JSON.stringify([baselineBackup]));
     }
 
     // Check stores and counters
-    const existingStores = localStorage.getItem(STORAGE_KEYS.STORES);
+    const existingStores = safeStorage.getItem(STORAGE_KEYS.STORES);
     if (!existingStores) {
-      localStorage.setItem(STORAGE_KEYS.STORES, JSON.stringify(INITIAL_STORES));
+      safeStorage.setItem(STORAGE_KEYS.STORES, JSON.stringify(INITIAL_STORES));
     }
 
     // Check store admins
-    if (!localStorage.getItem(STORAGE_KEYS.STORE_ADMINS)) {
-      localStorage.setItem(STORAGE_KEYS.STORE_ADMINS, JSON.stringify(INITIAL_STORE_ADMINS));
+    if (!safeStorage.getItem(STORAGE_KEYS.STORE_ADMINS)) {
+      safeStorage.setItem(STORAGE_KEYS.STORE_ADMINS, JSON.stringify(INITIAL_STORE_ADMINS));
     }
 
     // Check store expenses
-    if (!localStorage.getItem(STORAGE_KEYS.STORE_EXPENSES)) {
-      localStorage.setItem(STORAGE_KEYS.STORE_EXPENSES, JSON.stringify(INITIAL_STORE_EXPENSES));
+    if (!safeStorage.getItem(STORAGE_KEYS.STORE_EXPENSES)) {
+      safeStorage.setItem(STORAGE_KEYS.STORE_EXPENSES, JSON.stringify(INITIAL_STORE_EXPENSES));
     }
   }
 
@@ -1425,7 +1427,7 @@ export class StorageService {
 
   getStores(): StoreLocation[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.STORES);
+      const data = safeStorage.getItem(STORAGE_KEYS.STORES);
       if (!data) return INITIAL_STORES;
       const parsed = JSON.parse(data);
       return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_STORES;
@@ -1435,7 +1437,7 @@ export class StorageService {
   }
 
   saveStores(stores: StoreLocation[]): void {
-    localStorage.setItem(STORAGE_KEYS.STORES, JSON.stringify(stores));
+    safeStorage.setItem(STORAGE_KEYS.STORES, JSON.stringify(stores));
     this.notify();
   }
 
@@ -1585,7 +1587,7 @@ export class StorageService {
 
   getActivePOSSession(): POSSession | null {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.POS_SESSION);
+      const data = safeStorage.getItem(STORAGE_KEYS.POS_SESSION);
       return data ? JSON.parse(data) : null;
     } catch {
       return null;
@@ -1593,12 +1595,12 @@ export class StorageService {
   }
 
   setActivePOSSession(session: POSSession): void {
-    localStorage.setItem(STORAGE_KEYS.POS_SESSION, JSON.stringify(session));
+    safeStorage.setItem(STORAGE_KEYS.POS_SESSION, JSON.stringify(session));
     this.notify();
   }
 
   clearPOSSession(): void {
-    localStorage.removeItem(STORAGE_KEYS.POS_SESSION);
+    safeStorage.removeItem(STORAGE_KEYS.POS_SESSION);
     this.notify();
   }
 
@@ -1640,11 +1642,11 @@ export class StorageService {
     if (typeof window === 'undefined') return;
 
     const todayStr = new Date().toISOString().split('T')[0];
-    const lastBackup = localStorage.getItem(STORAGE_KEYS.LAST_BACKUP_DATE);
+    const lastBackup = safeStorage.getItem(STORAGE_KEYS.LAST_BACKUP_DATE);
 
     if (lastBackup !== todayStr) {
       this.createBackup('automated_daily', `Automated daily backup for ${todayStr} (12:00 AM Cycle)`);
-      localStorage.setItem(STORAGE_KEYS.LAST_BACKUP_DATE, todayStr);
+      safeStorage.setItem(STORAGE_KEYS.LAST_BACKUP_DATE, todayStr);
     }
   }
 
@@ -1652,7 +1654,7 @@ export class StorageService {
 
   getInventory(): InventoryItem[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.INVENTORY);
+      const data = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
       if (!data) return INITIAL_INVENTORY;
       const rawList: any = JSON.parse(data);
       if (!Array.isArray(rawList)) return INITIAL_INVENTORY;
@@ -1697,7 +1699,7 @@ export class StorageService {
 
       if (hadDuplicatesOrUnnormalized && typeof window !== 'undefined') {
         try {
-          localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(sanitized));
+          safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(sanitized));
         } catch {
           // ignore storage quota errors
         }
@@ -1741,7 +1743,7 @@ export class StorageService {
       });
     });
 
-    localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(sanitized));
+    safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(sanitized));
     this.checkAndTriggerLowStockAlerts(sanitized);
     this.notify();
   }
@@ -2035,7 +2037,7 @@ export class StorageService {
 
   getCategories(): Category[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+      const data = safeStorage.getItem(STORAGE_KEYS.CATEGORIES);
       return data ? JSON.parse(data) : INITIAL_CATEGORIES;
     } catch {
       return INITIAL_CATEGORIES;
@@ -2046,7 +2048,7 @@ export class StorageService {
 
   getCustomers(): Customer[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
+      const data = safeStorage.getItem(STORAGE_KEYS.CUSTOMERS);
       return data ? JSON.parse(data) : INITIAL_CUSTOMERS;
     } catch {
       return INITIAL_CUSTOMERS;
@@ -2054,7 +2056,7 @@ export class StorageService {
   }
 
   saveCustomers(customers: Customer[]) {
-    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+    safeStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
     this.notify();
   }
 
@@ -2110,7 +2112,7 @@ export class StorageService {
 
   getOrders(): Order[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.ORDERS);
+      const data = safeStorage.getItem(STORAGE_KEYS.ORDERS);
       return data ? JSON.parse(data) : INITIAL_ORDERS;
     } catch {
       return INITIAL_ORDERS;
@@ -2118,7 +2120,7 @@ export class StorageService {
   }
 
   saveOrders(orders: Order[]) {
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    safeStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     this.notify();
   }
 
@@ -2250,7 +2252,7 @@ export class StorageService {
 
   getPromotions(): Promotion[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.PROMOTIONS);
+      const data = safeStorage.getItem(STORAGE_KEYS.PROMOTIONS);
       return data ? JSON.parse(data) : INITIAL_PROMOTIONS;
     } catch {
       return INITIAL_PROMOTIONS;
@@ -2258,7 +2260,7 @@ export class StorageService {
   }
 
   savePromotions(promos: Promotion[]) {
-    localStorage.setItem(STORAGE_KEYS.PROMOTIONS, JSON.stringify(promos));
+    safeStorage.setItem(STORAGE_KEYS.PROMOTIONS, JSON.stringify(promos));
     this.notify();
   }
 
@@ -2308,7 +2310,7 @@ export class StorageService {
 
   getNotifications(): PushNotification[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+      const data = safeStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
       return data ? JSON.parse(data) : INITIAL_NOTIFICATIONS;
     } catch {
       return INITIAL_NOTIFICATIONS;
@@ -2316,7 +2318,7 @@ export class StorageService {
   }
 
   saveNotifications(notifs: PushNotification[]) {
-    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifs.slice(0, 50)));
+    safeStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifs.slice(0, 50)));
     this.notify();
   }
 
@@ -2366,7 +2368,7 @@ export class StorageService {
 
   getBackups(): BackupSnapshot[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.BACKUPS);
+      const data = safeStorage.getItem(STORAGE_KEYS.BACKUPS);
       return data ? JSON.parse(data) : [];
     } catch {
       return [];
@@ -2408,7 +2410,7 @@ export class StorageService {
     };
 
     backups.unshift(newSnapshot);
-    localStorage.setItem(STORAGE_KEYS.BACKUPS, JSON.stringify(backups.slice(0, 30)));
+    safeStorage.setItem(STORAGE_KEYS.BACKUPS, JSON.stringify(backups.slice(0, 30)));
 
     this.addNotification({
       title: `💾 Backup Created: ${type === 'automated_daily' ? 'Daily 12:00 AM Auto-Backup' : 'Manual Snapshot'}`,
@@ -2465,19 +2467,19 @@ export class StorageService {
     stores?: StoreLocation[];
   }): void {
     if (data.inventory && Array.isArray(data.inventory)) {
-      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(data.inventory));
+      safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(data.inventory));
     }
     if (data.orders && Array.isArray(data.orders)) {
-      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(data.orders));
+      safeStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(data.orders));
     }
     if (data.customers && Array.isArray(data.customers)) {
-      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(data.customers));
+      safeStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(data.customers));
     }
     if (data.promotions && Array.isArray(data.promotions)) {
-      localStorage.setItem(STORAGE_KEYS.PROMOTIONS, JSON.stringify(data.promotions));
+      safeStorage.setItem(STORAGE_KEYS.PROMOTIONS, JSON.stringify(data.promotions));
     }
     if (data.stores && Array.isArray(data.stores)) {
-      localStorage.setItem(STORAGE_KEYS.STORES, JSON.stringify(data.stores));
+      safeStorage.setItem(STORAGE_KEYS.STORES, JSON.stringify(data.stores));
     }
     this.notify();
   }
@@ -2565,11 +2567,11 @@ export class StorageService {
 
   exportDailyCollectionReportCSV(selectedDate?: string, storeId?: string): string {
     const orders = this.getOrders();
-    const targetDate = selectedDate || new Date().toISOString().split('T')[0];
+    const targetDate = selectedDate || getLocalDateString(new Date());
     
-    // Filter orders by date & optional store
+    // Filter orders by date & optional store (strictly accurate for 12:00 AM local midnight resets)
     const dayOrders = orders.filter((o) => {
-      const orderDate = o.createdAt.split('T')[0];
+      const orderDate = getLocalDateString(o.createdAt);
       const matchesDate = orderDate === targetDate;
       const matchesStore = !storeId || storeId === 'all' || o.storeId === storeId;
       return matchesDate && matchesStore;
@@ -2627,7 +2629,7 @@ export class StorageService {
   // =========================================================================
   getStoreAdmins(): StoreAdminCredential[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.STORE_ADMINS);
+      const data = safeStorage.getItem(STORAGE_KEYS.STORE_ADMINS);
       if (!data) return INITIAL_STORE_ADMINS;
       const parsed = JSON.parse(data);
       return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_STORE_ADMINS;
@@ -2638,7 +2640,7 @@ export class StorageService {
 
   saveStoreAdmins(admins: StoreAdminCredential[]): void {
     try {
-      localStorage.setItem(STORAGE_KEYS.STORE_ADMINS, JSON.stringify(admins));
+      safeStorage.setItem(STORAGE_KEYS.STORE_ADMINS, JSON.stringify(admins));
       this.notifySubscribers();
     } catch (e) {
       console.error('Failed to save store admins:', e);
@@ -2679,7 +2681,7 @@ export class StorageService {
   // =========================================================================
   getStoreExpenses(storeId?: string): StoreExpense[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.STORE_EXPENSES);
+      const data = safeStorage.getItem(STORAGE_KEYS.STORE_EXPENSES);
       let expenses: StoreExpense[] = [];
       if (!data) {
         expenses = INITIAL_STORE_EXPENSES;
@@ -2698,7 +2700,7 @@ export class StorageService {
 
   saveStoreExpenses(expenses: StoreExpense[]): void {
     try {
-      localStorage.setItem(STORAGE_KEYS.STORE_EXPENSES, JSON.stringify(expenses));
+      safeStorage.setItem(STORAGE_KEYS.STORE_EXPENSES, JSON.stringify(expenses));
       this.notifySubscribers();
     } catch (e) {
       console.error('Failed to save store expenses:', e);

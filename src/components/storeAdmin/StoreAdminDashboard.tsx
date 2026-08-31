@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Store,
   IndianRupee,
@@ -43,10 +43,12 @@ import {
   InventoryItem,
 } from '../../types';
 import { storage } from '../../services/storage';
+import { warehouseStorage } from '../../services/warehouseStorage';
 import { authService } from '../../services/auth';
 import { soundEffects } from '../../services/audio';
 import { pdfReportService } from '../../services/pdfReportService';
 import { StoreStatementModal } from './StoreStatementModal';
+import { isToday, getLocalDateString } from '../../utils/dateUtils';
 
 interface StoreAdminDashboardProps {
   initialStoreId?: string;
@@ -62,7 +64,25 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
   onNavigateToAdmin,
 }) => {
   const authState = authService.getStoreAdminAuthState();
-  const stores = useMemo(() => storage.getStores(), []);
+  
+  // Refresh trigger for real-time reactivity across POS, Warehouse, Admin, and Store Admin
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Subscribe to real-time events from storage & warehouse storage
+  useEffect(() => {
+    const unsubMain = storage.subscribe(() => {
+      setRefreshKey((prev) => prev + 1);
+    });
+    const unsubWh = warehouseStorage.subscribe(() => {
+      setRefreshKey((prev) => prev + 1);
+    });
+    return () => {
+      unsubMain();
+      unsubWh();
+    };
+  }, []);
+
+  const stores = useMemo(() => storage.getStores(), [refreshKey]);
   
   // Current active store ID
   const [activeStoreId, setActiveStoreId] = useState<string>(() => {
@@ -70,9 +90,6 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
   });
 
   const [activeTab, setActiveTab] = useState<'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory'>('financials');
-
-  // Refresh trigger
-  const [refreshKey, setRefreshKey] = useState(0);
 
   // Add Expense modal state
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
@@ -171,22 +188,48 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
     });
   }, [storeInventory, inventorySearch, inventoryCategoryFilter]);
 
-  // Real-time counter metrics (BUG FIX: compute live metrics per counter)
+  // Real-time counter metrics (both today resetting after 12:00 AM midnight and all-time)
   const counterStats = useMemo(() => {
-    const stats: Record<number, { ordersCount: number; totalRevenue: number; cashTotal: number; upiTotal: number }> = {};
-    
+    const stats: Record<
+      number,
+      {
+        ordersCountToday: number;
+        revenueToday: number;
+        cashToday: number;
+        upiToday: number;
+        ordersCountAllTime: number;
+        revenueAllTime: number;
+      }
+    > = {};
+
     currentStore.counters.forEach((c) => {
-      stats[c.id] = { ordersCount: 0, totalRevenue: 0, cashTotal: 0, upiTotal: 0 };
+      stats[c.id] = {
+        ordersCountToday: 0,
+        revenueToday: 0,
+        cashToday: 0,
+        upiToday: 0,
+        ordersCountAllTime: 0,
+        revenueAllTime: 0,
+      };
     });
 
     allOrders.forEach((o) => {
       const cId = o.counterNumber || 1;
       if (stats[cId]) {
         const orderAmt = o.grandTotal ?? 0;
-        stats[cId].ordersCount += 1;
-        stats[cId].totalRevenue += orderAmt;
-        if (o.paymentMethod === 'cash') stats[cId].cashTotal += orderAmt;
-        else stats[cId].upiTotal += orderAmt;
+        const isOrderToday = isToday(o.createdAt);
+
+        // All-time metrics
+        stats[cId].ordersCountAllTime += 1;
+        stats[cId].revenueAllTime += orderAmt;
+
+        // Today's metrics (strictly since 12:00 AM)
+        if (isOrderToday) {
+          stats[cId].ordersCountToday += 1;
+          stats[cId].revenueToday += orderAmt;
+          if (o.paymentMethod === 'cash') stats[cId].cashToday += orderAmt;
+          else stats[cId].upiToday += orderAmt;
+        }
       }
     });
 
@@ -345,7 +388,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-600 mt-1">
-                📍 {currentStore.address} • 📞 {currentStore.phone} • Timings: {currentStore.timings}
+                📍 {currentStore.address} • 📞 {currentStore.phone} • Timings: {currentStore.timings || (currentStore.is24x7 ? '24x7 Open' : '10:00 AM - 12:00 AM')}
               </p>
             </div>
           </div>
@@ -957,7 +1000,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                       </tr>
                     ) : (
                       filteredOrders.map((ord) => {
-                        const billTotal = ord.grandTotal ?? ord.totalAmount ?? 0;
+                        const billTotal = ord.grandTotal ?? 0;
                         return (
                           <tr key={ord.id} className="hover:bg-slate-50/70 transition-colors">
                             <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
@@ -1018,7 +1061,14 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {currentStore.counters.map((counter) => {
-                const stat = counterStats[counter.id] || { ordersCount: 0, totalRevenue: 0, cashTotal: 0, upiTotal: 0 };
+                const stat = counterStats[counter.id] || {
+                  ordersCountToday: 0,
+                  revenueToday: 0,
+                  cashToday: 0,
+                  upiToday: 0,
+                  ordersCountAllTime: 0,
+                  revenueAllTime: 0,
+                };
 
                 return (
                   <div
@@ -1040,19 +1090,27 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                       <p className="text-xs text-slate-500 mt-0.5">{counter.name}</p>
                     </div>
 
-                    {/* Live Counter Sales Stats */}
-                    <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-700 space-y-1.5 border border-slate-200/80">
+                    {/* Live Today's Counter Sales (Since 12am) */}
+                    <div className="bg-amber-50/70 rounded-xl p-3 text-xs text-slate-700 space-y-1.5 border border-amber-200/80">
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-500 font-medium">Billed Orders:</span>
-                        <span className="font-bold text-slate-900">{stat.ordersCount} bills</span>
+                        <span className="text-amber-900 font-bold text-[11px] uppercase tracking-wider">Today's Shift Sales (Since 12am):</span>
+                        <span className="font-mono font-black text-amber-950 text-sm">₹{stat.revenueToday.toFixed(2)}</span>
                       </div>
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span>Today's Bills:</span>
+                        <span className="font-bold text-slate-900">{stat.ordersCountToday} bills</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-600 pt-1 border-t border-amber-200/60">
+                        <span>Cash: ₹{stat.cashToday.toFixed(0)}</span>
+                        <span>UPI/QR: ₹{stat.upiToday.toFixed(0)}</span>
+                      </div>
+                    </div>
+
+                    {/* All-Time Lifetime Counter Stats */}
+                    <div className="bg-slate-50 rounded-xl p-2.5 text-[11px] text-slate-600 space-y-1 border border-slate-200/80">
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-500 font-medium">Total Collection:</span>
-                        <span className="font-black text-slate-900">₹{stat.totalRevenue.toFixed(2)}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200">
-                        <span>Cash: ₹{stat.cashTotal.toFixed(0)}</span>
-                        <span>UPI: ₹{stat.upiTotal.toFixed(0)}</span>
+                        <span className="text-slate-500">All-Time Billed:</span>
+                        <span className="font-bold text-slate-800">₹{stat.revenueAllTime.toFixed(0)} ({stat.ordersCountAllTime} bills)</span>
                       </div>
                     </div>
 
