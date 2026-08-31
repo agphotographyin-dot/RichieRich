@@ -298,6 +298,31 @@ export const WarehouseSidebar: React.FC<WarehouseSidebarProps> = ({
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
                   <span>Scrap & Stock Adjustment</span>
                 </button>
+                <div className="pt-1.5 pb-1 px-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-t border-slate-800 mt-1">
+                  Monitoring & Auditing
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsQuickActionOpen(false);
+                    onSelectTab('audit_trail');
+                  }}
+                  className="w-full text-left px-2.5 py-2 rounded-xl text-slate-200 hover:bg-slate-800 hover:text-white flex items-center gap-2 font-medium cursor-pointer transition-colors"
+                >
+                  <History className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>View Full Movement Audit</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsQuickActionOpen(false);
+                    onSelectTab('adjustments');
+                  }}
+                  className="w-full text-left px-2.5 py-2 rounded-xl text-slate-200 hover:bg-slate-800 hover:text-white flex items-center gap-2 font-medium cursor-pointer transition-colors"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Review Batch Expiries</span>
+                </button>
                 {onOpenPipelineTester && (
                   <button
                     type="button"
