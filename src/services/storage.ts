@@ -1187,6 +1187,8 @@ try {
 export class StorageService {
   private static instance: StorageService;
   private listeners: Set<() => void> = new Set();
+  private memoryCache: Map<string, any> = new Map();
+  private isNotifyPending = false;
 
   private constructor() {
     this.initDefaultData();
@@ -1199,6 +1201,27 @@ export class StorageService {
       StorageService.instance = new StorageService();
     }
     return StorageService.instance;
+  }
+
+  getCached<T>(key: string, loader: () => T): T {
+    if (this.memoryCache.has(key)) {
+      return this.memoryCache.get(key) as T;
+    }
+    const val = loader();
+    this.memoryCache.set(key, val);
+    return val;
+  }
+
+  setCached<T>(key: string, val: T): void {
+    this.memoryCache.set(key, val);
+  }
+
+  invalidateCache(key?: string): void {
+    if (key) {
+      this.memoryCache.delete(key);
+    } else {
+      this.memoryCache.clear();
+    }
   }
 
   // Subscribe to real-time changes
@@ -1214,10 +1237,25 @@ export class StorageService {
   }
 
   private notify() {
-    this.listeners.forEach((cb) => cb());
-    if (syncChannel) {
-      syncChannel.postMessage({ type: 'STATE_CHANGED', timestamp: Date.now() });
-    }
+    if (this.isNotifyPending) return;
+    this.isNotifyPending = true;
+    queueMicrotask(() => {
+      this.isNotifyPending = false;
+      this.listeners.forEach((cb) => {
+        try {
+          cb();
+        } catch (err) {
+          console.error('Subscriber error in storage:', err);
+        }
+      });
+      if (syncChannel) {
+        try {
+          syncChannel.postMessage({ type: 'STATE_CHANGED', timestamp: Date.now() });
+        } catch {
+          // ignore
+        }
+      }
+    });
   }
 
   private setupSyncListener() {
@@ -1226,7 +1264,8 @@ export class StorageService {
     if (syncChannel) {
       syncChannel.onmessage = (event) => {
         if (event.data && event.data.type === 'STATE_CHANGED') {
-          this.listeners.forEach((cb) => cb());
+          this.memoryCache.clear();
+          this.notify();
         }
       };
     }
@@ -1234,7 +1273,8 @@ export class StorageService {
     // Also listen to storage event as fallback
     window.addEventListener('storage', (e) => {
       if (e.key && (Object.values(STORAGE_KEYS).includes(e.key) || e.key.startsWith('rr_'))) {
-        this.listeners.forEach((cb) => cb());
+        this.memoryCache.clear();
+        this.notify();
       }
     });
   }
@@ -1426,17 +1466,20 @@ export class StorageService {
   // --- MULTI-STORE & POS COUNTER / SALESPERSON MANAGEMENT METHODS ---
 
   getStores(): StoreLocation[] {
-    try {
-      const data = safeStorage.getItem(STORAGE_KEYS.STORES);
-      if (!data) return INITIAL_STORES;
-      const parsed = JSON.parse(data);
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_STORES;
-    } catch {
-      return INITIAL_STORES;
-    }
+    return this.getCached(STORAGE_KEYS.STORES, () => {
+      try {
+        const data = safeStorage.getItem(STORAGE_KEYS.STORES);
+        if (!data) return INITIAL_STORES;
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_STORES;
+      } catch {
+        return INITIAL_STORES;
+      }
+    });
   }
 
   saveStores(stores: StoreLocation[]): void {
+    this.setCached(STORAGE_KEYS.STORES, stores);
     safeStorage.setItem(STORAGE_KEYS.STORES, JSON.stringify(stores));
     this.notify();
   }
@@ -1653,62 +1696,64 @@ export class StorageService {
   // --- INVENTORY METHODS ---
 
   getInventory(): InventoryItem[] {
-    try {
-      const data = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
-      if (!data) return INITIAL_INVENTORY;
-      const rawList: any = JSON.parse(data);
-      if (!Array.isArray(rawList)) return INITIAL_INVENTORY;
+    return this.getCached(STORAGE_KEYS.INVENTORY, () => {
+      try {
+        const data = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
+        if (!data) return INITIAL_INVENTORY;
+        const rawList: any = JSON.parse(data);
+        if (!Array.isArray(rawList)) return INITIAL_INVENTORY;
 
-      const seenIds = new Set<string>();
-      const seenSkus = new Set<string>();
-      const sanitized: InventoryItem[] = [];
-      let hadDuplicatesOrUnnormalized = false;
+        const seenIds = new Set<string>();
+        const seenSkus = new Set<string>();
+        const sanitized: InventoryItem[] = [];
+        let hadDuplicatesOrUnnormalized = false;
 
-      for (let i = 0; i < rawList.length; i++) {
-        const item = rawList[i];
-        if (!item || typeof item !== 'object') continue;
+        for (let i = 0; i < rawList.length; i++) {
+          const item = rawList[i];
+          if (!item || typeof item !== 'object') continue;
 
-        let itemId = item.id ? String(item.id).trim() : '';
-        const itemSku = item.sku ? String(item.sku).trim().toLowerCase() : '';
+          let itemId = item.id ? String(item.id).trim() : '';
+          const itemSku = item.sku ? String(item.sku).trim().toLowerCase() : '';
 
-        // If duplicate ID or empty ID
-        if (!itemId || seenIds.has(itemId)) {
-          itemId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${i}`;
-          item.id = itemId;
-          hadDuplicatesOrUnnormalized = true;
+          // If duplicate ID or empty ID
+          if (!itemId || seenIds.has(itemId)) {
+            itemId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${i}`;
+            item.id = itemId;
+            hadDuplicatesOrUnnormalized = true;
+          }
+
+          // If duplicate SKU, disambiguate
+          if (itemSku && seenSkus.has(itemSku)) {
+            item.sku = `${item.sku}-${i + 1}`;
+            hadDuplicatesOrUnnormalized = true;
+          }
+
+          // Normalize Category: Any category other than Paan or Cafe is automatically kept in Essentials
+          const normalizedCategory = normalizeProductCategory(item.category);
+          if (item.category !== normalizedCategory) {
+            item.category = normalizedCategory;
+            hadDuplicatesOrUnnormalized = true;
+          }
+
+          seenIds.add(itemId);
+          if (item.sku) seenSkus.add(item.sku.trim().toLowerCase());
+
+          sanitized.push(item);
         }
 
-        // If duplicate SKU, disambiguate
-        if (itemSku && seenSkus.has(itemSku)) {
-          item.sku = `${item.sku}-${i + 1}`;
-          hadDuplicatesOrUnnormalized = true;
+        if (hadDuplicatesOrUnnormalized && typeof window !== 'undefined') {
+          try {
+            safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(sanitized));
+          } catch {
+            // ignore storage quota errors
+          }
         }
 
-        // Normalize Category: Any category other than Paan or Cafe is automatically kept in Essentials
-        const normalizedCategory = normalizeProductCategory(item.category);
-        if (item.category !== normalizedCategory) {
-          item.category = normalizedCategory;
-          hadDuplicatesOrUnnormalized = true;
-        }
-
-        seenIds.add(itemId);
-        if (item.sku) seenSkus.add(item.sku.trim().toLowerCase());
-
-        sanitized.push(item);
+        return sanitized;
+      } catch {
+        return INITIAL_INVENTORY;
       }
-
-      if (hadDuplicatesOrUnnormalized && typeof window !== 'undefined') {
-        try {
-          safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(sanitized));
-        } catch {
-          // ignore storage quota errors
-        }
-      }
-
-      return sanitized;
-    } catch {
-      return INITIAL_INVENTORY;
-    }
+    });
   }
 
   saveInventory(items: InventoryItem[]) {
@@ -1743,6 +1788,7 @@ export class StorageService {
       });
     });
 
+    this.setCached(STORAGE_KEYS.INVENTORY, sanitized);
     safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(sanitized));
     this.checkAndTriggerLowStockAlerts(sanitized);
     this.notify();
@@ -2036,26 +2082,31 @@ export class StorageService {
   // --- CATEGORIES ---
 
   getCategories(): Category[] {
-    try {
-      const data = safeStorage.getItem(STORAGE_KEYS.CATEGORIES);
-      return data ? JSON.parse(data) : INITIAL_CATEGORIES;
-    } catch {
-      return INITIAL_CATEGORIES;
-    }
+    return this.getCached(STORAGE_KEYS.CATEGORIES, () => {
+      try {
+        const data = safeStorage.getItem(STORAGE_KEYS.CATEGORIES);
+        return data ? JSON.parse(data) : INITIAL_CATEGORIES;
+      } catch {
+        return INITIAL_CATEGORIES;
+      }
+    });
   }
 
   // --- CUSTOMERS & LOYALTY ---
 
   getCustomers(): Customer[] {
-    try {
-      const data = safeStorage.getItem(STORAGE_KEYS.CUSTOMERS);
-      return data ? JSON.parse(data) : INITIAL_CUSTOMERS;
-    } catch {
-      return INITIAL_CUSTOMERS;
-    }
+    return this.getCached(STORAGE_KEYS.CUSTOMERS, () => {
+      try {
+        const data = safeStorage.getItem(STORAGE_KEYS.CUSTOMERS);
+        return data ? JSON.parse(data) : INITIAL_CUSTOMERS;
+      } catch {
+        return INITIAL_CUSTOMERS;
+      }
+    });
   }
 
   saveCustomers(customers: Customer[]) {
+    this.setCached(STORAGE_KEYS.CUSTOMERS, customers);
     safeStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
     this.notify();
   }
@@ -2111,15 +2162,18 @@ export class StorageService {
   // --- ORDERS & REAL-TIME STOCK DEDUCTION ---
 
   getOrders(): Order[] {
-    try {
-      const data = safeStorage.getItem(STORAGE_KEYS.ORDERS);
-      return data ? JSON.parse(data) : INITIAL_ORDERS;
-    } catch {
-      return INITIAL_ORDERS;
-    }
+    return this.getCached(STORAGE_KEYS.ORDERS, () => {
+      try {
+        const data = safeStorage.getItem(STORAGE_KEYS.ORDERS);
+        return data ? JSON.parse(data) : INITIAL_ORDERS;
+      } catch {
+        return INITIAL_ORDERS;
+      }
+    });
   }
 
   saveOrders(orders: Order[]) {
+    this.setCached(STORAGE_KEYS.ORDERS, orders);
     safeStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     this.notify();
   }
@@ -2251,15 +2305,18 @@ export class StorageService {
   // --- PROMOTIONS ---
 
   getPromotions(): Promotion[] {
-    try {
-      const data = safeStorage.getItem(STORAGE_KEYS.PROMOTIONS);
-      return data ? JSON.parse(data) : INITIAL_PROMOTIONS;
-    } catch {
-      return INITIAL_PROMOTIONS;
-    }
+    return this.getCached(STORAGE_KEYS.PROMOTIONS, () => {
+      try {
+        const data = safeStorage.getItem(STORAGE_KEYS.PROMOTIONS);
+        return data ? JSON.parse(data) : INITIAL_PROMOTIONS;
+      } catch {
+        return INITIAL_PROMOTIONS;
+      }
+    });
   }
 
   savePromotions(promos: Promotion[]) {
+    this.setCached(STORAGE_KEYS.PROMOTIONS, promos);
     safeStorage.setItem(STORAGE_KEYS.PROMOTIONS, JSON.stringify(promos));
     this.notify();
   }
@@ -2309,16 +2366,20 @@ export class StorageService {
   // --- NOTIFICATIONS ---
 
   getNotifications(): PushNotification[] {
-    try {
-      const data = safeStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
-      return data ? JSON.parse(data) : INITIAL_NOTIFICATIONS;
-    } catch {
-      return INITIAL_NOTIFICATIONS;
-    }
+    return this.getCached(STORAGE_KEYS.NOTIFICATIONS, () => {
+      try {
+        const data = safeStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+        return data ? JSON.parse(data) : INITIAL_NOTIFICATIONS;
+      } catch {
+        return INITIAL_NOTIFICATIONS;
+      }
+    });
   }
 
   saveNotifications(notifs: PushNotification[]) {
-    safeStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifs.slice(0, 50)));
+    const trimmed = notifs.slice(0, 50);
+    this.setCached(STORAGE_KEYS.NOTIFICATIONS, trimmed);
+    safeStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(trimmed));
     this.notify();
   }
 
@@ -2367,12 +2428,14 @@ export class StorageService {
   // --- BACKUP MANAGEMENT (Daily 12:00 AM and Manual) ---
 
   getBackups(): BackupSnapshot[] {
-    try {
-      const data = safeStorage.getItem(STORAGE_KEYS.BACKUPS);
-      return data ? JSON.parse(data) : [];
-    } catch {
-      return [];
-    }
+    return this.getCached(STORAGE_KEYS.BACKUPS, () => {
+      try {
+        const data = safeStorage.getItem(STORAGE_KEYS.BACKUPS);
+        return data ? JSON.parse(data) : [];
+      } catch {
+        return [];
+      }
+    });
   }
 
   createBackup(type: 'automated_daily' | 'manual' = 'manual', note?: string): BackupSnapshot {
@@ -2409,8 +2472,9 @@ export class StorageService {
       dataJson,
     };
 
-    backups.unshift(newSnapshot);
-    safeStorage.setItem(STORAGE_KEYS.BACKUPS, JSON.stringify(backups.slice(0, 30)));
+    const updatedBackups = [newSnapshot, ...backups].slice(0, 30);
+    this.setCached(STORAGE_KEYS.BACKUPS, updatedBackups);
+    safeStorage.setItem(STORAGE_KEYS.BACKUPS, JSON.stringify(updatedBackups));
 
     this.addNotification({
       title: `💾 Backup Created: ${type === 'automated_daily' ? 'Daily 12:00 AM Auto-Backup' : 'Manual Snapshot'}`,
@@ -2466,6 +2530,7 @@ export class StorageService {
     promotions?: Promotion[];
     stores?: StoreLocation[];
   }): void {
+    this.invalidateCache();
     if (data.inventory && Array.isArray(data.inventory)) {
       safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(data.inventory));
     }
@@ -2680,26 +2745,31 @@ export class StorageService {
   // STORE EXPENSES MANAGEMENT
   // =========================================================================
   getStoreExpenses(storeId?: string): StoreExpense[] {
-    try {
-      const data = safeStorage.getItem(STORAGE_KEYS.STORE_EXPENSES);
-      let expenses: StoreExpense[] = [];
-      if (!data) {
-        expenses = INITIAL_STORE_EXPENSES;
-      } else {
-        const parsed = JSON.parse(data);
-        expenses = Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_STORE_EXPENSES;
+    const allExpenses = this.getCached(STORAGE_KEYS.STORE_EXPENSES, () => {
+      try {
+        const data = safeStorage.getItem(STORAGE_KEYS.STORE_EXPENSES);
+        let expenses: StoreExpense[] = [];
+        if (!data) {
+          expenses = INITIAL_STORE_EXPENSES;
+        } else {
+          const parsed = JSON.parse(data);
+          expenses = Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_STORE_EXPENSES;
+        }
+        return expenses;
+      } catch {
+        return INITIAL_STORE_EXPENSES;
       }
-      if (storeId && storeId !== 'all') {
-        return expenses.filter((e) => e.storeId === storeId);
-      }
-      return expenses;
-    } catch {
-      return INITIAL_STORE_EXPENSES;
+    });
+
+    if (storeId && storeId !== 'all') {
+      return allExpenses.filter((e) => e.storeId === storeId);
     }
+    return allExpenses;
   }
 
   saveStoreExpenses(expenses: StoreExpense[]): void {
     try {
+      this.setCached(STORAGE_KEYS.STORE_EXPENSES, expenses);
       safeStorage.setItem(STORAGE_KEYS.STORE_EXPENSES, JSON.stringify(expenses));
       this.notifySubscribers();
     } catch (e) {

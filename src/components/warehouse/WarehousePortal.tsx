@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useTransition } from 'react';
 import { WarehouseHeader } from './WarehouseHeader';
 import { WarehouseSidebar } from './WarehouseSidebar';
 import { WarehouseDashboardView } from './views/WarehouseDashboardView';
@@ -168,23 +168,25 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
     const unsubWh = warehouseStorage.subscribe(() => {
       loadData();
     });
-    const unsubMain = storage.subscribe(() => {
-      loadData();
-    });
     return () => {
       unsubWh();
-      unsubMain();
     };
   }, []);
 
+  const [isPending, startTransition] = useTransition();
+
   useEffect(() => {
     if (currentTab && currentTab !== activeTab) {
-      setActiveTab(currentTab);
+      startTransition(() => {
+        setActiveTab(currentTab);
+      });
     }
   }, [currentTab]);
 
   const handleSelectTab = (tab: WarehouseTab) => {
-    setActiveTab(tab);
+    startTransition(() => {
+      setActiveTab(tab);
+    });
     if (onTabChange) {
       onTabChange(tab);
     }
@@ -195,12 +197,21 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
     warehouseStorage.setActiveSubRole(role);
   };
 
-  // Calculated quick badge counts
-  const stats = warehouseStorage.getOverviewStats();
-  const nearExpiryCount = batches.filter((b) => b.status === 'near_expiry' && b.quantityInStock > 0).length;
-  const inTransitCount = transfers.filter((t) => t.status === 'dispatched_in_transit').length;
-  const lowStockCount = inventory.filter((i) => i.stockQuantity <= i.lowStockThreshold).length;
-  const overdueBillsCount = purchaseBills.filter((b) => b.dueAmount > 0).length;
+  // Calculated quick badge counts (memoized to avoid layout shifts and redundant calculations)
+  const stats = useMemo(() => warehouseStorage.getOverviewStats(), [
+    warehouses,
+    suppliers,
+    purchaseBills,
+    batches,
+    transfers,
+    indents,
+    inventory,
+    stores,
+  ]);
+  const nearExpiryCount = useMemo(() => batches.filter((b) => b.status === 'near_expiry' && b.quantityInStock > 0).length, [batches]);
+  const inTransitCount = useMemo(() => transfers.filter((t) => t.status === 'dispatched_in_transit').length, [transfers]);
+  const lowStockCount = useMemo(() => inventory.filter((i) => i.stockQuantity <= i.lowStockThreshold).length, [inventory]);
+  const overdueBillsCount = useMemo(() => purchaseBills.filter((b) => b.dueAmount > 0).length, [purchaseBills]);
 
   const renderActiveView = (mode: 'modern' | 'classic') => {
     if (activeTab === 'dashboard') {
@@ -406,7 +417,12 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
             />
 
             {/* Central Workspace Container */}
-            <div className="flex-1 p-3 sm:p-5 lg:p-6 bg-[#F8FAFC] overflow-y-auto min-w-0">
+            <div className="flex-1 p-3 sm:p-5 lg:p-6 bg-[#F8FAFC] overflow-y-auto min-w-0 relative">
+              {isPending && (
+                <div className="absolute top-0 left-0 right-0 h-1 bg-indigo-100 overflow-hidden z-20">
+                  <div className="h-full bg-indigo-600 animate-pulse w-full"></div>
+                </div>
+              )}
               {renderActiveView('modern')}
             </div>
           </div>

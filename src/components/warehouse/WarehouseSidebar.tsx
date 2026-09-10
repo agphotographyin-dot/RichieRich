@@ -127,11 +127,11 @@ export const WarehouseSidebar: React.FC<WarehouseSidebarProps> = ({
       ],
     },
     {
-      groupTitle: 'Auditing & Intelligence',
+      groupTitle: 'Auditing & Compliance',
       items: [
         {
           id: 'audit_trail',
-          label: 'Movement Audit Trail',
+          label: 'View Full Audit',
           icon: History,
         },
         {

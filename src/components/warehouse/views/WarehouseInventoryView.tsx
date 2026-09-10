@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Boxes,
   Search,
@@ -95,82 +95,128 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
   const [localSearch, setLocalSearch] = useState('');
   const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
-  
+
+  // High-performance loading screen & pagination states
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number | 'all'>(25);
+
   // Sorting
   const [sortBy, setSortBy] = useState<'name' | 'stock' | 'profit' | 'margin' | 'valuation'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // Instant visual response on initial mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 120);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Reset pagination to page 1 whenever any filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, localSearch, selectedCategory, stockStatusFilter, priceTypeFilter, vendorFilter, sortBy, sortOrder]);
+
+  const handleManualRefresh = () => {
+    setIsLoading(true);
+    soundEffects.playClick();
+    setTimeout(() => {
+      setIsLoading(false);
+    }, 150);
+  };
 
   // Edit & Label Modals
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [printingLabelItem, setPrintingLabelItem] = useState<InventoryItem | null>(null);
   const [zoomPhotoItem, setZoomPhotoItem] = useState<InventoryItem | null>(null);
 
-  // Suppliers from warehouse storage
-  const suppliers = warehouseStorage.getSuppliers();
-  const allVendorsList = Array.from(
-    new Set([
-      ...suppliers.map((s) => s.name),
-      ...inventory.flatMap((i) => i.vendors || (i.vendor ? [i.vendor] : [])),
-    ])
-  ).filter(Boolean);
+  // Suppliers from warehouse storage (memoized)
+  const suppliers = useMemo(() => warehouseStorage.getSuppliers(), []);
+  const allVendorsList = useMemo(() => {
+    return Array.from(
+      new Set([
+        ...suppliers.map((s) => s.name),
+        ...inventory.flatMap((i) => i.vendors || (i.vendor ? [i.vendor] : [])),
+      ])
+    ).filter(Boolean);
+  }, [suppliers, inventory]);
 
-  // Categories extraction
-  const categoriesList = propCategories && propCategories.length > 0 
-    ? propCategories.map(c => c.name) 
-    : ['all', ...Array.from(new Set(inventory.map((i) => i.category)))];
+  // Categories extraction (memoized)
+  const categoriesList = useMemo(() => {
+    return propCategories && propCategories.length > 0 
+      ? propCategories.map(c => c.name) 
+      : ['all', ...Array.from(new Set(inventory.map((i) => i.category)))];
+  }, [propCategories, inventory]);
 
-  // Filtering
+  // Filtering (memoized)
   const effectiveSearch = (searchQuery || localSearch).trim().toLowerCase();
-  const filteredInventory = inventory.filter((item) => {
-    const matchesSearch =
-      !effectiveSearch ||
-      item.name.toLowerCase().includes(effectiveSearch) ||
-      item.sku.toLowerCase().includes(effectiveSearch) ||
-      item.barcode.includes(effectiveSearch) ||
-      item.category.toLowerCase().includes(effectiveSearch) ||
-      (item.brand && item.brand.toLowerCase().includes(effectiveSearch)) ||
-      (item.vendor && item.vendor.toLowerCase().includes(effectiveSearch)) ||
-      (item.vendors && item.vendors.some((v) => v.toLowerCase().includes(effectiveSearch)));
+  const filteredInventory = useMemo(() => {
+    return inventory.filter((item) => {
+      const matchesSearch =
+        !effectiveSearch ||
+        item.name.toLowerCase().includes(effectiveSearch) ||
+        item.sku.toLowerCase().includes(effectiveSearch) ||
+        item.barcode.includes(effectiveSearch) ||
+        item.category.toLowerCase().includes(effectiveSearch) ||
+        (item.brand && item.brand.toLowerCase().includes(effectiveSearch)) ||
+        (item.vendor && item.vendor.toLowerCase().includes(effectiveSearch)) ||
+        (item.vendors && item.vendors.some((v) => v.toLowerCase().includes(effectiveSearch)));
 
-    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+      const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
 
-    const matchesPriceType =
-      priceTypeFilter === 'all' || (item.priceType || 'fixed') === priceTypeFilter;
+      const matchesPriceType =
+        priceTypeFilter === 'all' || (item.priceType || 'fixed') === priceTypeFilter;
 
-    const matchesVendor =
-      vendorFilter === 'all' ||
-      item.vendor === vendorFilter ||
-      (item.vendors && item.vendors.includes(vendorFilter));
+      const matchesVendor =
+        vendorFilter === 'all' ||
+        item.vendor === vendorFilter ||
+        (item.vendors && item.vendors.includes(vendorFilter));
 
-    let matchesStatus = true;
-    if (stockStatusFilter === 'low') {
-      matchesStatus = item.stockQuantity <= item.lowStockThreshold && item.stockQuantity > 0;
-    } else if (stockStatusFilter === 'critical') {
-      matchesStatus = item.stockQuantity > 0 && item.stockQuantity <= Math.ceil(item.lowStockThreshold * 0.4);
-    } else if (stockStatusFilter === 'out_of_stock') {
-      matchesStatus = item.stockQuantity <= 0;
-    } else if (stockStatusFilter === 'healthy') {
-      matchesStatus = item.stockQuantity > item.lowStockThreshold;
-    } else if (stockStatusFilter === 'high_margin') {
-      matchesStatus = (item.marginPercentage || 0) >= 55;
-    } else if (stockStatusFilter === 'tax_exempt') {
-      matchesStatus = item.isTaxApplicable === false;
-    }
+      let matchesStatus = true;
+      if (stockStatusFilter === 'low') {
+        matchesStatus = item.stockQuantity <= item.lowStockThreshold && item.stockQuantity > 0;
+      } else if (stockStatusFilter === 'critical') {
+        matchesStatus = item.stockQuantity > 0 && item.stockQuantity <= Math.ceil(item.lowStockThreshold * 0.4);
+      } else if (stockStatusFilter === 'out_of_stock') {
+        matchesStatus = item.stockQuantity <= 0;
+      } else if (stockStatusFilter === 'healthy') {
+        matchesStatus = item.stockQuantity > item.lowStockThreshold;
+      } else if (stockStatusFilter === 'high_margin') {
+        matchesStatus = (item.marginPercentage || 0) >= 55;
+      } else if (stockStatusFilter === 'tax_exempt') {
+        matchesStatus = item.isTaxApplicable === false;
+      }
 
-    return matchesSearch && matchesCategory && matchesPriceType && matchesVendor && matchesStatus;
-  });
+      return matchesSearch && matchesCategory && matchesPriceType && matchesVendor && matchesStatus;
+    });
+  }, [inventory, effectiveSearch, selectedCategory, priceTypeFilter, vendorFilter, stockStatusFilter]);
 
-  // Sort
-  const sortedInventory = [...filteredInventory].sort((a, b) => {
-    let comp = 0;
-    if (sortBy === 'name') comp = a.name.localeCompare(b.name);
-    else if (sortBy === 'stock') comp = a.stockQuantity - b.stockQuantity;
-    else if (sortBy === 'profit') comp = (a.profitPerUnit || 0) - (b.profitPerUnit || 0);
-    else if (sortBy === 'margin') comp = (a.marginPercentage || 0) - (b.marginPercentage || 0);
-    else if (sortBy === 'valuation') comp = a.stockQuantity * a.costPrice - b.stockQuantity * b.costPrice;
+  // Sort (memoized)
+  const sortedInventory = useMemo(() => {
+    return [...filteredInventory].sort((a, b) => {
+      let comp = 0;
+      if (sortBy === 'name') comp = a.name.localeCompare(b.name);
+      else if (sortBy === 'stock') comp = a.stockQuantity - b.stockQuantity;
+      else if (sortBy === 'profit') comp = (a.profitPerUnit || 0) - (b.profitPerUnit || 0);
+      else if (sortBy === 'margin') comp = (a.marginPercentage || 0) - (b.marginPercentage || 0);
+      else if (sortBy === 'valuation') comp = a.stockQuantity * a.costPrice - b.stockQuantity * b.costPrice;
 
-    return sortOrder === 'asc' ? comp : -comp;
-  });
+      return sortOrder === 'asc' ? comp : -comp;
+    });
+  }, [filteredInventory, sortBy, sortOrder]);
+
+  const totalPages = useMemo(() => {
+    if (pageSize === 'all') return 1;
+    return Math.max(1, Math.ceil(sortedInventory.length / (pageSize as number)));
+  }, [sortedInventory.length, pageSize]);
+
+  const paginatedInventory = useMemo(() => {
+    if (pageSize === 'all') return sortedInventory;
+    const size = pageSize as number;
+    const start = (currentPage - 1) * size;
+    return sortedInventory.slice(start, start + size);
+  }, [sortedInventory, currentPage, pageSize]);
 
   const handleStockAdjust = (id: string, delta: number) => {
     storage.adjustStock(id, delta, 'Warehouse Stock Stepper');
@@ -235,9 +281,80 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
     soundEffects.playClick();
   };
 
-  const totalValuation = inventory.reduce((sum, i) => sum + i.stockQuantity * i.costPrice, 0);
-  const totalStockUnits = inventory.reduce((sum, i) => sum + i.stockQuantity, 0);
-  const lowStockCount = inventory.filter((i) => i.stockQuantity <= i.lowStockThreshold).length;
+  const totalValuation = useMemo(() => inventory.reduce((sum, i) => sum + i.stockQuantity * i.costPrice, 0), [inventory]);
+  const totalStockUnits = useMemo(() => inventory.reduce((sum, i) => sum + i.stockQuantity, 0), [inventory]);
+  const lowStockCount = useMemo(() => inventory.filter((i) => i.stockQuantity <= i.lowStockThreshold).length, [inventory]);
+
+  const renderPaginationFooter = () => {
+    if (sortedInventory.length === 0) return null;
+
+    const startIdx = pageSize === 'all' ? 1 : (currentPage - 1) * (pageSize as number) + 1;
+    const endIdx = pageSize === 'all' ? sortedInventory.length : Math.min(currentPage * (pageSize as number), sortedInventory.length);
+
+    return (
+      <div className="p-3.5 sm:p-4 border-t border-slate-200 bg-slate-50/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        <div className="text-slate-500 font-medium">
+          Showing <span className="font-bold text-slate-800 font-mono">{startIdx}</span> to{' '}
+          <span className="font-bold text-slate-800 font-mono">{endIdx}</span> of{' '}
+          <span className="font-bold text-slate-900 font-mono">{sortedInventory.length}</span> items
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500 text-[11px] font-semibold">Per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
+                setPageSize(val);
+                setCurrentPage(1);
+              }}
+              className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-700 cursor-pointer focus:outline-hidden"
+            >
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value="all">All ({sortedInventory.length})</option>
+            </select>
+          </div>
+
+          {pageSize !== 'all' && totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                  currentPage <= 1
+                    ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                    : 'border-slate-200 bg-white hover:bg-slate-100 text-slate-700 shadow-xs'
+                }`}
+              >
+                Previous
+              </button>
+
+              <div className="px-2.5 py-1 text-xs font-bold text-slate-700 font-mono">
+                {currentPage} / {totalPages}
+              </div>
+
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                  currentPage >= totalPages
+                    ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                    : 'border-slate-200 bg-white hover:bg-slate-100 text-slate-700 shadow-xs'
+                }`}
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-5">
@@ -260,6 +377,16 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
 
         {/* Global Action Toolbar */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Refresh Catalog Button */}
+          <button
+            onClick={handleManualRefresh}
+            className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 active:scale-95 text-indigo-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer border border-indigo-200 shadow-xs"
+            title="Refresh and recalculate Master Inventory catalog"
+          >
+            <RefreshCw className={`w-4 h-4 text-indigo-600 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+
           {/* Excel Import Button */}
           <button
             onClick={() => setIsExcelImportOpen(true)}
@@ -410,7 +537,68 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
         </div>
       </div>
 
-      {/* Sub-View Navigation Tabs & Live Valuation Pill */}
+      {/* Loading Animation Screen / Content */}
+      {isLoading ? (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          {/* Sub-view tab skeleton */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs animate-pulse">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-44 bg-indigo-100/80 rounded-xl"></div>
+              <div className="h-8 w-36 bg-slate-100 rounded-xl"></div>
+              <div className="h-8 w-36 bg-slate-100 rounded-xl"></div>
+              <div className="h-8 w-36 bg-slate-100 rounded-xl"></div>
+            </div>
+            <div className="h-8 w-48 bg-slate-100 rounded-xl"></div>
+          </div>
+
+          {/* Filter Bar Skeleton */}
+          <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-xs flex flex-col md:flex-row items-center justify-between gap-3 animate-pulse">
+            <div className="h-9 w-full md:w-80 bg-slate-100 rounded-xl"></div>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="h-9 w-32 bg-slate-100 rounded-xl"></div>
+              <div className="h-9 w-28 bg-slate-100 rounded-xl"></div>
+              <div className="h-9 w-32 bg-slate-100 rounded-xl"></div>
+            </div>
+          </div>
+
+          {/* Table Container Skeleton with Animated Loading Notification */}
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-indigo-50/40">
+              <div className="flex items-center gap-3">
+                <div className="w-5 h-5 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin"></div>
+                <div>
+                  <div className="text-xs font-bold text-slate-800">Loading Master Inventory Catalog...</div>
+                  <div className="text-[11px] text-slate-500">Preparing SKU catalog, FIFO batches, barcode tags & store allocations</div>
+                </div>
+              </div>
+              <span className="hidden sm:inline-flex px-2.5 py-1 rounded-lg bg-indigo-100/60 text-indigo-700 text-[11px] font-bold font-mono">
+                Synchronizing
+              </span>
+            </div>
+
+            <div className="divide-y divide-slate-100">
+              {[1, 2, 3, 4, 5, 6].map((idx) => (
+                <div key={idx} className="p-3.5 flex items-center justify-between gap-4 animate-pulse">
+                  <div className="flex items-center gap-3 min-w-[200px]">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 shrink-0"></div>
+                    <div className="space-y-1.5">
+                      <div className="h-4 w-40 bg-slate-200 rounded"></div>
+                      <div className="h-3 w-24 bg-slate-100 rounded"></div>
+                    </div>
+                  </div>
+                  <div className="h-4 w-24 bg-slate-100 rounded hidden md:block"></div>
+                  <div className="h-4 w-16 bg-slate-100 rounded hidden sm:block"></div>
+                  <div className="h-4 w-16 bg-emerald-50 rounded"></div>
+                  <div className="h-4 w-16 bg-indigo-50 rounded"></div>
+                  <div className="h-6 w-20 bg-slate-100 rounded-lg"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Sub-View Navigation Tabs & Live Valuation Pill */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs">
         <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto p-0.5">
           <button
@@ -616,7 +804,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  sortedInventory.map((item, idx) => {
+                  paginatedInventory.map((item, idx) => {
                     const margin = item.marginPercentage || 
                       (item.sellingPrice > 0 ? Math.round(((item.sellingPrice - item.costPrice) / item.sellingPrice) * 100) : 0);
                     
@@ -829,6 +1017,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
               </tbody>
             </table>
           </div>
+          {renderPaginationFooter()}
         </div>
       )}
 
@@ -961,7 +1150,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono">
-                {sortedInventory.map((item, idx) => {
+                {paginatedInventory.map((item, idx) => {
                   const alloc = item.storeAllocations || {};
                   const gota = alloc['gota'] || 0;
                   const bopal = alloc['bopal'] || 0;
@@ -990,6 +1179,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
               </tbody>
             </table>
           </div>
+          {renderPaginationFooter()}
         </div>
       )}
 
@@ -1018,7 +1208,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {sortedInventory.map((item, idx) => (
+            {paginatedInventory.map((item, idx) => (
               <div
                 key={item.id ? `${item.id}-${idx}` : `lbl-${idx}`}
                 onClick={() => setPrintingLabelItem(item)}
@@ -1038,7 +1228,10 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
               </div>
             ))}
           </div>
+          {renderPaginationFooter()}
         </div>
+      )}
+        </>
       )}
 
       {/* ========================================================================= */}

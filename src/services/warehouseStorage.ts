@@ -178,16 +178,34 @@ export function cleanWarehouseDummyData(): void {
 cleanWarehouseDummyData();
 
 const warehouseListeners: Set<() => void> = new Set();
+const whMemoryCache: Map<string, any> = new Map();
+let isWhNotifyPending = false;
+
+function getWhCached<T>(key: string, loader: () => T): T {
+  if (whMemoryCache.has(key)) {
+    return whMemoryCache.get(key) as T;
+  }
+  const val = loader();
+  whMemoryCache.set(key, val);
+  return val;
+}
+
+function setWhCached<T>(key: string, val: T): void {
+  whMemoryCache.set(key, val);
+}
+
+function clearWhCache(key?: string): void {
+  if (key) {
+    whMemoryCache.delete(key);
+  } else {
+    whMemoryCache.clear();
+  }
+}
 
 // Synchronize storage service events with warehouse listeners for real-time reactivity
 storage.subscribe(() => {
-  warehouseListeners.forEach((cb) => {
-    try {
-      cb();
-    } catch (e) {
-      console.error('Error in warehouse listener', e);
-    }
-  });
+  clearWhCache();
+  warehouseStorage.notifySubscribers();
 });
 
 export const warehouseStorage = {
@@ -199,14 +217,18 @@ export const warehouseStorage = {
   },
 
   notifySubscribers(): void {
-    warehouseListeners.forEach((cb) => {
-      try {
-        cb();
-      } catch (e) {
-        console.error('Error notifying warehouse listener', e);
-      }
+    if (isWhNotifyPending) return;
+    isWhNotifyPending = true;
+    queueMicrotask(() => {
+      isWhNotifyPending = false;
+      warehouseListeners.forEach((cb) => {
+        try {
+          cb();
+        } catch (e) {
+          console.error('Error notifying warehouse listener', e);
+        }
+      });
     });
-    storage.notifySubscribers();
   },
 
   // =========================================================================
@@ -234,44 +256,46 @@ export const warehouseStorage = {
   // WAREHOUSES (Single Central Master Hub)
   // =========================================================================
   getWarehouses(): Warehouse[] {
-    try {
-      const data = safeStorage.getItem(WH_KEYS.WAREHOUSES);
-      if (!data) {
-        this.saveWarehouses(INITIAL_WAREHOUSES);
-        return INITIAL_WAREHOUSES;
-      }
-      const parsed: Warehouse[] = JSON.parse(data);
-      if (!Array.isArray(parsed) || parsed.length === 0) {
-        this.saveWarehouses(INITIAL_WAREHOUSES);
-        return INITIAL_WAREHOUSES;
-      }
-      // If user had multi-warehouse stored previously, sanitize to single active central master warehouse
-      let list = parsed;
-      if (parsed.length > 1) {
-        const central = parsed.find((w) => w.type === 'central_hub' || w.id === 'wh-central-amd') || INITIAL_WAREHOUSES[0];
-        list = [central];
-      }
-
-      // Ensure standard name "Central Warehouse"
-      let hasChanges = false;
-      list = list.map((w) => {
-        if (w.id === 'wh-central-amd' || w.type === 'central_hub' || w.name.includes('Master Warehouse') || w.name.includes('Gota Hub')) {
-          if (w.name !== 'Central Warehouse') {
-            hasChanges = true;
-            return { ...w, name: 'Central Warehouse' };
-          }
+    return getWhCached(WH_KEYS.WAREHOUSES, () => {
+      try {
+        const data = safeStorage.getItem(WH_KEYS.WAREHOUSES);
+        if (!data) {
+          this.saveWarehouses(INITIAL_WAREHOUSES);
+          return INITIAL_WAREHOUSES;
         }
-        return w;
-      });
+        const parsed: Warehouse[] = JSON.parse(data);
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+          this.saveWarehouses(INITIAL_WAREHOUSES);
+          return INITIAL_WAREHOUSES;
+        }
+        // If user had multi-warehouse stored previously, sanitize to single active central master warehouse
+        let list = parsed;
+        if (parsed.length > 1) {
+          const central = parsed.find((w) => w.type === 'central_hub' || w.id === 'wh-central-amd') || INITIAL_WAREHOUSES[0];
+          list = [central];
+        }
 
-      if (hasChanges || list.length !== parsed.length) {
-        this.saveWarehouses(list);
+        // Ensure standard name "Central Warehouse"
+        let hasChanges = false;
+        list = list.map((w) => {
+          if (w.id === 'wh-central-amd' || w.type === 'central_hub' || w.name.includes('Master Warehouse') || w.name.includes('Gota Hub')) {
+            if (w.name !== 'Central Warehouse') {
+              hasChanges = true;
+              return { ...w, name: 'Central Warehouse' };
+            }
+          }
+          return w;
+        });
+
+        if (hasChanges || list.length !== parsed.length) {
+          this.saveWarehouses(list);
+        }
+
+        return list;
+      } catch {
+        return INITIAL_WAREHOUSES;
       }
-
-      return list;
-    } catch {
-      return INITIAL_WAREHOUSES;
-    }
+    });
   },
 
   getCentralWarehouse(): Warehouse {
@@ -325,6 +349,7 @@ export const warehouseStorage = {
 
   saveWarehouses(list: Warehouse[]): void {
     try {
+      setWhCached(WH_KEYS.WAREHOUSES, list);
       safeStorage.setItem(WH_KEYS.WAREHOUSES, JSON.stringify(list));
       this.notifySubscribers();
     } catch (e) {
@@ -365,25 +390,28 @@ export const warehouseStorage = {
   // SUPPLIERS & DISTRIBUTORS
   // =========================================================================
   getSuppliers(): Supplier[] {
-    try {
-      const data = safeStorage.getItem(WH_KEYS.SUPPLIERS);
-      if (!data) {
-        this.saveSuppliers(INITIAL_SUPPLIERS);
+    return getWhCached(WH_KEYS.SUPPLIERS, () => {
+      try {
+        const data = safeStorage.getItem(WH_KEYS.SUPPLIERS);
+        if (!data) {
+          this.saveSuppliers(INITIAL_SUPPLIERS);
+          return INITIAL_SUPPLIERS;
+        }
+        const parsed = JSON.parse(data);
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+          this.saveSuppliers(INITIAL_SUPPLIERS);
+          return INITIAL_SUPPLIERS;
+        }
+        return parsed;
+      } catch {
         return INITIAL_SUPPLIERS;
       }
-      const parsed = JSON.parse(data);
-      if (!Array.isArray(parsed) || parsed.length === 0) {
-        this.saveSuppliers(INITIAL_SUPPLIERS);
-        return INITIAL_SUPPLIERS;
-      }
-      return parsed;
-    } catch {
-      return INITIAL_SUPPLIERS;
-    }
+    });
   },
 
   saveSuppliers(list: Supplier[]): void {
     try {
+      setWhCached(WH_KEYS.SUPPLIERS, list);
       safeStorage.setItem(WH_KEYS.SUPPLIERS, JSON.stringify(list));
       this.notifySubscribers();
     } catch (e) {
@@ -460,20 +488,23 @@ export const warehouseStorage = {
   // SUPPLIER LEDGER
   // =========================================================================
   getSupplierLedger(): SupplierLedgerEntry[] {
-    try {
-      const data = safeStorage.getItem(WH_KEYS.SUPPLIER_LEDGER);
-      if (!data) {
-        this.saveSupplierLedger(INITIAL_LEDGER_ENTRIES);
+    return getWhCached(WH_KEYS.SUPPLIER_LEDGER, () => {
+      try {
+        const data = safeStorage.getItem(WH_KEYS.SUPPLIER_LEDGER);
+        if (!data) {
+          this.saveSupplierLedger(INITIAL_LEDGER_ENTRIES);
+          return INITIAL_LEDGER_ENTRIES;
+        }
+        return JSON.parse(data);
+      } catch {
         return INITIAL_LEDGER_ENTRIES;
       }
-      return JSON.parse(data);
-    } catch {
-      return INITIAL_LEDGER_ENTRIES;
-    }
+    });
   },
 
   saveSupplierLedger(list: SupplierLedgerEntry[]): void {
     try {
+      setWhCached(WH_KEYS.SUPPLIER_LEDGER, list);
       safeStorage.setItem(WH_KEYS.SUPPLIER_LEDGER, JSON.stringify(list));
       this.notifySubscribers();
     } catch (e) {
@@ -485,20 +516,23 @@ export const warehouseStorage = {
   // PURCHASE ORDERS (PO)
   // =========================================================================
   getPurchaseOrders(): PurchaseOrder[] {
-    try {
-      const data = safeStorage.getItem(WH_KEYS.PURCHASE_ORDERS);
-      if (!data) {
-        this.savePurchaseOrders(INITIAL_PURCHASE_ORDERS);
+    return getWhCached(WH_KEYS.PURCHASE_ORDERS, () => {
+      try {
+        const data = safeStorage.getItem(WH_KEYS.PURCHASE_ORDERS);
+        if (!data) {
+          this.savePurchaseOrders(INITIAL_PURCHASE_ORDERS);
+          return INITIAL_PURCHASE_ORDERS;
+        }
+        return JSON.parse(data);
+      } catch {
         return INITIAL_PURCHASE_ORDERS;
       }
-      return JSON.parse(data);
-    } catch {
-      return INITIAL_PURCHASE_ORDERS;
-    }
+    });
   },
 
   savePurchaseOrders(list: PurchaseOrder[]): void {
     try {
+      setWhCached(WH_KEYS.PURCHASE_ORDERS, list);
       safeStorage.setItem(WH_KEYS.PURCHASE_ORDERS, JSON.stringify(list));
       this.notifySubscribers();
     } catch (e) {
@@ -540,20 +574,23 @@ export const warehouseStorage = {
   // PURCHASE BILLS & GRN (INWARD GOODS RECEIPT)
   // =========================================================================
   getPurchaseBills(): PurchaseBill[] {
-    try {
-      const data = safeStorage.getItem(WH_KEYS.PURCHASE_BILLS);
-      if (!data) {
-        this.savePurchaseBills(INITIAL_PURCHASE_BILLS);
+    return getWhCached(WH_KEYS.PURCHASE_BILLS, () => {
+      try {
+        const data = safeStorage.getItem(WH_KEYS.PURCHASE_BILLS);
+        if (!data) {
+          this.savePurchaseBills(INITIAL_PURCHASE_BILLS);
+          return INITIAL_PURCHASE_BILLS;
+        }
+        return JSON.parse(data);
+      } catch {
         return INITIAL_PURCHASE_BILLS;
       }
-      return JSON.parse(data);
-    } catch {
-      return INITIAL_PURCHASE_BILLS;
-    }
+    });
   },
 
   savePurchaseBills(list: PurchaseBill[]): void {
     try {
+      setWhCached(WH_KEYS.PURCHASE_BILLS, list);
       safeStorage.setItem(WH_KEYS.PURCHASE_BILLS, JSON.stringify(list));
       this.notifySubscribers();
     } catch (e) {
@@ -678,16 +715,18 @@ export const warehouseStorage = {
   // BATCHES & EXPIRY TRACKING
   // =========================================================================
   getBatches(): BatchRecord[] {
-    try {
-      const data = safeStorage.getItem(WH_KEYS.BATCHES);
-      if (!data) {
-        this.saveBatches(INITIAL_BATCHES);
+    return getWhCached(WH_KEYS.BATCHES, () => {
+      try {
+        const data = safeStorage.getItem(WH_KEYS.BATCHES);
+        if (!data) {
+          this.saveBatches(INITIAL_BATCHES);
+          return INITIAL_BATCHES;
+        }
+        return JSON.parse(data);
+      } catch {
         return INITIAL_BATCHES;
       }
-      return JSON.parse(data);
-    } catch {
-      return INITIAL_BATCHES;
-    }
+    });
   },
 
   saveBatches(list: BatchRecord[]): void {
@@ -705,6 +744,7 @@ export const warehouseStorage = {
         return { ...b, daysToExpiry: days, status };
       });
 
+      setWhCached(WH_KEYS.BATCHES, updated);
       safeStorage.setItem(WH_KEYS.BATCHES, JSON.stringify(updated));
       this.notifySubscribers();
     } catch (e) {
@@ -716,20 +756,23 @@ export const warehouseStorage = {
   // STOCK TRANSFERS & IN-TRANSIT TRACKING
   // =========================================================================
   getStockTransfers(): StockTransfer[] {
-    try {
-      const data = safeStorage.getItem(WH_KEYS.TRANSFERS);
-      if (!data) {
-        this.saveStockTransfers(INITIAL_TRANSFERS);
+    return getWhCached(WH_KEYS.TRANSFERS, () => {
+      try {
+        const data = safeStorage.getItem(WH_KEYS.TRANSFERS);
+        if (!data) {
+          this.saveStockTransfers(INITIAL_TRANSFERS);
+          return INITIAL_TRANSFERS;
+        }
+        return JSON.parse(data);
+      } catch {
         return INITIAL_TRANSFERS;
       }
-      return JSON.parse(data);
-    } catch {
-      return INITIAL_TRANSFERS;
-    }
+    });
   },
 
   saveStockTransfers(list: StockTransfer[]): void {
     try {
+      setWhCached(WH_KEYS.TRANSFERS, list);
       safeStorage.setItem(WH_KEYS.TRANSFERS, JSON.stringify(list));
       this.notifySubscribers();
     } catch (e) {
@@ -907,20 +950,23 @@ export const warehouseStorage = {
   // STORE INDENTS (STOCK REQUESTS)
   // =========================================================================
   getStoreIndents(): StoreStockIndent[] {
-    try {
-      const data = safeStorage.getItem(WH_KEYS.INDENTS);
-      if (!data) {
-        this.saveStoreIndents(INITIAL_INDENTS);
+    return getWhCached(WH_KEYS.INDENTS, () => {
+      try {
+        const data = safeStorage.getItem(WH_KEYS.INDENTS);
+        if (!data) {
+          this.saveStoreIndents(INITIAL_INDENTS);
+          return INITIAL_INDENTS;
+        }
+        return JSON.parse(data);
+      } catch {
         return INITIAL_INDENTS;
       }
-      return JSON.parse(data);
-    } catch {
-      return INITIAL_INDENTS;
-    }
+    });
   },
 
   saveStoreIndents(list: StoreStockIndent[]): void {
     try {
+      setWhCached(WH_KEYS.INDENTS, list);
       safeStorage.setItem(WH_KEYS.INDENTS, JSON.stringify(list));
       this.notifySubscribers();
     } catch (e) {
@@ -995,20 +1041,23 @@ export const warehouseStorage = {
   // STOCK ADJUSTMENTS & SCRAP
   // =========================================================================
   getStockAdjustments(): StockAdjustment[] {
-    try {
-      const data = safeStorage.getItem(WH_KEYS.ADJUSTMENTS);
-      if (!data) {
-        this.saveStockAdjustments(INITIAL_ADJUSTMENTS);
+    return getWhCached(WH_KEYS.ADJUSTMENTS, () => {
+      try {
+        const data = safeStorage.getItem(WH_KEYS.ADJUSTMENTS);
+        if (!data) {
+          this.saveStockAdjustments(INITIAL_ADJUSTMENTS);
+          return INITIAL_ADJUSTMENTS;
+        }
+        return JSON.parse(data);
+      } catch {
         return INITIAL_ADJUSTMENTS;
       }
-      return JSON.parse(data);
-    } catch {
-      return INITIAL_ADJUSTMENTS;
-    }
+    });
   },
 
   saveStockAdjustments(list: StockAdjustment[]): void {
     try {
+      setWhCached(WH_KEYS.ADJUSTMENTS, list);
       safeStorage.setItem(WH_KEYS.ADJUSTMENTS, JSON.stringify(list));
       this.notifySubscribers();
     } catch (e) {
@@ -1133,20 +1182,23 @@ export const warehouseStorage = {
   // AUDIT TRAIL
   // =========================================================================
   getAuditTrail(): StockMovementAudit[] {
-    try {
-      const data = safeStorage.getItem(WH_KEYS.AUDIT_TRAIL);
-      if (!data) {
-        this.saveAuditTrail(INITIAL_AUDIT_TRAIL);
+    return getWhCached(WH_KEYS.AUDIT_TRAIL, () => {
+      try {
+        const data = safeStorage.getItem(WH_KEYS.AUDIT_TRAIL);
+        if (!data) {
+          this.saveAuditTrail(INITIAL_AUDIT_TRAIL);
+          return INITIAL_AUDIT_TRAIL;
+        }
+        return JSON.parse(data);
+      } catch {
         return INITIAL_AUDIT_TRAIL;
       }
-      return JSON.parse(data);
-    } catch {
-      return INITIAL_AUDIT_TRAIL;
-    }
+    });
   },
 
   saveAuditTrail(list: StockMovementAudit[]): void {
     try {
+      setWhCached(WH_KEYS.AUDIT_TRAIL, list);
       safeStorage.setItem(WH_KEYS.AUDIT_TRAIL, JSON.stringify(list));
       this.notifySubscribers();
     } catch (e) {
