@@ -17,8 +17,43 @@
   #printable-receipt,
   #printable-receipt *,
   #printable-store-statement,
-  #printable-store-statement * {
+  #printable-store-statement *,
+  #printable-barcode-tag,
+  #printable-barcode-tag *,
+  #printable-daily-collection,
+  #printable-daily-collection *,
+  #printable-warehouse-report,
+  #printable-warehouse-report *,
+  #printable-store-stock,
+  #printable-store-stock * {
     visibility: visible;
+  }
+
+  #printable-barcode-tag {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 320px !important;
+    margin: 0 auto !important;
+    padding: 12px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: 1px solid #000000 !important;
+  }
+
+  #printable-daily-collection,
+  #printable-warehouse-report,
+  #printable-store-stock {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 16px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
   }
 
   #printable-store-statement {

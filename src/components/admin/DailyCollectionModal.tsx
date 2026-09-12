@@ -304,7 +304,7 @@ _Generated via Richie Rich POS Management System_`;
         </div>
 
         {/* Modal Scrollable Content */}
-        <div className="overflow-y-auto flex-1 p-4 sm:p-5 space-y-5">
+        <div id="printable-daily-collection" className="overflow-y-auto flex-1 p-4 sm:p-5 space-y-5">
           {/* Executive Big Summary Strip */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             {/* Total Sale Today */}

@@ -3012,7 +3012,12 @@ export class StorageService {
     csv += `DETAILED STORE EXPENSES LOG\n`;
     csv += `Date,Voucher #,Category,Description,Paid To,Payment Mode,Logged By,Amount (${CURRENCY})\n`;
     expenses.forEach((e) => {
-      csv += `"${e.date}","${e.voucherNumber}","${e.category}","${e.description.replace(/"/g, '""')}","${e.paidTo}","${e.paymentMethod}","${e.loggedBy}",${e.amount.toFixed(2)}\n`;
+      const desc = (e.description || e.title || '').replace(/"/g, '""');
+      const paidTo = (e.paidTo || e.paidToOrRecipient || '').replace(/"/g, '""');
+      const mode = (e.paymentMethod || e.paymentMode || '').toUpperCase();
+      const logged = (e.loggedBy || e.paidBy || '').replace(/"/g, '""');
+      const amt = (e.amount || 0).toFixed(2);
+      csv += `"${e.date || ''}","${e.voucherNumber || ''}","${e.category || ''}","${desc}","${paidTo}","${mode}","${logged}",${amt}\n`;
     });
 
     return csv;

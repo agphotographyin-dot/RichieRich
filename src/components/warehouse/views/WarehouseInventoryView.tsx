@@ -1524,7 +1524,10 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
             </div>
 
             {/* Printable Tag Container */}
-            <div className="p-4 bg-white border-2 border-dashed border-slate-300 rounded-xl space-y-2 text-slate-900">
+            <div
+              id="printable-barcode-tag"
+              className="p-4 bg-white border-2 border-dashed border-slate-300 rounded-xl space-y-2 text-slate-900"
+            >
               <div className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Richie Rich Pan House</div>
               <div className="font-extrabold text-base">{printingLabelItem.name}</div>
               <div className="font-mono text-xs text-slate-500">SKU: {printingLabelItem.sku}</div>

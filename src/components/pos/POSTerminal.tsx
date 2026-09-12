@@ -114,7 +114,7 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
 
     if (availableStock <= 0) {
       soundEffects.playWarningChime();
-      alert(`"${item.name}" is out of stock at ${posSession.storeName}!`);
+      alert(`"${item.name}" is out of stock at ${posSession?.storeName || 'the store'}!`);
       return;
     }
 

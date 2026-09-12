@@ -408,7 +408,7 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
 
       {/* 2. Individual Store Mode View */}
       {viewMode === 'individual' && currentStore && (
-        <div className="space-y-5">
+        <div id="printable-store-stock" className="space-y-5">
           {/* Store Spotlight Header Banner */}
           <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white p-5 sm:p-6 rounded-2xl shadow-sm space-y-4">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">

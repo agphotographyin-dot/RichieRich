@@ -151,6 +151,7 @@ export const WarehouseReportsView: React.FC<WarehouseReportsViewProps> = ({
       </div>
 
       {/* Report Content Panels */}
+      <div id="printable-warehouse-report">
       {reportType === 'valuation' && (
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -343,6 +344,7 @@ export const WarehouseReportsView: React.FC<WarehouseReportsViewProps> = ({
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
