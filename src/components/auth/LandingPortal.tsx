@@ -52,9 +52,9 @@ export const LandingPortal: React.FC<LandingPortalProps> = ({
   };
 
   return (
-    <div className="relative min-h-[90vh] flex flex-col justify-between py-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto overflow-hidden">
+    <div className="relative min-h-[90vh] flex flex-col justify-between py-6 px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12 w-full max-w-[2400px] 2xl:max-w-none mx-auto overflow-hidden">
       {/* Ambient background glow */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-80 bg-gradient-to-b from-amber-500/10 via-slate-800/10 to-transparent blur-3xl pointer-events-none -z-10" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-80 bg-gradient-to-b from-amber-500/10 via-slate-800/10 to-transparent blur-3xl pointer-events-none -z-10" />
 
       {/* Brand Hero Header */}
       <div className="text-center space-y-4 mb-8 pt-2">
@@ -374,7 +374,7 @@ export const LandingPortal: React.FC<LandingPortalProps> = ({
       </div>
 
       {/* Customer Ordering & Loyalty Portal Card */}
-      <div className="max-w-4xl mx-auto w-full">
+      <div className="w-full max-w-5xl 2xl:max-w-6xl mx-auto">
         <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs hover:border-amber-500 transition-colors">
           <div className="flex items-center gap-3 text-center sm:text-left">
             <div className="w-10 h-10 rounded-xl bg-[#1E293B] text-amber-400 flex items-center justify-center shrink-0 shadow-xs border border-slate-700">

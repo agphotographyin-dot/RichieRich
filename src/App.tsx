@@ -9,6 +9,7 @@ import {
   BackupSnapshot,
   UserRole,
   AdminTab,
+  POSSession,
 } from './types';
 import { storage } from './services/storage';
 import { authService } from './services/auth';
@@ -74,6 +75,9 @@ export const App: React.FC = () => {
   );
   const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(
     authService.getCurrentCustomer()
+  );
+  const [posSession, setPosSession] = useState<POSSession | null>(() =>
+    storage.getActivePOSSession()
   );
 
   // Application Data States (Synced reactive via storage service)
@@ -147,6 +151,7 @@ export const App: React.FC = () => {
       setPromotions(storage.getPromotions());
       setNotifications(storage.getNotifications());
       setBackups(storage.getBackups());
+      setPosSession(storage.getActivePOSSession());
     });
 
     return () => {
@@ -231,8 +236,15 @@ export const App: React.FC = () => {
   };
 
   const handlePOSLogout = () => {
+    storage.clearPOSSession();
     authService.logoutPOS();
     setIsPOSAuthenticated(false);
+    setPosSession(null);
+  };
+
+  const handleSwitchPOSCounter = () => {
+    storage.clearPOSSession();
+    setPosSession(null);
   };
 
   // Auth Handler: Warehouse
@@ -283,10 +295,12 @@ export const App: React.FC = () => {
         onNavigateLanding={() => navigateToRole('landing')}
         warehouseLayoutMode={warehouseLayoutMode}
         onToggleWarehouseLayoutMode={toggleWarehouseLayoutMode}
+        posSession={posSession}
+        onSwitchPOSCounter={handleSwitchPOSCounter}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Main Content Area: Expands sideways responsively to fit device size, screen, and resolution */}
+      <main className="flex-1 w-full max-w-[2400px] 2xl:max-w-none mx-auto px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 sm:py-6">
         {/* ================================================================= */}
         {/* LANDING PAGE: 4 Operational Portals Grid + Customer Portal        */}
         {/* ================================================================= */}

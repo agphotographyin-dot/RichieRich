@@ -420,7 +420,7 @@ export const AdminLoyaltyPromos: React.FC<AdminLoyaltyPromosProps> = ({
 
       {/* SUB-TAB 3: PUSH NOTIFICATION DISPATCHER */}
       {activeSubTab === 'push_dispatch' && (
-        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm max-w-2xl">
+        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm w-full max-w-4xl">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-200">
               <BellRing className="w-5 h-5" />

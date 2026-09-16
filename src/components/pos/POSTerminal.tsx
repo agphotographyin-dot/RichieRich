@@ -340,6 +340,14 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
     return () => clearTimeout(timer);
   }, [lastScannedFeedback]);
 
+  // Keep session synchronized with storage
+  useEffect(() => {
+    const unsub = storage.subscribe(() => {
+      setPosSession(storage.getActivePOSSession());
+    });
+    return unsub;
+  }, []);
+
   // If no active session, show Store & Counter PIN selection screen
   if (!posSession) {
     return (
@@ -647,10 +655,10 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
         </div>
       )}
 
-      {/* Main POS Grid: Product Catalog (Left 7 cols) + Live Cart & Tender (Right 5 cols) */}
+      {/* Main POS Grid: Product Catalog (Left) + Live Cart & Tender (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* LEFT: Product Catalog & Category Tabs (7 cols) */}
-        <div className="lg:col-span-7 space-y-4">
+        {/* LEFT: Product Catalog & Category Tabs (7 cols on lg, 7 cols on xl, 8 cols on 2xl) */}
+        <div className="lg:col-span-7 xl:col-span-7 2xl:col-span-8 space-y-4">
           {/* Search & Category Pills */}
           <div className="bg-white border border-slate-200 p-4 rounded-2xl space-y-3 shadow-xs">
             <div className="relative">
@@ -691,8 +699,8 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
             </div>
           </div>
 
-          {/* Product Cards Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[640px] overflow-y-auto pr-1">
+          {/* Product Cards Grid: Scales responsively from 2 up to 5 columns on wide monitors */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 max-h-[calc(100vh-220px)] min-h-[500px] overflow-y-auto pr-1">
             {filteredProducts.map((item, idx) => {
               const storeStock = getItemStoreStock(item);
               const isLow = storeStock <= item.lowStockThreshold && storeStock > 0;
@@ -790,8 +798,8 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
           </div>
         </div>
 
-        {/* RIGHT: Current Active Cart, Patron Loyalty, Discount, & Checkout (5 cols on Desktop, or drawer) */}
-        <div className="hidden lg:flex lg:col-span-5 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex-col justify-between space-y-4 sticky top-20">
+        {/* RIGHT: Current Active Cart, Patron Loyalty, Discount, & Checkout */}
+        <div className="hidden lg:flex lg:col-span-5 xl:col-span-5 2xl:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex-col justify-between space-y-4 sticky top-20">
           <div className="space-y-3.5">
             {/* Cart Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">

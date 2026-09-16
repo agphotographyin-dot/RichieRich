@@ -285,7 +285,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({
   );
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-24 px-1 sm:px-0">
+    <div className="space-y-6 w-full max-w-7xl 2xl:max-w-[1600px] mx-auto pb-24 px-1 sm:px-0">
       {/* Outlet Location & 24x7 Badge Bar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -584,7 +584,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({
           </div>
 
           {/* Products Menu Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredItems.map((item) => {
               const branchStock = getBranchStock(item);
               const isOut = branchStock <= 0;

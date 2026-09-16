@@ -19,7 +19,7 @@ import {
   Store,
   Sparkles,
 } from 'lucide-react';
-import { Role, PushNotification, AdminTab, Customer } from '../../types';
+import { Role, PushNotification, AdminTab, Customer, POSSession } from '../../types';
 import { RichieRichLogo } from './RichieRichLogo';
 
 interface HeaderProps {
@@ -35,6 +35,8 @@ interface HeaderProps {
   onNavigateLanding?: () => void;
   warehouseLayoutMode?: 'modern' | 'classic';
   onToggleWarehouseLayoutMode?: () => void;
+  posSession?: POSSession | null;
+  onSwitchPOSCounter?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -50,6 +52,8 @@ export const Header: React.FC<HeaderProps> = ({
   onNavigateLanding,
   warehouseLayoutMode,
   onToggleWarehouseLayoutMode,
+  posSession,
+  onSwitchPOSCounter,
 }) => {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -65,7 +69,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-[#1E293B] border-b border-slate-700/80 text-white shadow-md">
       {/* Top Primary Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full max-w-[2400px] 2xl:max-w-none mx-auto px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12">
         <div className="flex items-center justify-between h-16 gap-3">
           {/* Logo & Store Title */}
           <div
@@ -109,8 +113,14 @@ export const Header: React.FC<HeaderProps> = ({
             {currentRole === 'pos' && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800 text-white border border-slate-700 shadow-xs">
                 <CreditCard className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-xs font-bold tracking-tight">POS Billing Terminal</span>
-                <span className="text-[10px] font-mono text-slate-400 hidden md:inline">(/pos)</span>
+                <span className="text-xs font-bold tracking-tight">POS Terminal</span>
+                {posSession ? (
+                  <span className="text-[10px] font-mono bg-slate-900 px-2 py-0.5 rounded-md text-amber-300 border border-slate-700 hidden sm:inline">
+                    {posSession.storeName.replace('Richie Rich Pan House - ', '').replace(' & Coffee Lounge', '')} • C{posSession.counterNumber}
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono text-slate-400 hidden md:inline">(/pos)</span>
+                )}
               </div>
             )}
 
@@ -199,6 +209,19 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
+            {/* POS Counter Switch Button */}
+            {currentRole === 'pos' && posSession && onSwitchPOSCounter && (
+              <button
+                type="button"
+                onClick={onSwitchPOSCounter}
+                title="Switch Store Counter"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-xs font-bold transition-all cursor-pointer shadow-xs"
+              >
+                <Store className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Switch Counter</span>
+              </button>
+            )}
+
             {/* Switch / Home Button */}
             {currentRole !== 'landing' && onNavigateLanding && (
               <button
@@ -228,8 +251,8 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Admin Sub Navigation Tabs Bar */}
       {currentRole === 'admin' && onSelectAdminTab && (
-        <div className="border-t border-slate-700/60 bg-slate-900 px-4 sm:px-6 lg:px-8">
-          <div className="max-w-7xl mx-auto flex items-center gap-1.5 overflow-x-auto py-2 scrollbar-none">
+        <div className="border-t border-slate-700/60 bg-slate-900 px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12">
+          <div className="w-full max-w-[2400px] 2xl:max-w-none mx-auto flex items-center gap-1.5 overflow-x-auto py-2 scrollbar-none">
             {adminTabs.map((tab) => {
               const isActive = activeAdminTab === tab.id;
               return (

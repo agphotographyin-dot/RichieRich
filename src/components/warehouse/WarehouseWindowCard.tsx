@@ -109,7 +109,7 @@ export const WarehouseWindowCard: React.FC<WarehouseWindowCardProps> = ({
       {/* Maximized Fullscreen Overlay Modal */}
       {isMaximized && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-150">
-          <div className="bg-white w-full max-w-6xl max-h-[92vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+          <div className="bg-white w-full max-w-7xl 2xl:max-w-[1800px] max-h-[92vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
             {/* Modal Header */}
             <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">

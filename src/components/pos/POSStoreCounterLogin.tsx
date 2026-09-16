@@ -141,7 +141,7 @@ export const POSStoreCounterLogin: React.FC<POSStoreCounterLoginProps> = ({ onLo
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto py-4 sm:py-8 px-3 sm:px-6">
+    <div className="w-full max-w-5xl 2xl:max-w-6xl mx-auto py-4 sm:py-8 px-3 sm:px-6">
       {/* Top Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white rounded-2xl p-5 sm:p-7 shadow-lg border border-slate-700 mb-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
