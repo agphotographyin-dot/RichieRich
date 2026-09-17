@@ -20,34 +20,42 @@ export const AddWarehouseModal: React.FC<AddWarehouseModalProps> = ({
   const [address, setAddress] = useState('');
   const [capacitySqFt, setCapacitySqFt] = useState<number>(5000);
   const [isCentral, setIsCentral] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    warehouseStorage.addWarehouse({
-      code: `WH-AHM-${Date.now().toString().slice(-3)}`,
-      name,
-      type: isCentral ? 'central_hub' : 'regional_depot',
-      address,
-      city,
-      state: 'Gujarat',
-      pincode: '380060',
-      contactPerson: managerName,
-      managerName,
-      phone: phone || '+91 98250 99999',
-      email: 'ops@richierichpan.com',
-      totalCapacitySqFt: capacitySqFt,
-      utilizationPercent: 15,
-      temperatureControlled: true,
-      temperatureRange: '18°C to 24°C',
-      isActive: true,
-      operatingHours: '24x7 Active Operations',
-      storageZones: ['Zone A - Inward Staging', 'Zone B - High-Value Inventory', 'Zone C - Temperature Storage'],
-    });
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    onSuccess();
-    onClose();
+    try {
+      warehouseStorage.addWarehouse({
+        code: `WH-AHM-${Date.now().toString().slice(-3)}`,
+        name,
+        type: isCentral ? 'central_hub' : 'regional_depot',
+        address,
+        city,
+        state: 'Gujarat',
+        pincode: '380060',
+        contactPerson: managerName,
+        managerName,
+        phone: phone || '+91 98250 99999',
+        email: 'ops@richierichpan.com',
+        totalCapacitySqFt: capacitySqFt,
+        utilizationPercent: 15,
+        temperatureControlled: true,
+        temperatureRange: '18°C to 24°C',
+        isActive: true,
+        operatingHours: '24x7 Active Operations',
+        storageZones: ['Zone A - Inward Staging', 'Zone B - High-Value Inventory', 'Zone C - Temperature Storage'],
+      });
+
+      onSuccess();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -159,9 +167,17 @@ export const AddWarehouseModal: React.FC<AddWarehouseModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md"
+              disabled={isSubmitting}
+              className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-75 text-white text-xs font-bold shadow-md flex items-center gap-2 cursor-pointer"
             >
-              Save Warehouse
+              {isSubmitting ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <span>Save Warehouse</span>
+              )}
             </button>
           </div>
         </form>

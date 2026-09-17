@@ -29,6 +29,7 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
   );
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   React.useEffect(() => {
     if (transfer) {
@@ -56,19 +57,26 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (otpInput.trim() !== transfer.otpOrPin?.trim()) {
       setError(`Invalid Delivery OTP! The driver / dispatch note has PIN: ${transfer.otpOrPin}`);
       return;
     }
 
-    const itemMap: Record<string, number> = {};
-    receivedItems.forEach((r) => {
-      itemMap[r.itemId] = r.receivedQty;
-    });
+    setIsSubmitting(true);
+    try {
+      const itemMap: Record<string, number> = {};
+      receivedItems.forEach((r) => {
+        itemMap[r.itemId] = r.receivedQty;
+      });
 
-    warehouseStorage.receiveTransfer(transfer.id, 'Store Manager', itemMap);
-    onSuccess();
-    onClose();
+      warehouseStorage.receiveTransfer(transfer.id, 'Store Manager', itemMap);
+      onSuccess();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -189,9 +197,17 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md"
+              disabled={isSubmitting}
+              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-75 text-white text-xs font-bold shadow-md flex items-center gap-2 cursor-pointer"
             >
-              Confirm Store Receipt
+              {isSubmitting ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Receiving...</span>
+                </>
+              ) : (
+                <span>Confirm Store Receipt</span>
+              )}
             </button>
           </div>
         </form>

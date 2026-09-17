@@ -46,6 +46,7 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
   >('damage_in_transit');
   const [quantity, setQuantity] = useState(5);
   const [remarks, setRemarks] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
@@ -62,46 +63,52 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    const locId = locationType === 'warehouse' ? defaultWh.id : storeId;
-    const locName = locationType === 'warehouse' ? defaultWh.name : stores.find((s) => s.id === storeId)?.name || 'Store';
+    try {
+      const locId = locationType === 'warehouse' ? defaultWh.id : storeId;
+      const locName = locationType === 'warehouse' ? defaultWh.name : stores.find((s) => s.id === storeId)?.name || 'Store';
 
-    const prevStock = inventory.find((i) => i.id === itemId)?.stockQuantity || 0;
-    const adjustedQty = -Math.abs(quantity);
+      const prevStock = inventory.find((i) => i.id === itemId)?.stockQuantity || 0;
+      const adjustedQty = -Math.abs(quantity);
 
-    let mappedReason: 'damaged_spoilage' | 'expired_batch' | 'physical_count_discrepancy' | 'sampling_tasting' | 'theft_loss' | 'other' = 'damaged_spoilage';
-    if (reason === 'expiry_disposal') mappedReason = 'expired_batch';
-    else if (reason === 'physical_audit_correction') mappedReason = 'physical_count_discrepancy';
-    else if (reason === 'scrap_writeoff') mappedReason = 'theft_loss';
-    else if (reason === 'sampling_qc') mappedReason = 'sampling_tasting';
+      let mappedReason: 'damaged_spoilage' | 'expired_batch' | 'physical_count_discrepancy' | 'sampling_tasting' | 'theft_loss' | 'other' = 'damaged_spoilage';
+      if (reason === 'expiry_disposal') mappedReason = 'expired_batch';
+      else if (reason === 'physical_audit_correction') mappedReason = 'physical_count_discrepancy';
+      else if (reason === 'scrap_writeoff') mappedReason = 'theft_loss';
+      else if (reason === 'sampling_qc') mappedReason = 'sampling_tasting';
 
-    warehouseStorage.createStockAdjustment({
-      locationType,
-      locationId: locId,
-      locationName: locName,
-      date: new Date().toISOString().split('T')[0],
-      reason: mappedReason,
-      items: [
-        {
-          itemId,
-          sku: itemSku,
-          name: selectedItemName,
-          batchNumber: batchNumber || undefined,
-          previousStock: prevStock,
-          adjustedQty,
-          unit: itemUnit,
-          unitCost: itemCost,
-          totalValueImpact: adjustedQty * itemCost,
-          itemNotes: remarks,
-        },
-      ],
-      authorizedBy: 'Warehouse Operations Manager',
-      status: 'approved_applied',
-      notes: remarks || `Adjustment: ${selectedItemName} write-off (${quantity} ${itemUnit})`,
-    });
+      warehouseStorage.createStockAdjustment({
+        locationType,
+        locationId: locId,
+        locationName: locName,
+        date: new Date().toISOString().split('T')[0],
+        reason: mappedReason,
+        items: [
+          {
+            itemId,
+            sku: itemSku,
+            name: selectedItemName,
+            batchNumber: batchNumber || undefined,
+            previousStock: prevStock,
+            adjustedQty,
+            unit: itemUnit,
+            unitCost: itemCost,
+            totalValueImpact: adjustedQty * itemCost,
+            itemNotes: remarks,
+          },
+        ],
+        authorizedBy: 'Warehouse Operations Manager',
+        status: 'approved_applied',
+        notes: remarks || `Adjustment: ${selectedItemName} write-off (${quantity} ${itemUnit})`,
+      });
 
-    onSuccess();
-    onClose();
+      onSuccess();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -265,10 +272,20 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2"
+              disabled={isSubmitting}
+              className="px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-75 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer"
             >
-              <AlertTriangle className="w-4 h-4" />
-              <span>Apply Stock Write-off</span>
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Applying Write-off...</span>
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Apply Stock Write-off</span>
+                </>
+              )}
             </button>
           </div>
         </form>

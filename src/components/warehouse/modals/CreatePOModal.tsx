@@ -39,6 +39,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
   const [notes, setNotes] = useState('');
   const [includeGst, setIncludeGst] = useState<boolean>(false);
   const [taxPercent, setTaxPercent] = useState<number>(5);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId);
 
@@ -216,50 +217,56 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    const poItems: PurchaseOrderItem[] = items.map((it) => {
-      const qty = Number(it.quantity) || 1;
-      const unitPrice = Number(it.unitPrice) || 0;
-      const totalCost = qty * unitPrice;
-      const gst = includeGst ? Math.round(totalCost * (activeTaxRate / 100)) : 0;
-      return {
-        itemId: it.itemId,
-        sku: it.sku,
-        name: it.name,
-        category: it.category,
-        quantityOrdered: qty,
-        quantityReceived: 0,
-        unitPrice: unitPrice,
-        unit: it.unit,
-        taxPercent: activeTaxRate,
-        taxAmount: gst,
-        totalAmount: totalCost + gst,
-      };
-    });
+    try {
+      const poItems: PurchaseOrderItem[] = items.map((it) => {
+        const qty = Number(it.quantity) || 1;
+        const unitPrice = Number(it.unitPrice) || 0;
+        const totalCost = qty * unitPrice;
+        const gst = includeGst ? Math.round(totalCost * (activeTaxRate / 100)) : 0;
+        return {
+          itemId: it.itemId,
+          sku: it.sku,
+          name: it.name,
+          category: it.category,
+          quantityOrdered: qty,
+          quantityReceived: 0,
+          unitPrice: unitPrice,
+          unit: it.unit,
+          taxPercent: activeTaxRate,
+          taxAmount: gst,
+          totalAmount: totalCost + gst,
+        };
+      });
 
-    warehouseStorage.createPurchaseOrder({
-      supplierId,
-      supplierName: selectedSupplier?.name || 'Supplier',
-      supplierGstin: selectedSupplier?.gstin && selectedSupplier.gstin !== 'N/A' ? selectedSupplier.gstin : '',
-      destinationWarehouseId: defaultWh.id,
-      destinationWarehouseName: defaultWh.name,
-      orderDate: new Date().toISOString().split('T')[0],
-      expectedDeliveryDate: expectedDate,
-      items: poItems,
-      subtotal: subTotal,
-      taxTotal: gstAmount,
-      freightCharge: 0,
-      grandTotal,
-      status: 'approved',
-      createdByName: 'Purchase Manager',
-      approvedByName: 'Warehouse Admin',
-      paymentTerms: selectedSupplier?.paymentTerms || 'Net 30 Days',
-      paymentStatus: 'unpaid',
-      notes,
-    });
+      warehouseStorage.createPurchaseOrder({
+        supplierId,
+        supplierName: selectedSupplier?.name || 'Supplier',
+        supplierGstin: selectedSupplier?.gstin && selectedSupplier.gstin !== 'N/A' ? selectedSupplier.gstin : '',
+        destinationWarehouseId: defaultWh.id,
+        destinationWarehouseName: defaultWh.name,
+        orderDate: new Date().toISOString().split('T')[0],
+        expectedDeliveryDate: expectedDate,
+        items: poItems,
+        subtotal: subTotal,
+        taxTotal: gstAmount,
+        freightCharge: 0,
+        grandTotal,
+        status: 'approved',
+        createdByName: 'Purchase Manager',
+        approvedByName: 'Warehouse Admin',
+        paymentTerms: selectedSupplier?.paymentTerms || 'Net 30 Days',
+        paymentStatus: 'unpaid',
+        notes,
+      });
 
-    onSuccess();
-    onClose();
+      onSuccess();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -595,10 +602,20 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2"
+              disabled={isSubmitting}
+              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-75 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer"
             >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>Issue Purchase Order</span>
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Issuing PO...</span>
+                </>
+              ) : (
+                <>
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Issue Purchase Order</span>
+                </>
+              )}
             </button>
           </div>
         </form>

@@ -666,34 +666,34 @@ export const warehouseStorage = {
     });
     this.saveBatches([...newBatches, ...batches]);
 
-    // 3. Update Master Inventory Central Stock
-    newBill.items.forEach((item) => {
-      storage.adjustStock(
-        item.itemId,
-        item.quantity,
-        `Inward Purchase Bill ${billNumber} (Supplier: ${newBill.supplierName})`
-      );
+    // 3. Update Master Inventory Central Stock (Batched)
+    const stockDeltas = newBill.items.map((item) => ({
+      id: item.itemId,
+      delta: item.quantity,
+      reason: `Inward Purchase Bill ${billNumber} (Supplier: ${newBill.supplierName})`,
+    }));
+    storage.batchAdjustStock(stockDeltas);
 
-      // Record Audit Trail
-      this.addAuditRecord({
-        referenceNumber: billNumber,
-        itemId: item.itemId,
-        sku: item.sku,
-        itemName: item.name,
-        batchNumber: item.batchNumber,
-        movementType: 'purchase_inward',
-        fromLocation: `Supplier: ${newBill.supplierName}`,
-        toLocation: newBill.warehouseName,
-        quantity: item.quantity,
-        unit: item.unit,
-        balanceAfter: item.quantity,
-        unitCost: item.unitCost,
-        totalCostImpact: item.totalCost,
-        performedBy: newBill.receivedBy || 'Warehouse Manager',
-        userRole: 'Warehouse Manager',
-        notes: `Inward GRN stock verified. Invoice No: ${newBill.supplierInvoiceNo}`,
-      });
-    });
+    // Record Batched Audit Trail
+    const auditRecords = newBill.items.map((item) => ({
+      referenceNumber: billNumber,
+      itemId: item.itemId,
+      sku: item.sku,
+      itemName: item.name,
+      batchNumber: item.batchNumber,
+      movementType: 'purchase_inward' as const,
+      fromLocation: `Supplier: ${newBill.supplierName}`,
+      toLocation: newBill.warehouseName,
+      quantity: item.quantity,
+      unit: item.unit,
+      balanceAfter: item.quantity,
+      unitCost: item.unitCost,
+      totalCostImpact: item.totalCost,
+      performedBy: newBill.receivedBy || 'Warehouse Manager',
+      userRole: 'Warehouse Manager' as const,
+      notes: `Inward GRN stock verified. Invoice No: ${newBill.supplierInvoiceNo}`,
+    }));
+    this.addAuditRecords(auditRecords);
 
     // 4. Update PO status if linked
     if (newBill.poReferenceId) {
@@ -796,21 +796,29 @@ export const warehouseStorage = {
       otpOrPin: transferData.otpOrPin || Math.floor(1000 + Math.random() * 9000).toString(),
     };
 
-    // If auto dispatched, decrement source stock & audit
+    // If auto dispatched, decrement source stock & audit in a single batch
     if (newTransfer.status === 'dispatched_in_transit') {
       newTransfer.dispatchDate = new Date().toISOString().split('T')[0];
-      newTransfer.items.forEach((item) => {
-        const qty = item.dispatchedQty || item.requestedQty;
-        // Decrement warehouse stock
-        storage.adjustStock(item.itemId, -qty, `Dispatched transfer ${transferNumber} to ${newTransfer.destinationName}`);
 
-        this.addAuditRecord({
+      const stockDeltas = newTransfer.items.map((item) => {
+        const qty = item.dispatchedQty || item.requestedQty;
+        return {
+          id: item.itemId,
+          delta: -qty,
+          reason: `Dispatched transfer ${transferNumber} to ${newTransfer.destinationName}`,
+        };
+      });
+      storage.batchAdjustStock(stockDeltas);
+
+      const auditRecords = newTransfer.items.map((item) => {
+        const qty = item.dispatchedQty || item.requestedQty;
+        return {
           referenceNumber: transferNumber,
           itemId: item.itemId,
           sku: item.sku,
           itemName: item.name,
           batchNumber: item.batchNumber,
-          movementType: 'warehouse_transfer_out',
+          movementType: 'warehouse_transfer_out' as const,
           fromLocation: newTransfer.sourceName,
           toLocation: `In Transit ➔ ${newTransfer.destinationName}`,
           quantity: -qty,
@@ -819,10 +827,11 @@ export const warehouseStorage = {
           unitCost: item.unitCost,
           totalCostImpact: -qty * item.unitCost,
           performedBy: newTransfer.dispatchedBy || 'Warehouse Manager',
-          userRole: 'Warehouse Manager',
+          userRole: 'Warehouse Manager' as const,
           notes: `Vehicle: ${newTransfer.vehicleNumber || 'Van'} • Carrier: ${newTransfer.carrierName || 'Internal'} • OTP: ${newTransfer.otpOrPin || 'N/A'}`,
-        });
+        };
       });
+      this.addAuditRecords(auditRecords);
     }
 
     this.saveStockTransfers([newTransfer, ...transfers]);
@@ -850,18 +859,26 @@ export const warehouseStorage = {
     transfer.driverContact = driverContact;
     transfer.otpOrPin = Math.floor(1000 + Math.random() * 9000).toString();
 
-    // Deduct stock from source warehouse
-    transfer.items.forEach((item) => {
+    // Deduct stock from source warehouse in a single batch
+    const stockDeltas = transfer.items.map((item) => {
       const qty = item.dispatchedQty || item.requestedQty;
-      storage.adjustStock(item.itemId, -qty, `Dispatched transfer ${transfer.transferNumber} to ${transfer.destinationName}`);
+      return {
+        id: item.itemId,
+        delta: -qty,
+        reason: `Dispatched transfer ${transfer.transferNumber} to ${transfer.destinationName}`,
+      };
+    });
+    storage.batchAdjustStock(stockDeltas);
 
-      this.addAuditRecord({
+    const auditRecords = transfer.items.map((item) => {
+      const qty = item.dispatchedQty || item.requestedQty;
+      return {
         referenceNumber: transfer.transferNumber,
         itemId: item.itemId,
         sku: item.sku,
         itemName: item.name,
         batchNumber: item.batchNumber,
-        movementType: 'warehouse_transfer_out',
+        movementType: 'warehouse_transfer_out' as const,
         fromLocation: transfer.sourceName,
         toLocation: `In Transit ➔ ${transfer.destinationName}`,
         quantity: -qty,
@@ -870,10 +887,11 @@ export const warehouseStorage = {
         unitCost: item.unitCost,
         totalCostImpact: -qty * item.unitCost,
         performedBy: transfer.dispatchedBy || 'Warehouse Manager',
-        userRole: 'Warehouse Manager',
+        userRole: 'Warehouse Manager' as const,
         notes: `Dispatched in transit with tracking OTP: ${transfer.otpOrPin}`,
-      });
+      };
     });
+    this.addAuditRecords(auditRecords);
 
     this.saveStockTransfers(transfers);
     return true;
@@ -890,6 +908,7 @@ export const warehouseStorage = {
     const inventory = storage.getInventory();
     let inventoryModified = false;
     let hasPartial = false;
+    const auditRecords: Array<Omit<StockMovementAudit, 'id' | 'timestamp'>> = [];
 
     transfer.items.forEach((item) => {
       const receivedQty = itemReceivedMap[item.itemId] !== undefined ? itemReceivedMap[item.itemId] : item.dispatchedQty;
@@ -908,7 +927,7 @@ export const warehouseStorage = {
         inventoryModified = true;
       }
 
-      this.addAuditRecord({
+      auditRecords.push({
         referenceNumber: transfer.transferNumber,
         itemId: item.itemId,
         sku: item.sku,
@@ -927,6 +946,8 @@ export const warehouseStorage = {
         notes: `Stock safely received at store. Received Qty: ${receivedQty}/${item.dispatchedQty} ${item.unit}.`,
       });
     });
+
+    this.addAuditRecords(auditRecords);
 
     if (inventoryModified) {
       storage.saveInventory(inventory);
@@ -1080,33 +1101,35 @@ export const warehouseStorage = {
       totalLossValue,
     };
 
-    // Apply stock delta immediately
-    newAdj.items.forEach((item) => {
-      storage.adjustStock(
-        item.itemId,
-        item.adjustedQty,
-        `Adjustment ${adjustmentNumber} (${newAdj.reason.replace(/_/g, ' ').toUpperCase()})`
-      );
+    // Apply stock delta in a single batch
+    const stockDeltas = newAdj.items.map((item) => ({
+      id: item.itemId,
+      delta: item.adjustedQty,
+      reason: `Adjustment ${adjustmentNumber} (${newAdj.reason.replace(/_/g, ' ').toUpperCase()})`,
+    }));
+    storage.batchAdjustStock(stockDeltas);
 
-      this.addAuditRecord({
-        referenceNumber: adjustmentNumber,
-        itemId: item.itemId,
-        sku: item.sku,
-        itemName: item.name,
-        batchNumber: item.batchNumber,
-        movementType: newAdj.reason === 'damaged_spoilage' || newAdj.reason === 'expired_batch' ? 'damage_scrap' : 'physical_adjustment',
-        fromLocation: newAdj.locationName,
-        toLocation: item.adjustedQty < 0 ? 'Scrap & Spoilage Write-Off' : 'Stock Surplus Addition',
-        quantity: item.adjustedQty,
-        unit: item.unit,
-        balanceAfter: item.previousStock + item.adjustedQty,
-        unitCost: item.unitCost,
-        totalCostImpact: item.adjustedQty * item.unitCost,
-        performedBy: newAdj.authorizedBy,
-        userRole: 'Warehouse Manager',
-        notes: `Reason: ${newAdj.reason.replace(/_/g, ' ')} • ${item.itemNotes || ''}`,
-      });
-    });
+    const auditRecords = newAdj.items.map((item) => ({
+      referenceNumber: adjustmentNumber,
+      itemId: item.itemId,
+      sku: item.sku,
+      itemName: item.name,
+      batchNumber: item.batchNumber,
+      movementType: (newAdj.reason === 'damaged_spoilage' || newAdj.reason === 'expired_batch'
+        ? ('damage_scrap' as const)
+        : ('physical_adjustment' as const)),
+      fromLocation: newAdj.locationName,
+      toLocation: item.adjustedQty < 0 ? 'Scrap & Spoilage Write-Off' : 'Stock Surplus Addition',
+      quantity: item.adjustedQty,
+      unit: item.unit,
+      balanceAfter: item.previousStock + item.adjustedQty,
+      unitCost: item.unitCost,
+      totalCostImpact: item.adjustedQty * item.unitCost,
+      performedBy: newAdj.authorizedBy,
+      userRole: 'Warehouse Manager' as const,
+      notes: `Reason: ${newAdj.reason.replace(/_/g, ' ')} • ${item.itemNotes || ''}`,
+    }));
+    this.addAuditRecords(auditRecords);
 
     this.saveStockAdjustments([newAdj, ...adjustments]);
 
@@ -1206,14 +1229,21 @@ export const warehouseStorage = {
     }
   },
 
-  addAuditRecord(audit: Omit<StockMovementAudit, 'id' | 'timestamp'>): void {
+  addAuditRecords(audits: Array<Omit<StockMovementAudit, 'id' | 'timestamp'>>): void {
+    if (!audits || audits.length === 0) return;
     const list = this.getAuditTrail();
-    const newRecord: StockMovementAudit = {
+    const now = Date.now();
+    const newRecords: StockMovementAudit[] = audits.map((audit, idx) => ({
       ...audit,
-      id: `aud-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: `aud-${now}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
       timestamp: new Date().toISOString(),
-    };
-    this.saveAuditTrail([newRecord, ...list]);
+    }));
+    // Cap to latest 1000 records to prevent bloated storage
+    this.saveAuditTrail([...newRecords, ...list].slice(0, 1000));
+  },
+
+  addAuditRecord(audit: Omit<StockMovementAudit, 'id' | 'timestamp'>): void {
+    this.addAuditRecords([audit]);
   },
 
   // =========================================================================

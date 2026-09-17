@@ -43,6 +43,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
   const [carrierName, setCarrierName] = useState('Richie Rich Express Van');
   const [otpCode, setOtpCode] = useState(() => initialData?.otpOrPin || Math.floor(1000 + Math.random() * 9000).toString());
   const [notes, setNotes] = useState(initialData?.notes || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [items, setItems] = useState<
     Array<{
@@ -169,47 +170,54 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const st = stores.find((s) => s.id === destStoreId);
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    const fromLoc = transferType === 'warehouse_to_store' ? defaultWh.name : st?.name || 'Store';
-    const toLoc = transferType === 'warehouse_to_store' ? st?.name || 'Store' : defaultWh.name;
+    try {
+      const st = stores.find((s) => s.id === destStoreId);
 
-    const transferItems: TransferItem[] = items.map((it) => {
-      return {
-        itemId: it.itemId,
-        sku: it.sku,
-        name: it.name,
-        batchNumber: it.batchNumber || 'BATCH-STD',
-        requestedQty: it.quantity,
-        dispatchedQty: it.quantity,
-        receivedQty: 0,
-        unit: it.unit,
-        unitCost: it.unitCost,
-      };
-    });
+      const fromLoc = transferType === 'warehouse_to_store' ? defaultWh.name : st?.name || 'Store';
+      const toLoc = transferType === 'warehouse_to_store' ? st?.name || 'Store' : defaultWh.name;
 
-    warehouseStorage.createStockTransfer({
-      type: transferType,
-      sourceType: transferType === 'warehouse_to_store' ? 'warehouse' : 'store',
-      sourceId: transferType === 'warehouse_to_store' ? defaultWh.id : destStoreId,
-      sourceName: fromLoc,
-      destinationType: transferType === 'warehouse_to_store' ? 'store' : 'warehouse',
-      destinationId: transferType === 'warehouse_to_store' ? destStoreId : defaultWh.id,
-      destinationName: toLoc,
-      requestedDate: new Date().toISOString().split('T')[0],
-      dispatchDate: new Date().toISOString().split('T')[0],
-      status: 'dispatched_in_transit',
-      items: transferItems,
-      vehicleNumber: vehicleNo,
-      carrierName,
-      driverContact: driverPhone ? `${driverName} (${driverPhone})` : driverName,
-      otpOrPin: otpCode,
-      dispatchedBy: 'Warehouse Dispatch Officer',
-      notes,
-    });
+      const transferItems: TransferItem[] = items.map((it) => {
+        return {
+          itemId: it.itemId,
+          sku: it.sku,
+          name: it.name,
+          batchNumber: it.batchNumber || 'BATCH-STD',
+          requestedQty: it.quantity,
+          dispatchedQty: it.quantity,
+          receivedQty: 0,
+          unit: it.unit,
+          unitCost: it.unitCost,
+        };
+      });
 
-    onSuccess();
-    onClose();
+      warehouseStorage.createStockTransfer({
+        type: transferType,
+        sourceType: transferType === 'warehouse_to_store' ? 'warehouse' : 'store',
+        sourceId: transferType === 'warehouse_to_store' ? defaultWh.id : destStoreId,
+        sourceName: fromLoc,
+        destinationType: transferType === 'warehouse_to_store' ? 'store' : 'warehouse',
+        destinationId: transferType === 'warehouse_to_store' ? destStoreId : defaultWh.id,
+        destinationName: toLoc,
+        requestedDate: new Date().toISOString().split('T')[0],
+        dispatchDate: new Date().toISOString().split('T')[0],
+        status: 'dispatched_in_transit',
+        items: transferItems,
+        vehicleNumber: vehicleNo,
+        carrierName,
+        driverContact: driverPhone ? `${driverName} (${driverPhone})` : driverName,
+        otpOrPin: otpCode,
+        dispatchedBy: 'Warehouse Dispatch Officer',
+        notes,
+      });
+
+      onSuccess();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const selectedStoreObj = stores.find((s) => s.id === destStoreId);
@@ -472,10 +480,20 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2"
+              disabled={isSubmitting}
+              className="px-5 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-75 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer"
             >
-              <Truck className="w-4 h-4" />
-              <span>Generate Gate Pass & Dispatch</span>
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Dispatching...</span>
+                </>
+              ) : (
+                <>
+                  <Truck className="w-4 h-4" />
+                  <span>Generate Gate Pass & Dispatch</span>
+                </>
+              )}
             </button>
           </div>
         </form>

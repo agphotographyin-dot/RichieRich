@@ -23,31 +23,39 @@ export const AddSupplierModal: React.FC<AddSupplierModalProps> = ({
   const [gstin, setGstin] = useState('');
   const [paymentTerms, setPaymentTerms] = useState('Net 30 Days');
   const [openingBalance, setOpeningBalance] = useState<number>(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    warehouseStorage.addSupplier({
-      code: `SUP-${Date.now().toString().slice(-4)}`,
-      name,
-      category,
-      contactPerson,
-      phone,
-      email,
-      address: `${city}, ${state}`,
-      city,
-      state,
-      gstin: gstin.trim() || 'N/A',
-      panNumber: 'AAACR1234F',
-      paymentTerms,
-      creditLimit: 500000,
-      rating: 5,
-      isActive: true,
-    });
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    onSuccess();
-    onClose();
+    try {
+      warehouseStorage.addSupplier({
+        code: `SUP-${Date.now().toString().slice(-4)}`,
+        name,
+        category,
+        contactPerson,
+        phone,
+        email,
+        address: `${city}, ${state}`,
+        city,
+        state,
+        gstin: gstin.trim() || 'N/A',
+        panNumber: 'AAACR1234F',
+        paymentTerms,
+        creditLimit: 500000,
+        rating: 5,
+        isActive: true,
+      });
+
+      onSuccess();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -178,9 +186,17 @@ export const AddSupplierModal: React.FC<AddSupplierModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold shadow-md"
+              disabled={isSubmitting}
+              className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-75 text-white text-xs font-bold shadow-md flex items-center gap-2 cursor-pointer"
             >
-              Save Supplier
+              {isSubmitting ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <span>Save Supplier</span>
+              )}
             </button>
           </div>
         </form>

@@ -26,22 +26,29 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   const [paymentMode, setPaymentMode] = useState<'NEFT' | 'RTGS' | 'UPI' | 'Cheque' | 'Cash'>('NEFT');
   const [refNumber, setRefNumber] = useState(`UTR-${Math.floor(10000000 + Math.random() * 90000000)}`);
   const [notes, setNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!supplier) return;
 
-    let mode: 'bank_neft' | 'upi_qr' | 'cheque' | 'cash' = 'bank_neft';
-    if (paymentMode === 'UPI') mode = 'upi_qr';
-    else if (paymentMode === 'Cheque') mode = 'cheque';
-    else if (paymentMode === 'Cash') mode = 'cash';
+    setIsSubmitting(true);
+    try {
+      let mode: 'bank_neft' | 'upi_qr' | 'cheque' | 'cash' = 'bank_neft';
+      if (paymentMode === 'UPI') mode = 'upi_qr';
+      else if (paymentMode === 'Cheque') mode = 'cheque';
+      else if (paymentMode === 'Cash') mode = 'cash';
 
-    warehouseStorage.recordSupplierPayment(supplier.id, amount, mode, refNumber, notes);
+      warehouseStorage.recordSupplierPayment(supplier.id, amount, mode, refNumber, notes);
 
-    onSuccess();
-    onClose();
+      onSuccess();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -152,9 +159,17 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold shadow-md"
+              disabled={isSubmitting}
+              className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-75 text-white text-xs font-bold shadow-md flex items-center gap-2 cursor-pointer"
             >
-              Record Payment & Update Ledger
+              {isSubmitting ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Recording...</span>
+                </>
+              ) : (
+                <span>Record Payment & Update Ledger</span>
+              )}
             </button>
           </div>
         </form>

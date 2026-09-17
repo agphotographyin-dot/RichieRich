@@ -1790,8 +1790,12 @@ export class StorageService {
 
     this.setCached(STORAGE_KEYS.INVENTORY, sanitized);
     safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(sanitized));
-    this.checkAndTriggerLowStockAlerts(sanitized);
     this.notify();
+
+    // Defer low stock alert evaluation so UI operations remain immediate
+    setTimeout(() => {
+      this.checkAndTriggerLowStockAlerts(sanitized);
+    }, 40);
   }
 
   addInventoryItem(item: Omit<InventoryItem, 'id' | 'profitPerUnit' | 'marginPercentage'>): InventoryItem {
@@ -2011,18 +2015,42 @@ export class StorageService {
     this.saveInventory(items);
 
     if (delta < 0 && item.stockQuantity <= item.lowStockThreshold) {
-      soundEffects.playWarningChime();
+      setTimeout(() => soundEffects.playWarningChime(), 50);
     }
     return true;
   }
 
+  batchAdjustStock(adjustments: Array<{ id: string; delta: number; reason?: string }>): boolean {
+    if (!adjustments || adjustments.length === 0) return true;
+    const items = this.getInventory();
+    let modified = false;
+    let anyLowStockWarning = false;
+
+    adjustments.forEach(({ id, delta }) => {
+      const item = items.find((i) => i.id === id);
+      if (item) {
+        item.stockQuantity = Math.max(0, item.stockQuantity + delta);
+        modified = true;
+        if (delta < 0 && item.stockQuantity <= item.lowStockThreshold) {
+          anyLowStockWarning = true;
+        }
+      }
+    });
+
+    if (modified) {
+      this.saveInventory(items);
+    }
+    if (anyLowStockWarning) {
+      setTimeout(() => soundEffects.playWarningChime(), 50);
+    }
+    return modified;
+  }
+
   private checkAndTriggerLowStockAlerts(items: InventoryItem[]) {
     const lowStockItems = items.filter((i) => i.stockQuantity <= i.lowStockThreshold);
-    if (lowStockItems.length === 0) return;
-
-    // Check if we need to emit new notifications
     const notifications = this.getNotifications();
     const stores = this.getStores();
+    const newNotifications: PushNotification[] = [];
 
     // 1. Central Master Warehouse Low Stock Alerts
     lowStockItems.forEach((item) => {
@@ -2035,12 +2063,14 @@ export class StorageService {
       );
 
       if (!alreadyAlertedRecently) {
-        this.addNotification({
+        newNotifications.push({
+          id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
           title: `⚠️ Central WH Low Stock: ${item.name}`,
           message: `Central Master Warehouse has only ${item.stockQuantity} ${item.unit} available (Minimum Threshold: ${item.lowStockThreshold}). Issue a Supplier Purchase Order to replenish.`,
           type: 'low_stock',
-          targetRole: 'admin',
+          timestamp: new Date().toISOString(),
           read: false,
+          targetRole: 'admin',
           linkTab: 'inventory',
         });
       }
@@ -2065,18 +2095,24 @@ export class StorageService {
           );
 
           if (!alreadyAlertedStore) {
-            this.addNotification({
+            newNotifications.push({
+              id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
               title: `⚠️ In-Store Low Stock: ${storeName} - ${item.name}`,
               message: `${storeName} currently has only ${storeQty} ${item.unit} remaining (Store Min Threshold: ${storeMinThreshold}). Dispatch replenishment from Central Master Warehouse.`,
               type: 'low_stock',
-              targetRole: 'admin',
+              timestamp: new Date().toISOString(),
               read: false,
+              targetRole: 'admin',
               linkTab: 'store_stock',
             });
           }
         }
       });
     });
+
+    if (newNotifications.length > 0) {
+      this.saveNotifications([...newNotifications, ...notifications]);
+    }
   }
 
   // --- CATEGORIES ---
@@ -2222,10 +2258,12 @@ export class StorageService {
         }
       }
     });
-    this.saveInventory(inventory);
+    // Deduct stock in memory and persist
+    this.setCached(STORAGE_KEYS.INVENTORY, inventory);
+    safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory));
 
     if (triggeredStoreLowStock) {
-      soundEffects.playWarningChime();
+      setTimeout(() => soundEffects.playWarningChime(), 60);
     }
 
     // 2. Award or Deduct Loyalty Points
@@ -2247,37 +2285,46 @@ export class StorageService {
         // Tier upgrades
         if (cust.totalSpent >= 3000 && cust.tier !== 'Platinum Royal') {
           cust.tier = 'Platinum Royal';
-          this.addNotification({
-            title: `👑 VIP Tier Upgrade: ${cust.name}`,
-            message: `${cust.name} has been upgraded to Platinum Royal! Enjoy 25% VIP perks.`,
-            type: 'loyalty_reward',
-            targetRole: 'customer',
-            read: false,
-          });
+          setTimeout(() => {
+            this.addNotification({
+              title: `👑 VIP Tier Upgrade: ${cust.name}`,
+              message: `${cust.name} has been upgraded to Platinum Royal! Enjoy 25% VIP perks.`,
+              type: 'loyalty_reward',
+              targetRole: 'customer',
+              read: false,
+            });
+          }, 80);
         } else if (cust.totalSpent >= 1200 && cust.tier === 'Silver') {
           cust.tier = 'Gold';
         }
 
         newOrder.loyaltyPointsEarned = pointsEarned;
-        this.saveCustomers(customers);
+        this.setCached(STORAGE_KEYS.CUSTOMERS, customers);
+        safeStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
       }
     }
 
     // 3. Save order
     orders.unshift(newOrder);
-    this.saveOrders(orders);
+    this.setCached(STORAGE_KEYS.ORDERS, orders);
+    safeStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
 
-    // 4. Trigger audio & notifications
-    soundEffects.playSuccessChime();
+    // Single unified notification broadcast for state synchronization
+    this.notify();
 
-    this.addNotification({
-      title: `🛍️ New Order #${orderNumber} (${newOrder.source === 'customer_online' ? 'Online' : 'POS Counter'})`,
-      message: `${newOrder.items.length} items • Total ${CURRENCY}${newOrder.grandTotal.toFixed(2)} [${newOrder.paymentMethod.toUpperCase()}]`,
-      type: 'order_update',
-      targetRole: 'all',
-      read: false,
-      linkTab: 'orders',
-    });
+    // 4. Trigger audio & background notifications asynchronously (zero UI lag)
+    setTimeout(() => {
+      soundEffects.playSuccessChime();
+
+      this.addNotification({
+        title: `🛍️ New Order #${orderNumber} (${newOrder.source === 'customer_online' ? 'Online' : 'POS Counter'})`,
+        message: `${newOrder.items.length} items • Total ${CURRENCY}${newOrder.grandTotal.toFixed(2)} [${newOrder.paymentMethod.toUpperCase()}]`,
+        type: 'order_update',
+        targetRole: 'all',
+        read: false,
+        linkTab: 'orders',
+      });
+    }, 10);
 
     return newOrder;
   }

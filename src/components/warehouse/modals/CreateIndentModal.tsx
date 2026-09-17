@@ -30,6 +30,7 @@ export const CreateIndentModal: React.FC<CreateIndentModalProps> = ({
   const [storeId, setStoreId] = useState(stores[0]?.id || 'bopal');
   const [urgency, setUrgency] = useState<'routine' | 'urgent_low_stock' | 'emergency_event'>('urgent_low_stock');
   const [notes, setNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [items, setItems] = useState<
     Array<{
@@ -106,36 +107,43 @@ export const CreateIndentModal: React.FC<CreateIndentModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const st = stores.find((s) => s.id === storeId);
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    const indentItems: StoreStockIndentItem[] = items.map((it) => {
-      const inv = inventory.find((i) => i.id === it.itemId);
-      const currentStoreStock = inv?.storeAllocations?.[storeId] || 0;
-      return {
-        itemId: it.itemId,
-        sku: it.sku,
-        name: it.name,
-        requestedQty: it.quantity,
-        currentStoreStock,
-        minThreshold: it.threshold || 10,
-        unit: it.unit || 'units',
-      };
-    });
+    try {
+      const st = stores.find((s) => s.id === storeId);
 
-    warehouseStorage.createStoreIndent({
-      storeId,
-      storeName: st?.name || 'Store',
-      targetWarehouseId: defaultWh.id,
-      targetWarehouseName: defaultWh.name,
-      urgency,
-      requestDate: new Date().toISOString().split('T')[0],
-      items: indentItems,
-      requestedBy: `${st?.name.split(' ')[0]} Store Manager`,
-      notes,
-    });
+      const indentItems: StoreStockIndentItem[] = items.map((it) => {
+        const inv = inventory.find((i) => i.id === it.itemId);
+        const currentStoreStock = inv?.storeAllocations?.[storeId] || 0;
+        return {
+          itemId: it.itemId,
+          sku: it.sku,
+          name: it.name,
+          requestedQty: it.quantity,
+          currentStoreStock,
+          minThreshold: it.threshold || 10,
+          unit: it.unit || 'units',
+        };
+      });
 
-    onSuccess();
-    onClose();
+      warehouseStorage.createStoreIndent({
+        storeId,
+        storeName: st?.name || 'Store',
+        targetWarehouseId: defaultWh.id,
+        targetWarehouseName: defaultWh.name,
+        urgency,
+        requestDate: new Date().toISOString().split('T')[0],
+        items: indentItems,
+        requestedBy: `${st?.name.split(' ')[0]} Store Manager`,
+        notes,
+      });
+
+      onSuccess();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -321,10 +329,20 @@ export const CreateIndentModal: React.FC<CreateIndentModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2"
+              disabled={isSubmitting}
+              className="px-5 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-75 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer"
             >
-              <Send className="w-4 h-4" />
-              <span>Submit Store Indent</span>
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Submitting Indent...</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  <span>Submit Store Indent</span>
+                </>
+              )}
             </button>
           </div>
         </form>

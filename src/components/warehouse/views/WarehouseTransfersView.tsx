@@ -48,6 +48,8 @@ export const WarehouseTransfersView: React.FC<WarehouseTransfersViewProps> = ({
   onOpenReceiveModal,
 }) => {
   const [subTab, setSubTab] = useState<'transfers' | 'returns' | 'indents'>('transfers');
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [manifestDoc, setManifestDoc] = useState<{
     isOpen: boolean;
     type: ManifestDocumentType;
@@ -84,14 +86,26 @@ export const WarehouseTransfersView: React.FC<WarehouseTransfersViewProps> = ({
   });
 
   const handleApproveIndent = (indentId: string) => {
-    if (confirm('Approve store indent request and automatically create a Warehouse Dispatch Transfer?')) {
+    if (approvingId) return;
+    setApprovingId(indentId);
+    try {
       warehouseStorage.approveStoreIndent(indentId);
-      alert('Indent approved and converted to an active Transfer Order!');
+      setSuccessMsg('Indent approved and converted to an active Transfer Order!');
+      setTimeout(() => setSuccessMsg(null), 3500);
+    } finally {
+      setApprovingId(null);
     }
   };
 
   return (
     <div className="space-y-5">
+      {successMsg && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2 shadow-sm animate-fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+
       {/* Sub-navigation & Action Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
@@ -341,10 +355,18 @@ export const WarehouseTransfersView: React.FC<WarehouseTransfersViewProps> = ({
                           </button>
                           {ind.status === 'pending' && (
                             <button
+                              disabled={approvingId === ind.id}
                               onClick={() => handleApproveIndent(ind.id)}
-                              className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs transition-colors cursor-pointer"
+                              className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-75 text-white font-semibold text-xs shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
                             >
-                              Approve & Transfer
+                              {approvingId === ind.id ? (
+                                <>
+                                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                  <span>Approving...</span>
+                                </>
+                              ) : (
+                                <span>Approve & Transfer</span>
+                              )}
                             </button>
                           )}
                           {ind.status === 'converted_to_transfer' && (

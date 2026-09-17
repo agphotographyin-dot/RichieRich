@@ -41,6 +41,7 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
   const [notes, setNotes] = useState('');
   const [includeGst, setIncludeGst] = useState<boolean>(initialPO ? (initialPO.taxTotal > 0) : false);
   const [taxPercent, setTaxPercent] = useState<number>(initialPO?.items[0]?.taxPercent || 5);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId);
   const supplierProducts = useMemo(() => {
@@ -186,56 +187,63 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const selectedSupplier = suppliers.find((s) => s.id === supplierId);
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    const billItems: PurchaseBillItem[] = items.map((it) => {
-      const qty = Number(it.quantity) || 1;
-      const unitCost = Number(it.unitCost) || 0;
-      const totalAmount = qty * unitCost;
-      const gst = includeGst ? Math.round(totalAmount * (activeTaxRate / 100)) : 0;
-      return {
-        itemId: it.itemId,
-        sku: it.sku,
-        name: it.name,
-        category: it.category,
-        quantity: qty,
-        unitCost: unitCost,
-        unit: it.unit,
-        taxRate: activeTaxRate,
-        taxAmount: gst,
-        totalCost: totalAmount + gst,
-        batchNumber: it.batchNumber || `BATCH-${Date.now().toString().slice(-4)}`,
-        mfgDate: it.mfgDate,
-        expiryDate: it.expiryDate,
-      };
-    });
+    try {
+      const selectedSupplier = suppliers.find((s) => s.id === supplierId);
 
-    warehouseStorage.createPurchaseBill({
-      supplierId,
-      supplierName: selectedSupplier?.name || 'Supplier',
-      warehouseId: defaultWh.id,
-      warehouseName: defaultWh.name,
-      supplierInvoiceNo: invoiceNo,
-      billDate: invoiceDate,
-      receivedDate: new Date().toISOString().split('T')[0],
-      poReferenceId: selectedPoId || undefined,
-      items: billItems,
-      subtotal: subTotal,
-      gstAmount,
-      freightCharges: 0,
-      roundOff: 0,
-      grandTotal,
-      paidAmount: paymentMode === 'cash' || paymentMode === 'bank_neft' || paymentMode === 'upi_qr' ? grandTotal : 0,
-      dueAmount: paymentMode === 'credit_payable' ? grandTotal : 0,
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      paymentStatus: paymentMode === 'credit_payable' ? 'due' : 'paid',
-      grnStatus: 'verified_stocked',
-      receivedBy: 'Warehouse Inward Officer',
-      notes,
-    });
+      const billItems: PurchaseBillItem[] = items.map((it) => {
+        const qty = Number(it.quantity) || 1;
+        const unitCost = Number(it.unitCost) || 0;
+        const totalAmount = qty * unitCost;
+        const gst = includeGst ? Math.round(totalAmount * (activeTaxRate / 100)) : 0;
+        return {
+          itemId: it.itemId,
+          sku: it.sku,
+          name: it.name,
+          category: it.category,
+          quantity: qty,
+          unitCost: unitCost,
+          unit: it.unit,
+          taxRate: activeTaxRate,
+          taxAmount: gst,
+          totalCost: totalAmount + gst,
+          batchNumber: it.batchNumber || `BATCH-${Date.now().toString().slice(-4)}`,
+          mfgDate: it.mfgDate,
+          expiryDate: it.expiryDate,
+        };
+      });
 
-    onSuccess();
-    onClose();
+      warehouseStorage.createPurchaseBill({
+        supplierId,
+        supplierName: selectedSupplier?.name || 'Supplier',
+        warehouseId: defaultWh.id,
+        warehouseName: defaultWh.name,
+        supplierInvoiceNo: invoiceNo,
+        billDate: invoiceDate,
+        receivedDate: new Date().toISOString().split('T')[0],
+        poReferenceId: selectedPoId || undefined,
+        items: billItems,
+        subtotal: subTotal,
+        gstAmount,
+        freightCharges: 0,
+        roundOff: 0,
+        grandTotal,
+        paidAmount: paymentMode === 'cash' || paymentMode === 'bank_neft' || paymentMode === 'upi_qr' ? grandTotal : 0,
+        dueAmount: paymentMode === 'credit_payable' ? grandTotal : 0,
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        paymentStatus: paymentMode === 'credit_payable' ? 'due' : 'paid',
+        grnStatus: 'verified_stocked',
+        receivedBy: 'Warehouse Inward Officer',
+        notes,
+      });
+
+      onSuccess();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -551,10 +559,20 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer"
+              disabled={isSubmitting}
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-75 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer"
             >
-              <PackagePlus className="w-4 h-4" />
-              <span>Record Inward Stock & Post Bill</span>
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Recording Stock...</span>
+                </>
+              ) : (
+                <>
+                  <PackagePlus className="w-4 h-4" />
+                  <span>Record Inward Stock & Post Bill</span>
+                </>
+              )}
             </button>
           </div>
         </form>

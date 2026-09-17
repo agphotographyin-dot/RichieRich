@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Search,
   Scan,
@@ -91,7 +91,8 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
 
   const [showShiftSummary, setShowShiftSummary] = useState(false);
   const [localScannerOpen, setLocalScannerOpen] = useState(false);
-  const [, setOrderSyncTrigger] = useState(0);
+  const [orderSyncTrigger, setOrderSyncTrigger] = useState(0);
+  const [isProcessingSale, setIsProcessingSale] = useState(false);
 
   // Subscribe to storage changes for live shift & order sync
   useEffect(() => {
@@ -506,72 +507,99 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
 
   // Complete checkout
   const handleProcessCheckout = () => {
-    if (cart.length === 0) return;
-
-    // Create order with full store & counter metadata and deduct stock in storage
-    const newOrder = storage.processOrder({
-      source: 'pos_counter',
-      storeId: posSession.storeId,
-      storeName: posSession.storeName,
-      counterNumber: posSession.counterNumber,
-      counterName: posSession.counterName,
-      cashierName: posSession.cashierName,
-      customerId: selectedCustomer?.id,
-      customerName: selectedCustomer ? selectedCustomer.name : 'Walk-in Guest',
-      customerPhone: selectedCustomer ? selectedCustomer.phone : customerPhone || undefined,
-      items: cart.map((c) => ({
-        itemId: c.itemId,
-        name: c.name,
-        sku: c.sku,
-        price: c.price,
-        costPrice: c.costPrice,
-        quantity: c.quantity,
-        customization: c.customization,
-        subtotal: c.subtotal,
-        profit: c.profit,
-        isTaxApplicable: c.isTaxApplicable !== false,
-      })),
-      subtotal,
-      discountAmount: effectiveDiscount,
-      appliedPromoCode: appliedDiscount?.code,
-      loyaltyPointsUsed: pointsToRedeem,
-      taxAmount,
-      grandTotal,
-      totalCost,
-      totalProfit,
-      paymentMethod,
-      paymentStatus: 'paid',
-      status: 'completed',
-    });
+    if (cart.length === 0 || isProcessingSale) return;
+    setIsProcessingSale(true);
 
     try {
-      confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 } });
-    } catch {}
+      // Create order with full store & counter metadata and deduct stock in storage
+      const newOrder = storage.processOrder({
+        source: 'pos_counter',
+        storeId: posSession.storeId,
+        storeName: posSession.storeName,
+        counterNumber: posSession.counterNumber,
+        counterName: posSession.counterName,
+        cashierName: posSession.cashierName,
+        customerId: selectedCustomer?.id,
+        customerName: selectedCustomer ? selectedCustomer.name : 'Walk-in Guest',
+        customerPhone: selectedCustomer ? selectedCustomer.phone : customerPhone || undefined,
+        items: cart.map((c) => ({
+          itemId: c.itemId,
+          name: c.name,
+          sku: c.sku,
+          price: c.price,
+          costPrice: c.costPrice,
+          quantity: c.quantity,
+          customization: c.customization,
+          subtotal: c.subtotal,
+          profit: c.profit,
+          isTaxApplicable: c.isTaxApplicable !== false,
+        })),
+        subtotal,
+        discountAmount: effectiveDiscount,
+        appliedPromoCode: appliedDiscount?.code,
+        loyaltyPointsUsed: pointsToRedeem,
+        taxAmount,
+        grandTotal,
+        totalCost,
+        totalProfit,
+        paymentMethod,
+        paymentStatus: 'paid',
+        status: 'completed',
+      });
 
-    setRecentOrder(newOrder);
-    setPaymentModalOpen(false);
-    setReceiptModalOpen(true);
-    setMobileCartOpen(false);
-    setCart([]);
-    setSelectedCustomer(null);
-    setCustomerPhone('');
-    setRedeemPoints(false);
-    setAppliedDiscount(null);
+      setRecentOrder(newOrder);
+      setPaymentModalOpen(false);
+      setReceiptModalOpen(true);
+      setMobileCartOpen(false);
+      setCart([]);
+      setSelectedCustomer(null);
+      setCustomerPhone('');
+      setRedeemPoints(false);
+      setAppliedDiscount(null);
+
+      requestAnimationFrame(() => {
+        try {
+          confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 } });
+        } catch {}
+      });
+    } finally {
+      setIsProcessingSale(false);
+    }
   };
 
-  // Shift summary calculations for current store and counter (resets after 12:00 AM midnight)
-  const allOrders = storage.getOrders();
-  const storeOrdersToday = allOrders.filter(
-    (o) => o.storeId === posSession.storeId && isToday(o.createdAt)
-  );
-  const posOrdersToday = storeOrdersToday.filter(
-    (o) => o.source === 'pos_counter' && (o.counterNumber === posSession.counterNumber || !o.counterNumber)
-  );
-  const totalShiftRevenue = posOrdersToday.reduce((s, o) => s + o.grandTotal, 0);
-  const totalShiftCash = posOrdersToday.filter((o) => o.paymentMethod === 'cash').reduce((s, o) => s + o.grandTotal, 0);
-  const totalShiftUPI = posOrdersToday.filter((o) => o.paymentMethod === 'upi_qr').reduce((s, o) => s + o.grandTotal, 0);
-  const totalShiftCard = posOrdersToday.filter((o) => o.paymentMethod === 'card').reduce((s, o) => s + o.grandTotal, 0);
-  const totalStoreSalesToday = storeOrdersToday.reduce((s, o) => s + o.grandTotal, 0);
+  // Shift summary calculations for current store and counter (memoized to avoid recalculations during typing/cart edits)
+  const {
+    totalShiftRevenue,
+    totalShiftCash,
+    totalShiftUPI,
+    totalShiftCard,
+    totalStoreSalesToday,
+    posOrdersCount,
+    storeOrdersCount,
+  } = useMemo(() => {
+    const allOrders = storage.getOrders();
+    const storeOrdersToday = allOrders.filter(
+      (o) => o.storeId === posSession.storeId && isToday(o.createdAt)
+    );
+    const posOrdersToday = storeOrdersToday.filter(
+      (o) => o.source === 'pos_counter' && (o.counterNumber === posSession.counterNumber || !o.counterNumber)
+    );
+    const totalShiftRevenue = posOrdersToday.reduce((s, o) => s + o.grandTotal, 0);
+    const totalShiftCash = posOrdersToday.filter((o) => o.paymentMethod === 'cash').reduce((s, o) => s + o.grandTotal, 0);
+    const totalShiftUPI = posOrdersToday.filter((o) => o.paymentMethod === 'upi_qr').reduce((s, o) => s + o.grandTotal, 0);
+    const totalShiftCard = posOrdersToday.filter((o) => o.paymentMethod === 'card').reduce((s, o) => s + o.grandTotal, 0);
+    const totalStoreSalesToday = storeOrdersToday.reduce((s, o) => s + o.grandTotal, 0);
+
+    return {
+      totalShiftRevenue,
+      totalShiftCash,
+      totalShiftUPI,
+      totalShiftCard,
+      totalStoreSalesToday,
+      posOrdersCount: posOrdersToday.length,
+      storeOrdersCount: storeOrdersToday.length,
+    };
+  }, [posSession.storeId, posSession.counterNumber, orderSyncTrigger]);
 
   const totalCartCount = cart.reduce((s, i) => s + i.quantity, 0);
 
@@ -1135,9 +1163,19 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
             <button
               type="button"
               onClick={handleProcessCheckout}
-              className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-colors"
+              disabled={isProcessingSale}
+              className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 disabled:opacity-75 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-colors"
             >
-              <CheckCircle2 className="w-4 h-4 text-white" /> Complete Sale ({posSession.counterName})
+              {isProcessingSale ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Completing Sale...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-white" /> Complete Sale ({posSession.counterName})
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -1178,11 +1216,11 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
               )}
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center">
                 <span className="text-slate-600 font-medium">Counter #{posSession.counterNumber} Bills Today:</span>
-                <span className="font-bold text-slate-800">{posOrdersToday.length} transactions</span>
+                <span className="font-bold text-slate-800">{posOrdersCount} transactions</span>
               </div>
               <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100 flex justify-between items-center">
                 <span className="text-indigo-900 font-medium">Store-Wide Sales Today:</span>
-                <span className="font-bold text-indigo-950">{CURRENCY}{totalStoreSalesToday.toFixed(2)} ({storeOrdersToday.length} bills)</span>
+                <span className="font-bold text-indigo-950">{CURRENCY}{totalStoreSalesToday.toFixed(2)} ({storeOrdersCount} bills)</span>
               </div>
               <div className="text-center pt-1">
                 <span className="text-[10px] text-slate-400 font-medium flex items-center justify-center gap-1">
