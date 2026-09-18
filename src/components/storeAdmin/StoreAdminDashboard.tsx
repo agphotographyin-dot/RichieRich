@@ -51,7 +51,6 @@ import { pdfReportService } from '../../services/pdfReportService';
 import { StoreStatementModal } from './StoreStatementModal';
 import { StoreIndentsView } from './StoreIndentsView';
 import { CreateStoreIndentModal } from './CreateStoreIndentModal';
-import { StoreStockInventoryView } from './StoreStockInventoryView';
 import { isToday, getLocalDateString } from '../../utils/dateUtils';
 
 interface StoreAdminDashboardProps {
@@ -147,6 +146,8 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string>('all');
   const [expensePaymentFilter, setExpensePaymentFilter] = useState<string>('all');
   const [orderSearch, setOrderSearch] = useState('');
+  const [inventorySearch, setInventorySearch] = useState('');
+  const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState<string>('all');
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
 
   // Store Inventory Indents State
@@ -212,6 +213,19 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
       );
     });
   }, [allOrders, orderSearch]);
+
+  // Filtered Inventory for Store (BUG FIX: Full search and category filtering)
+  const filteredInventory = useMemo(() => {
+    return storeInventory.filter((item) => {
+      const matchSearch =
+        item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
+        (item.sku && item.sku.toLowerCase().includes(inventorySearch.toLowerCase())) ||
+        (item.barcode && item.barcode.includes(inventorySearch));
+      const matchCategory =
+        inventoryCategoryFilter === 'all' || item.category === inventoryCategoryFilter;
+      return matchSearch && matchCategory;
+    });
+  }, [storeInventory, inventorySearch, inventoryCategoryFilter]);
 
   // Real-time counter metrics (both today resetting after 12:00 AM midnight and all-time)
   const counterStats = useMemo(() => {
@@ -1181,19 +1195,143 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
         )}
 
         {/* ========================================================================= */}
-        {/* TAB CONTENT 5: STORE STOCK INVENTORY (HIGH PERFORMANCE & PAGINATED)       */}
+        {/* TAB CONTENT 5: STORE STOCK INVENTORY */}
         {/* ========================================================================= */}
         {activeTab === 'store_inventory' && (
-          <StoreStockInventoryView
-            currentStore={currentStore}
-            activeStoreId={activeStoreId}
-            storeInventory={storeInventory}
-            onOpenCreateIndent={(preselected) => {
-              setIndentPreselectedItem(preselected || null);
-              setIsCreateIndentOpen(true);
-            }}
-            onRefresh={triggerRefresh}
-          />
+          <div className="space-y-4">
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900">
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-amber-700 shrink-0" />
+                <span>
+                  Store outlet inventory is synchronized with Central Warehouse dispatches and real-time POS billings.
+                </span>
+              </div>
+              <div className="flex items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIndentPreselectedItem(null);
+                    setIsCreateIndentOpen(true);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Order Stock from Warehouse</span>
+                </button>
+                <span className="font-bold whitespace-nowrap bg-amber-200/50 px-2 py-1 rounded-lg">
+                  {filteredInventory.length} of {storeInventory.length} Items
+                </span>
+              </div>
+            </div>
+
+            {/* Search & Category Filter for Store Inventory */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="relative flex-1 w-full">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search inventory by product name, SKU, or barcode..."
+                  value={inventorySearch}
+                  onChange={(e) => setInventorySearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:bg-white focus:border-amber-500"
+                />
+              </div>
+
+              <select
+                value={inventoryCategoryFilter}
+                onChange={(e) => setInventoryCategoryFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 focus:outline-hidden w-full sm:w-auto"
+              >
+                <option value="all">All Categories</option>
+                <option value="Paan">Paan Creations</option>
+                <option value="Cafe">Cafe & Beverages</option>
+                <option value="Essentials">Mukhwas & Essentials</option>
+              </select>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-600">
+                  <thead className="bg-slate-50 text-slate-700 uppercase font-extrabold text-[10px] tracking-wider border-b border-slate-200">
+                    <tr>
+                      <th className="py-3 px-4">Item Name & SKU</th>
+                      <th className="py-3 px-4">Category</th>
+                      <th className="py-3 px-4">Selling Price</th>
+                      <th className="py-3 px-4">Store Allocated Stock</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Order / Indent</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredInventory.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-10 text-slate-400">
+                          No inventory items match your search.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredInventory.map((item) => {
+                        const allocatedStock = item.storeAllocations?.[activeStoreId] ?? 0;
+                        const isLowStock = allocatedStock <= (item.lowStockThreshold || 10);
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50/70">
+                            <td className="py-3 px-4">
+                              <div className="font-bold text-slate-900">{item.name}</div>
+                              <div className="text-[10px] font-mono text-slate-400">
+                                SKU: {item.sku || 'N/A'} • Barcode: {item.barcode || 'N/A'}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700">
+                                {item.category}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 font-mono font-bold text-slate-900">
+                              ₹{item.sellingPrice.toFixed(2)}
+                            </td>
+                            <td className="py-3 px-4 font-mono font-bold text-slate-900">
+                              {allocatedStock} {item.unit || 'units'}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  allocatedStock > 20
+                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                    : allocatedStock > 5
+                                    ? 'bg-amber-100 text-amber-900'
+                                    : 'bg-red-100 text-red-800'
+                                }`}
+                              >
+                                {allocatedStock > 20 ? 'In Stock' : allocatedStock > 5 ? 'Low Stock' : 'Critical'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIndentPreselectedItem(item);
+                                  setIsCreateIndentOpen(true);
+                                }}
+                                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                                  isLowStock
+                                    ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-2xs'
+                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                }`}
+                                title={`Order ${item.name} from Central Warehouse`}
+                              >
+                                <Truck className="w-3.5 h-3.5" />
+                                <span>Indent</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* ========================================================================= */}

@@ -800,15 +800,46 @@ export const warehouseStorage = {
     if (newTransfer.status === 'dispatched_in_transit') {
       newTransfer.dispatchDate = new Date().toISOString().split('T')[0];
 
-      const stockDeltas = newTransfer.items.map((item) => {
-        const qty = item.dispatchedQty || item.requestedQty;
-        return {
-          id: item.itemId,
-          delta: -qty,
-          reason: `Dispatched transfer ${transferNumber} to ${newTransfer.destinationName}`,
-        };
-      });
-      storage.batchAdjustStock(stockDeltas);
+      const inventory = storage.getInventory();
+
+      if (newTransfer.type === 'warehouse_to_store') {
+        // Pre-flight validation: Central WH must have sufficient stock
+        for (const item of newTransfer.items) {
+          const qty = item.dispatchedQty || item.requestedQty;
+          const invItem = inventory.find((i) => i.id === item.itemId);
+          const availableStock = invItem ? invItem.stockQuantity : 0;
+          if (qty > availableStock) {
+            throw new Error(
+              `Cannot dispatch transfer: Item "${item.name}" requested ${qty} ${item.unit || 'units'}, but Central Warehouse has only ${availableStock} ${item.unit || 'units'} available. Please inward stock first via GRN Bill or reduce dispatch quantity.`
+            );
+          }
+        }
+
+        const stockDeltas = newTransfer.items.map((item) => {
+          const qty = item.dispatchedQty || item.requestedQty;
+          return {
+            id: item.itemId,
+            delta: -qty,
+            reason: `Dispatched transfer ${transferNumber} to ${newTransfer.destinationName}`,
+          };
+        });
+        storage.batchAdjustStock(stockDeltas);
+      } else if (newTransfer.type === 'store_to_warehouse_return') {
+        // Deduct from the source store's allocation
+        let invModified = false;
+        newTransfer.items.forEach((item) => {
+          const qty = item.dispatchedQty || item.requestedQty;
+          const invItem = inventory.find((i) => i.id === item.itemId);
+          if (invItem && invItem.storeAllocations) {
+            const currentStoreStock = invItem.storeAllocations[newTransfer.sourceId] || 0;
+            invItem.storeAllocations[newTransfer.sourceId] = Math.max(0, currentStoreStock - qty);
+            invModified = true;
+          }
+        });
+        if (invModified) {
+          storage.saveInventory(inventory);
+        }
+      }
 
       const auditRecords = newTransfer.items.map((item) => {
         const qty = item.dispatchedQty || item.requestedQty;
@@ -847,28 +878,72 @@ export const warehouseStorage = {
     return newTransfer;
   },
 
-  dispatchTransfer(transferId: string, carrierName: string, vehicleNumber: string, driverContact: string): boolean {
+  dispatchTransfer(
+    transferId: string,
+    carrierName: string,
+    vehicleNumber: string,
+    driverContact: string
+  ): { success: boolean; error?: string } {
     const transfers = this.getStockTransfers();
     const transfer = transfers.find((t) => t.id === transferId);
-    if (!transfer) return false;
+    if (!transfer) {
+      return { success: false, error: 'Transfer not found.' };
+    }
+
+    if (transfer.status === 'dispatched_in_transit' || transfer.status === 'completed') {
+      return { success: false, error: 'Transfer has already been dispatched or completed.' };
+    }
+
+    const inventory = storage.getInventory();
+
+    // If warehouse to store, check Central Warehouse stock availability first
+    if (transfer.type === 'warehouse_to_store') {
+      for (const item of transfer.items) {
+        const qty = item.dispatchedQty || item.requestedQty;
+        const invItem = inventory.find((i) => i.id === item.itemId);
+        const availableStock = invItem ? invItem.stockQuantity : 0;
+        if (qty > availableStock) {
+          return {
+            success: false,
+            error: `Cannot dispatch transfer: Item "${item.name}" needs ${qty} ${item.unit || 'units'}, but Central Warehouse only has ${availableStock} ${item.unit || 'units'} available. Please inward stock first via GRN Bill or adjust dispatch quantity.`,
+          };
+        }
+      }
+
+      // Deduct stock from source warehouse in a single batch
+      const stockDeltas = transfer.items.map((item) => {
+        const qty = item.dispatchedQty || item.requestedQty;
+        return {
+          id: item.itemId,
+          delta: -qty,
+          reason: `Dispatched transfer ${transfer.transferNumber} to ${transfer.destinationName}`,
+        };
+      });
+      storage.batchAdjustStock(stockDeltas);
+    } else if (transfer.type === 'store_to_warehouse_return') {
+      let invModified = false;
+      transfer.items.forEach((item) => {
+        const qty = item.dispatchedQty || item.requestedQty;
+        const invItem = inventory.find((i) => i.id === item.itemId);
+        if (invItem && invItem.storeAllocations) {
+          const currentStoreStock = invItem.storeAllocations[transfer.sourceId] || 0;
+          invItem.storeAllocations[transfer.sourceId] = Math.max(0, currentStoreStock - qty);
+          invModified = true;
+        }
+      });
+      if (invModified) {
+        storage.saveInventory(inventory);
+      }
+    }
 
     transfer.status = 'dispatched_in_transit';
     transfer.dispatchDate = new Date().toISOString().split('T')[0];
     transfer.carrierName = carrierName;
     transfer.vehicleNumber = vehicleNumber;
     transfer.driverContact = driverContact;
-    transfer.otpOrPin = Math.floor(1000 + Math.random() * 9000).toString();
-
-    // Deduct stock from source warehouse in a single batch
-    const stockDeltas = transfer.items.map((item) => {
-      const qty = item.dispatchedQty || item.requestedQty;
-      return {
-        id: item.itemId,
-        delta: -qty,
-        reason: `Dispatched transfer ${transfer.transferNumber} to ${transfer.destinationName}`,
-      };
-    });
-    storage.batchAdjustStock(stockDeltas);
+    if (!transfer.otpOrPin) {
+      transfer.otpOrPin = Math.floor(1000 + Math.random() * 9000).toString();
+    }
 
     const auditRecords = transfer.items.map((item) => {
       const qty = item.dispatchedQty || item.requestedQty;
@@ -888,13 +963,30 @@ export const warehouseStorage = {
         totalCostImpact: -qty * item.unitCost,
         performedBy: transfer.dispatchedBy || 'Warehouse Manager',
         userRole: 'Warehouse Manager' as const,
-        notes: `Dispatched in transit with tracking OTP: ${transfer.otpOrPin}`,
+        notes: `Dispatched in transit with tracking OTP: ${transfer.otpOrPin} • Vehicle: ${vehicleNumber} • Carrier: ${carrierName}`,
       };
     });
     this.addAuditRecords(auditRecords);
 
     this.saveStockTransfers(transfers);
-    return true;
+
+    // If an associated store indent exists, mark it as in transit
+    try {
+      const indents = this.getStoreIndents();
+      const linkedIndent = indents.find(
+        (ind) =>
+          ind.storeId === transfer.destinationId &&
+          (ind.status === 'converted_to_transfer' || ind.status === 'approved')
+      );
+      if (linkedIndent) {
+        linkedIndent.status = 'converted_to_transfer';
+        this.saveStoreIndents(indents);
+      }
+    } catch {
+      // Non-critical
+    }
+
+    return { success: true };
   },
 
   receiveTransfer(transferId: string, receivedBy: string, itemReceivedMap: Record<string, number>): boolean {
@@ -921,10 +1013,17 @@ export const warehouseStorage = {
       // Add stock to store allocations in storage
       const invItem = inventory.find((i) => i.id === item.itemId);
       if (invItem) {
-        if (!invItem.storeAllocations) invItem.storeAllocations = {};
-        const destStoreKey = transfer.destinationId;
-        invItem.storeAllocations[destStoreKey] = (invItem.storeAllocations[destStoreKey] || 0) + receivedQty;
-        inventoryModified = true;
+        if (transfer.type === 'store_to_warehouse_return') {
+          // Returning to Central Warehouse
+          invItem.stockQuantity = (invItem.stockQuantity || 0) + receivedQty;
+          inventoryModified = true;
+        } else {
+          // Inwarding at destination Store
+          if (!invItem.storeAllocations) invItem.storeAllocations = {};
+          const destStoreKey = transfer.destinationId;
+          invItem.storeAllocations[destStoreKey] = (invItem.storeAllocations[destStoreKey] || 0) + receivedQty;
+          inventoryModified = true;
+        }
       }
 
       auditRecords.push({
@@ -933,7 +1032,7 @@ export const warehouseStorage = {
         sku: item.sku,
         itemName: item.name,
         batchNumber: item.batchNumber,
-        movementType: 'store_transfer_in',
+        movementType: transfer.type === 'store_to_warehouse_return' ? 'store_return_in' : 'store_transfer_in',
         fromLocation: 'In Transit',
         toLocation: transfer.destinationName,
         quantity: receivedQty,
@@ -943,7 +1042,7 @@ export const warehouseStorage = {
         totalCostImpact: receivedQty * item.unitCost,
         performedBy: receivedBy,
         userRole: 'Store Manager',
-        notes: `Stock safely received at store. Received Qty: ${receivedQty}/${item.dispatchedQty} ${item.unit}.`,
+        notes: `Stock safely received. Received Qty: ${receivedQty}/${item.dispatchedQty} ${item.unit}.`,
       });
     });
 
@@ -956,9 +1055,25 @@ export const warehouseStorage = {
     transfer.status = hasPartial ? 'partially_received' : 'completed';
     this.saveStockTransfers(transfers);
 
+    // If an associated store indent exists, mark it as completed
+    try {
+      const indents = this.getStoreIndents();
+      const linkedIndent = indents.find(
+        (ind) =>
+          ind.storeId === transfer.destinationId &&
+          (ind.status === 'converted_to_transfer' || ind.status === 'approved')
+      );
+      if (linkedIndent) {
+        linkedIndent.status = 'completed';
+        this.saveStoreIndents(indents);
+      }
+    } catch {
+      // Non-critical
+    }
+
     storage.addNotification({
-      title: `Stock Received at ${transfer.destinationName}`,
-      message: `Transfer ${transfer.transferNumber} received by ${receivedBy} (${transfer.status.toUpperCase()}).`,
+      title: `Stock Inward Completed at ${transfer.destinationName}`,
+      message: `Transfer ${transfer.transferNumber} received by ${receivedBy} (${transfer.status.toUpperCase()}). Stock successfully allocated to store inventory.`,
       type: 'order_update',
       targetRole: 'admin',
       read: false,

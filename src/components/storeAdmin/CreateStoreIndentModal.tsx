@@ -70,7 +70,7 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
     if (isOpen) {
       if (preselectedItem) {
         const storeStock =
-          preselectedItem.storeAllocations?.[currentStore.id] ?? preselectedItem.stockQuantity;
+          preselectedItem.storeAllocations?.[currentStore.id] ?? 0;
         const recQty = Math.max(
           (preselectedItem.lowStockThreshold || 10) * 3 - storeStock,
           25
@@ -90,7 +90,7 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
         setUrgency(storeStock <= (preselectedItem.lowStockThreshold || 10) ? 'urgent_low_stock' : 'routine');
       } else if (items.length === 0 && inventory.length > 0) {
         const first = inventory[0];
-        const storeStock = first.storeAllocations?.[currentStore.id] ?? first.stockQuantity;
+        const storeStock = first.storeAllocations?.[currentStore.id] ?? 0;
         setItems([
           {
             itemId: first.id,
@@ -115,28 +115,11 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
       name: 'Ahmedabad Central Logistics Hub',
     };
 
-  // Find all low stock items in current store (memoized for performance with large SKU lists)
-  const lowStockItemsInStore = useMemo(() => {
-    return inventory.filter((item) => {
-      const stock = item.storeAllocations?.[currentStore.id] ?? item.stockQuantity;
-      return stock <= (item.lowStockThreshold || 10);
-    });
-  }, [inventory, currentStore.id]);
-
-  // Memoized dropdown options to eliminate per-row re-render cost
-  const inventoryOptions = useMemo(() => {
-    return inventory.map((inv) => {
-      const stock = inv.storeAllocations?.[currentStore.id] ?? inv.stockQuantity;
-      return {
-        id: inv.id,
-        name: inv.name,
-        category: inv.category,
-        stock,
-        unit: inv.unit || 'units',
-        label: `${inv.name} (${inv.category}) — Current Store Stock: ${stock} ${inv.unit || 'units'}`,
-      };
-    });
-  }, [inventory, currentStore.id]);
+  // Find all low stock items in current store
+  const lowStockItemsInStore = inventory.filter((item) => {
+    const stock = item.storeAllocations?.[currentStore.id] ?? 0;
+    return stock <= (item.lowStockThreshold || 10);
+  });
 
   const handleAddRow = () => {
     // Find first item not already in draft
@@ -144,7 +127,7 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
     const candidate = inventory.find((i) => !existingIds.has(i.id)) || inventory[0];
     if (!candidate) return;
 
-    const storeStock = candidate.storeAllocations?.[currentStore.id] ?? candidate.stockQuantity;
+    const storeStock = candidate.storeAllocations?.[currentStore.id] ?? 0;
     setItems((prev) => [
       ...prev,
       {
@@ -167,7 +150,7 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
     }
 
     const newDrafts: IndentLineDraft[] = lowStockItemsInStore.map((item) => {
-      const stock = item.storeAllocations?.[currentStore.id] ?? item.stockQuantity;
+      const stock = item.storeAllocations?.[currentStore.id] ?? 0;
       const threshold = item.lowStockThreshold || 10;
       const suggested = Math.max(threshold * 3 - stock, 25);
       return {
@@ -191,7 +174,7 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
     const selected = inventory.find((i) => i.id === itemId);
     if (!selected) return;
 
-    const storeStock = selected.storeAllocations?.[currentStore.id] ?? selected.stockQuantity;
+    const storeStock = selected.storeAllocations?.[currentStore.id] ?? 0;
     setItems((prev) =>
       prev.map((row, idx) =>
         idx === index
@@ -475,9 +458,11 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
                       onChange={(e) => handleItemSelect(idx, e.target.value)}
                       className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-hidden focus:border-amber-500"
                     >
-                      {inventoryOptions.map((opt) => (
-                        <option key={opt.id} value={opt.id}>
-                          {opt.label}
+                      {inventory.map((inv) => (
+                        <option key={inv.id} value={inv.id}>
+                          {inv.name} ({inv.category}) — Current Store Stock:{' '}
+                          {inv.storeAllocations?.[currentStore.id] ?? inv.stockQuantity}{' '}
+                          {inv.unit || 'units'}
                         </option>
                       ))}
                     </select>

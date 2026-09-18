@@ -25,6 +25,7 @@ import { StoreLocation } from '../../../types';
 import { CURRENCY } from '../../../services/storage';
 import { warehouseStorage } from '../../../services/warehouseStorage';
 import { DocumentManifestModal, ManifestDocumentType } from '../../common/DocumentManifestModal';
+import { DispatchTransferModal } from '../modals/DispatchTransferModal';
 
 interface WarehouseTransfersViewProps {
   transfers: StockTransfer[];
@@ -35,6 +36,8 @@ interface WarehouseTransfersViewProps {
   onOpenTransferModal: () => void;
   onOpenIndentModal: () => void;
   onOpenReceiveModal: (transfer: StockTransfer) => void;
+  onRefresh?: () => void;
+  onOpenInwardBill?: () => void;
 }
 
 export const WarehouseTransfersView: React.FC<WarehouseTransfersViewProps> = ({
@@ -46,10 +49,13 @@ export const WarehouseTransfersView: React.FC<WarehouseTransfersViewProps> = ({
   onOpenTransferModal,
   onOpenIndentModal,
   onOpenReceiveModal,
+  onRefresh,
+  onOpenInwardBill,
 }) => {
   const [subTab, setSubTab] = useState<'transfers' | 'returns' | 'indents'>('transfers');
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [selectedTransferForDispatch, setSelectedTransferForDispatch] = useState<StockTransfer | null>(null);
   const [manifestDoc, setManifestDoc] = useState<{
     isOpen: boolean;
     type: ManifestDocumentType;
@@ -91,6 +97,7 @@ export const WarehouseTransfersView: React.FC<WarehouseTransfersViewProps> = ({
     try {
       warehouseStorage.approveStoreIndent(indentId);
       setSuccessMsg('Indent approved and converted to an active Transfer Order!');
+      if (onRefresh) onRefresh();
       setTimeout(() => setSuccessMsg(null), 3500);
     } finally {
       setApprovingId(null);
@@ -244,6 +251,18 @@ export const WarehouseTransfersView: React.FC<WarehouseTransfersViewProps> = ({
                             <FileText className="w-3.5 h-3.5 text-indigo-600" />
                             <span>Challan</span>
                           </button>
+
+                          {(tr.status === 'approved' || tr.status === 'requested') && (
+                            <button
+                              onClick={() => setSelectedTransferForDispatch(tr)}
+                              className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                              title="Validate Central WH stock & dispatch transfer"
+                            >
+                              <Truck className="w-3.5 h-3.5" />
+                              <span>Dispatch</span>
+                            </button>
+                          )}
+
                           {tr.status === 'dispatched_in_transit' && (
                             <button
                               onClick={() => onOpenReceiveModal(tr)}
@@ -390,6 +409,20 @@ export const WarehouseTransfersView: React.FC<WarehouseTransfersViewProps> = ({
         documentType={manifestDoc.type}
         documentData={manifestDoc.data}
       />
+
+      {/* Dispatch Transfer Modal */}
+      {selectedTransferForDispatch && (
+        <DispatchTransferModal
+          isOpen={true}
+          onClose={() => setSelectedTransferForDispatch(null)}
+          transfer={selectedTransferForDispatch}
+          onSuccess={() => {
+            setSelectedTransferForDispatch(null);
+            if (onRefresh) onRefresh();
+          }}
+          onOpenInward={onOpenInwardBill}
+        />
+      )}
     </div>
   );
 };

@@ -348,9 +348,9 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
   // Get store specific available stock for this counter's branch
   const getItemStoreStock = (item: InventoryItem): number => {
     if (item.storeAllocations && posSession.storeId in item.storeAllocations) {
-      return item.storeAllocations[posSession.storeId];
+      return item.storeAllocations[posSession.storeId] || 0;
     }
-    return item.stockQuantity;
+    return 0;
   };
 
   // Filter products (active only)

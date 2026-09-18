@@ -309,6 +309,11 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           onOpenTransferModal={() => setIsTransferModalOpen(true)}
           onOpenIndentModal={() => setIsIndentModalOpen(true)}
           onOpenReceiveModal={(tr) => setReceivingTransfer(tr)}
+          onRefresh={loadData}
+          onOpenInwardBill={() => {
+            setInwardInitialPO(null);
+            setIsInwardModalOpen(true);
+          }}
         />
       );
     }

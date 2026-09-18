@@ -1,8 +1,22 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, Truck, Building2, Store, ArrowRight, ShieldCheck, KeyRound, RefreshCw } from 'lucide-react';
+import {
+  X,
+  Plus,
+  Trash2,
+  Truck,
+  Building2,
+  Store,
+  ArrowRight,
+  ShieldCheck,
+  KeyRound,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
+} from 'lucide-react';
 import { Warehouse, BatchRecord, TransferItem, StockTransfer } from '../../../types/warehouse';
 import { InventoryItem, StoreLocation } from '../../../types';
 import { warehouseStorage } from '../../../services/warehouseStorage';
+import { soundEffects } from '../../../services/audio';
 import { ItemAutocompleteInput } from '../../common/ItemAutocompleteInput';
 
 interface CreateTransferModalProps {
@@ -44,6 +58,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
   const [otpCode, setOtpCode] = useState(() => initialData?.otpOrPin || Math.floor(1000 + Math.random() * 9000).toString());
   const [notes, setNotes] = useState(initialData?.notes || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [items, setItems] = useState<
     Array<{
@@ -168,10 +183,38 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
     setItems(next);
   };
 
+  // Real-time stock audit for items
+  const rowAudits = items.map((row) => {
+    const invItem = inventory.find(
+      (i) => i.id === row.itemId || i.name.toLowerCase() === row.name.toLowerCase()
+    );
+    const availableCentralStock = invItem ? invItem.stockQuantity : 0;
+    const isExceeded = transferType === 'warehouse_to_store' && row.quantity > availableCentralStock;
+    return {
+      ...row,
+      availableCentralStock,
+      isExceeded,
+      shortage: Math.max(0, row.quantity - availableCentralStock),
+    };
+  });
+
+  const hasInsufficientStock =
+    transferType === 'warehouse_to_store' && rowAudits.some((r) => r.isExceeded);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
+
+    if (hasInsufficientStock) {
+      setErrorMessage(
+        'Cannot dispatch transfer: One or more items exceed available Central Warehouse stock. Please inward stock first via GRN Bill or reduce the dispatch quantity.'
+      );
+      soundEffects.playWarningChime();
+      return;
+    }
+
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       const st = stores.find((s) => s.id === destStoreId);
@@ -213,8 +256,12 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
         notes,
       });
 
+      soundEffects.playSuccessChime();
       onSuccess();
       onClose();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'An error occurred during transfer dispatch.');
+      soundEffects.playWarningChime();
     } finally {
       setIsSubmitting(false);
     }
@@ -240,6 +287,13 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+          {errorMessage && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold rounded-xl flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
           {/* Transfer Type toggle */}
           <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
             <button
@@ -438,17 +492,41 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Item info pill */}
-                  <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                    <span className="font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
-                      SKU: {row.sku || 'N/A'}
-                    </span>
-                    <span className="bg-white px-2 py-0.5 rounded border border-slate-200 font-semibold">
-                      Category: {row.category || 'Paan'}
-                    </span>
-                    <span className="bg-white px-2 py-0.5 rounded border border-slate-200">
-                      Unit: {row.unit || 'pieces'}
-                    </span>
+                  {/* Item info pill & Central WH stock status */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500 pt-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
+                        SKU: {row.sku || 'N/A'}
+                      </span>
+                      <span className="bg-white px-2 py-0.5 rounded border border-slate-200 font-semibold">
+                        Category: {row.category || 'Paan'}
+                      </span>
+                      <span className="bg-white px-2 py-0.5 rounded border border-slate-200">
+                        Unit: {row.unit || 'pieces'}
+                      </span>
+                    </div>
+
+                    {transferType === 'warehouse_to_store' && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-600">
+                          Central WH Stock:{' '}
+                          <strong className="font-mono text-slate-900">
+                            {rowAudits[idx]?.availableCentralStock ?? 0} {row.unit}
+                          </strong>
+                        </span>
+                        {rowAudits[idx]?.isExceeded ? (
+                          <span className="px-2 py-0.5 rounded-full font-bold bg-rose-100 text-rose-800 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                            Short by {rowAudits[idx]?.shortage} {row.unit}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                            In Stock
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -480,8 +558,12 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="px-5 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-75 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer"
+              disabled={isSubmitting || hasInsufficientStock}
+              className={`px-5 py-2 font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2 ${
+                hasInsufficientStock
+                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-80'
+                  : 'bg-amber-600 hover:bg-amber-700 disabled:opacity-75 text-white cursor-pointer'
+              }`}
             >
               {isSubmitting ? (
                 <>
@@ -491,7 +573,9 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
               ) : (
                 <>
                   <Truck className="w-4 h-4" />
-                  <span>Generate Gate Pass & Dispatch</span>
+                  <span>
+                    {hasInsufficientStock ? 'Cannot Dispatch (Insufficient Central Stock)' : 'Generate Gate Pass & Dispatch'}
+                  </span>
                 </>
               )}
             </button>

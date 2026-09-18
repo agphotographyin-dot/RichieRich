@@ -20,18 +20,21 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
+  PackageCheck,
 } from 'lucide-react';
 import { StoreStockIndent, StockTransfer } from '../../types/warehouse';
 import { StoreLocation, InventoryItem } from '../../types';
 import { warehouseStorage } from '../../services/warehouseStorage';
 import { soundEffects } from '../../services/audio';
 import { DocumentManifestModal } from '../common/DocumentManifestModal';
+import { StoreReceiveTransferModal } from './StoreReceiveTransferModal';
 
 interface StoreIndentsViewProps {
   currentStore: StoreLocation;
   inventory: InventoryItem[];
   onOpenCreateIndent: (preselectedItem?: InventoryItem | null) => void;
   onRefresh: () => void;
+  adminName?: string;
 }
 
 export const StoreIndentsView: React.FC<StoreIndentsViewProps> = ({
@@ -39,11 +42,15 @@ export const StoreIndentsView: React.FC<StoreIndentsViewProps> = ({
   inventory,
   onOpenCreateIndent,
   onRefresh,
+  adminName,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [urgencyFilter, setUrgencyFilter] = useState<string>('all');
   const [selectedIndentForManifest, setSelectedIndentForManifest] = useState<StoreStockIndent | null>(
+    null
+  );
+  const [selectedTransferForReceive, setSelectedTransferForReceive] = useState<StockTransfer | null>(
     null
   );
   const [expandedIndentId, setExpandedIndentId] = useState<string | null>(null);
@@ -497,11 +504,32 @@ export const StoreIndentsView: React.FC<StoreIndentsViewProps> = ({
                   </div>
                 </div>
 
-                <div className="text-right">
-                  <span className="font-mono font-bold text-slate-800">
-                    {transfer.items.reduce((s, it) => s + (it.dispatchedQty || it.requestedQty), 0)}{' '}
-                    Units
-                  </span>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <span className="font-mono font-bold text-slate-800 block">
+                      {transfer.items.reduce((s, it) => s + (it.dispatchedQty || it.requestedQty), 0)}{' '}
+                      Units
+                    </span>
+                    {transfer.vehicleNumber && (
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        Vehicle: {transfer.vehicleNumber}
+                      </span>
+                    )}
+                  </div>
+
+                  {transfer.status === 'dispatched_in_transit' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedTransferForReceive(transfer);
+                        soundEffects.playClick();
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                    >
+                      <PackageCheck className="w-3.5 h-3.5" />
+                      <span>Receive & Inward</span>
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -516,6 +544,21 @@ export const StoreIndentsView: React.FC<StoreIndentsViewProps> = ({
           onClose={() => setSelectedIndentForManifest(null)}
           documentType="store_indent"
           documentData={selectedIndentForManifest}
+        />
+      )}
+
+      {/* Store Receive Transfer Modal */}
+      {selectedTransferForReceive && (
+        <StoreReceiveTransferModal
+          isOpen={true}
+          onClose={() => setSelectedTransferForReceive(null)}
+          transfer={selectedTransferForReceive}
+          currentStore={currentStore}
+          adminName={adminName}
+          onSuccess={() => {
+            onRefresh();
+            setSelectedTransferForReceive(null);
+          }}
         />
       )}
     </div>
