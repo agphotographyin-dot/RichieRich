@@ -33,6 +33,7 @@ import {
   X,
   Phone,
   BarChart3,
+  Truck,
 } from 'lucide-react';
 import {
   StoreLocation,
@@ -48,12 +49,15 @@ import { authService } from '../../services/auth';
 import { soundEffects } from '../../services/audio';
 import { pdfReportService } from '../../services/pdfReportService';
 import { StoreStatementModal } from './StoreStatementModal';
+import { StoreIndentsView } from './StoreIndentsView';
+import { CreateStoreIndentModal } from './CreateStoreIndentModal';
+import { StoreStockInventoryView } from './StoreStockInventoryView';
 import { isToday, getLocalDateString } from '../../utils/dateUtils';
 
 interface StoreAdminDashboardProps {
   initialStoreId?: string;
   initialTab?: string;
-  onTabChange?: (tab: 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory') => void;
+  onTabChange?: (tab: 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents') => void;
   onLogout: () => void;
   onNavigateToWarehouse?: () => void;
   onNavigateToAdmin?: () => void;
@@ -93,16 +97,17 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
     return authState.storeId || initialStoreId || stores[0]?.id || 'bopal';
   });
 
-  const mapPropToTab = (tab?: string): 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' => {
+  const mapPropToTab = (tab?: string): 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents' => {
     if (!tab) return 'financials';
     if (tab === 'expenses') return 'expenses';
     if (tab === 'sales_orders' || tab === 'orders') return 'sales_orders';
     if (tab === 'staff_counters' || tab === 'staff') return 'staff_counters';
     if (tab === 'store_inventory' || tab === 'inventory') return 'store_inventory';
+    if (tab === 'stock_indents' || tab === 'indents' || tab === 'store_indents') return 'stock_indents';
     return 'financials';
   };
 
-  const [activeTab, setActiveTab] = useState<'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory'>(() => mapPropToTab(initialTab));
+  const [activeTab, setActiveTab] = useState<'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents'>(() => mapPropToTab(initialTab));
 
   useEffect(() => {
     if (initialTab) {
@@ -110,7 +115,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
     }
   }, [initialTab]);
 
-  const handleTabSelect = (tab: 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory') => {
+  const handleTabSelect = (tab: 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents') => {
     setActiveTab(tab);
     onTabChange?.(tab);
   };
@@ -142,11 +147,20 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string>('all');
   const [expensePaymentFilter, setExpensePaymentFilter] = useState<string>('all');
   const [orderSearch, setOrderSearch] = useState('');
-  const [inventorySearch, setInventorySearch] = useState('');
-  const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState<string>('all');
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
 
+  // Store Inventory Indents State
+  const [isCreateIndentOpen, setIsCreateIndentOpen] = useState(false);
+  const [indentPreselectedItem, setIndentPreselectedItem] = useState<InventoryItem | null>(null);
+
   const currentStore = stores.find((s) => s.id === activeStoreId) || stores[0];
+
+  // Count pending indents for this store
+  const pendingIndentsCount = useMemo(() => {
+    return warehouseStorage
+      .getStoreIndents()
+      .filter((ind) => ind.storeId === activeStoreId && ind.status === 'pending').length;
+  }, [activeStoreId, refreshKey]);
 
   // Fetch Financials, Orders, Expenses, and Stock for current store
   const financialSummary: StoreFinancialSummary = useMemo(() => {
@@ -198,19 +212,6 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
       );
     });
   }, [allOrders, orderSearch]);
-
-  // Filtered Inventory for Store (BUG FIX: Full search and category filtering)
-  const filteredInventory = useMemo(() => {
-    return storeInventory.filter((item) => {
-      const matchSearch =
-        item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
-        (item.sku && item.sku.toLowerCase().includes(inventorySearch.toLowerCase())) ||
-        (item.barcode && item.barcode.includes(inventorySearch));
-      const matchCategory =
-        inventoryCategoryFilter === 'all' || item.category === inventoryCategoryFilter;
-      return matchSearch && matchCategory;
-    });
-  }, [storeInventory, inventorySearch, inventoryCategoryFilter]);
 
   // Real-time counter metrics (both today resetting after 12:00 AM midnight and all-time)
   const counterStats = useMemo(() => {
@@ -667,6 +668,23 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
           >
             <Package className="w-4 h-4 text-amber-400" />
             <span>Store Stock Inventory ({storeInventory.length})</span>
+          </button>
+
+          <button
+            onClick={() => handleTabSelect('stock_indents')}
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
+              activeTab === 'stock_indents'
+                ? 'bg-[#1E293B] text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Truck className="w-4 h-4 text-amber-400" />
+            <span>Warehouse Stock Indents</span>
+            {pendingIndentsCount > 0 && (
+              <span className="bg-amber-500 text-slate-950 text-[10px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
+                {pendingIndentsCount}
+              </span>
+            )}
           </button>
         </div>
 
@@ -1163,110 +1181,34 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
         )}
 
         {/* ========================================================================= */}
-        {/* TAB CONTENT 5: STORE STOCK INVENTORY */}
+        {/* TAB CONTENT 5: STORE STOCK INVENTORY (HIGH PERFORMANCE & PAGINATED)       */}
         {/* ========================================================================= */}
         {activeTab === 'store_inventory' && (
-          <div className="space-y-4">
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900">
-              <div className="flex items-center gap-2">
-                <Package className="w-4 h-4 text-amber-700 shrink-0" />
-                <span>
-                  Store outlet inventory is synchronized with Central Warehouse dispatches and real-time POS billings.
-                </span>
-              </div>
-              <span className="font-bold whitespace-nowrap">
-                Showing {filteredInventory.length} of {storeInventory.length} Items
-              </span>
-            </div>
+          <StoreStockInventoryView
+            currentStore={currentStore}
+            activeStoreId={activeStoreId}
+            storeInventory={storeInventory}
+            onOpenCreateIndent={(preselected) => {
+              setIndentPreselectedItem(preselected || null);
+              setIsCreateIndentOpen(true);
+            }}
+            onRefresh={triggerRefresh}
+          />
+        )}
 
-            {/* Search & Category Filter for Store Inventory */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="relative flex-1 w-full">
-                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search inventory by product name, SKU, or barcode..."
-                  value={inventorySearch}
-                  onChange={(e) => setInventorySearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:bg-white focus:border-amber-500"
-                />
-              </div>
-
-              <select
-                value={inventoryCategoryFilter}
-                onChange={(e) => setInventoryCategoryFilter(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 focus:outline-hidden w-full sm:w-auto"
-              >
-                <option value="all">All Categories</option>
-                <option value="Paan">Paan Creations</option>
-                <option value="Cafe">Cafe & Beverages</option>
-                <option value="Essentials">Mukhwas & Essentials</option>
-              </select>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-600">
-                  <thead className="bg-slate-50 text-slate-700 uppercase font-extrabold text-[10px] tracking-wider border-b border-slate-200">
-                    <tr>
-                      <th className="py-3 px-4">Item Name & SKU</th>
-                      <th className="py-3 px-4">Category</th>
-                      <th className="py-3 px-4">Selling Price</th>
-                      <th className="py-3 px-4">Store Allocated Stock</th>
-                      <th className="py-3 px-4 text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredInventory.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="text-center py-10 text-slate-400">
-                          No inventory items match your search.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredInventory.map((item) => {
-                        const allocatedStock = item.storeAllocations?.[activeStoreId] ?? item.stockQuantity;
-                        return (
-                          <tr key={item.id} className="hover:bg-slate-50/70">
-                            <td className="py-3 px-4">
-                              <div className="font-bold text-slate-900">{item.name}</div>
-                              <div className="text-[10px] font-mono text-slate-400">
-                                SKU: {item.sku || 'N/A'} • Barcode: {item.barcode || 'N/A'}
-                              </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700">
-                                {item.category}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 font-mono font-bold text-slate-900">
-                              ₹{item.sellingPrice.toFixed(2)}
-                            </td>
-                            <td className="py-3 px-4 font-mono font-bold text-slate-900">
-                              {allocatedStock} {item.unit || 'units'}
-                            </td>
-                            <td className="py-3 px-4 text-right">
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                  allocatedStock > 20
-                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                                    : allocatedStock > 5
-                                    ? 'bg-amber-100 text-amber-900'
-                                    : 'bg-red-100 text-red-800'
-                                }`}
-                              >
-                                {allocatedStock > 20 ? 'In Stock' : allocatedStock > 5 ? 'Low Stock' : 'Critical'}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+        {/* ========================================================================= */}
+        {/* TAB CONTENT 6: STORE INVENTORY INDENTS (WAREHOUSE ORDERS)                */}
+        {/* ========================================================================= */}
+        {activeTab === 'stock_indents' && (
+          <StoreIndentsView
+            currentStore={currentStore}
+            inventory={storeInventory}
+            onOpenCreateIndent={(preselected) => {
+              setIndentPreselectedItem(preselected || null);
+              setIsCreateIndentOpen(true);
+            }}
+            onRefresh={triggerRefresh}
+          />
         )}
       </div>
 
@@ -1587,6 +1529,23 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
         summary={financialSummary}
         expenses={allExpenses}
         orders={allOrders}
+      />
+
+      {/* Create Warehouse Stock Indent Modal */}
+      <CreateStoreIndentModal
+        isOpen={isCreateIndentOpen}
+        onClose={() => {
+          setIsCreateIndentOpen(false);
+          setIndentPreselectedItem(null);
+        }}
+        currentStore={currentStore}
+        inventory={storeInventory}
+        adminName={authState.adminName}
+        preselectedItem={indentPreselectedItem}
+        onSuccess={() => {
+          triggerRefresh();
+          handleTabSelect('stock_indents');
+        }}
       />
     </div>
   );

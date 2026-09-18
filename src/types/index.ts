@@ -1,7 +1,7 @@
 export type Role = 'landing' | 'admin' | 'pos' | 'customer' | 'warehouse' | 'store_admin';
 export type UserRole = Role;
 export type AdminTab = 'dashboard' | 'staff_counters' | 'analytics' | 'orders' | 'loyalty_promos' | 'backups';
-export type StoreAdminTab = 'overview' | 'finances' | 'expenses' | 'orders' | 'inventory' | 'staff' | 'closing';
+export type StoreAdminTab = 'overview' | 'finances' | 'expenses' | 'orders' | 'inventory' | 'staff' | 'closing' | 'stock_indents' | 'indents';
 
 export * from './warehouse';
 

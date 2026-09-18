@@ -1058,6 +1058,30 @@ export const warehouseStorage = {
     return true;
   },
 
+  cancelStoreIndent(indentId: string): boolean {
+    const indents = this.getStoreIndents();
+    const target = indents.find((i) => i.id === indentId);
+    if (!target) return false;
+    target.status = 'declined';
+    this.saveStoreIndents(indents);
+    storage.addNotification({
+      title: `Store Indent Cancelled: ${target.indentNumber}`,
+      message: `${target.storeName} cancelled indent requisition ${target.indentNumber}`,
+      type: 'order_update',
+      targetRole: 'admin',
+      read: false,
+    });
+    return true;
+  },
+
+  deleteStoreIndent(indentId: string): boolean {
+    const indents = this.getStoreIndents();
+    const filtered = indents.filter((i) => i.id !== indentId);
+    if (filtered.length === indents.length) return false;
+    this.saveStoreIndents(filtered);
+    return true;
+  },
+
   // =========================================================================
   // STOCK ADJUSTMENTS & SCRAP
   // =========================================================================

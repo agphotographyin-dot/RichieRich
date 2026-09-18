@@ -101,10 +101,12 @@ export function parseCurrentRoute(): RouteState {
     // Check Store Admin first (to avoid substring conflict with /admin)
     if (normalizedPath.includes('/store-admin') || normalizedPath.includes('/storeadmin') || normalizedPath.includes('/store/admin')) {
       let sTab: StoreAdminTab = 'overview';
-      if (storeAdminTabQuery && ['overview', 'finances', 'expenses', 'orders', 'inventory', 'staff', 'closing'].includes(storeAdminTabQuery)) {
-        sTab = storeAdminTabQuery;
+      if (storeAdminTabQuery && ['overview', 'finances', 'expenses', 'orders', 'inventory', 'staff', 'closing', 'stock_indents', 'indents'].includes(storeAdminTabQuery)) {
+        sTab = (storeAdminTabQuery === 'indents' ? 'stock_indents' : storeAdminTabQuery) as StoreAdminTab;
       } else if (normalizedPath.includes('/expenses')) {
         sTab = 'expenses';
+      } else if (normalizedPath.includes('/indents') || normalizedPath.includes('/stock_indents') || normalizedPath.includes('/stock-indents')) {
+        sTab = 'stock_indents';
       } else if (normalizedPath.includes('/finances') || normalizedPath.includes('/financials')) {
         sTab = 'finances';
       } else if (normalizedPath.includes('/orders') || normalizedPath.includes('/sales')) {
