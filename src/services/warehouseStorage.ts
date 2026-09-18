@@ -1102,12 +1102,25 @@ export const warehouseStorage = {
     };
 
     // Apply stock delta in a single batch
-    const stockDeltas = newAdj.items.map((item) => ({
-      id: item.itemId,
-      delta: item.adjustedQty,
-      reason: `Adjustment ${adjustmentNumber} (${newAdj.reason.replace(/_/g, ' ').toUpperCase()})`,
-    }));
-    storage.batchAdjustStock(stockDeltas);
+    if (newAdj.locationType === 'store') {
+      const inventory = storage.getInventory();
+      newAdj.items.forEach((item) => {
+        const invItem = inventory.find((i) => i.id === item.itemId);
+        if (invItem) {
+          if (!invItem.storeAllocations) invItem.storeAllocations = {};
+          const current = invItem.storeAllocations[newAdj.locationId] || 0;
+          invItem.storeAllocations[newAdj.locationId] = Math.max(0, current + item.adjustedQty);
+        }
+      });
+      storage.saveInventory(inventory);
+    } else {
+      const stockDeltas = newAdj.items.map((item) => ({
+        id: item.itemId,
+        delta: item.adjustedQty,
+        reason: `Adjustment ${adjustmentNumber} (${newAdj.reason.replace(/_/g, ' ').toUpperCase()})`,
+      }));
+      storage.batchAdjustStock(stockDeltas);
+    }
 
     const auditRecords = newAdj.items.map((item) => ({
       referenceNumber: adjustmentNumber,
