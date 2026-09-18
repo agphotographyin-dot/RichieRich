@@ -14,6 +14,9 @@ if (fs.existsSync(distDir)) {
     // 1. Create 404.html fallback for static hosts
     fs.writeFileSync(path.join(distDir, '404.html'), htmlContent);
 
+    // 2. Create _redirects for Netlify / Cloudflare Pages
+    fs.writeFileSync(path.join(distDir, '_redirects'), '/*  /index.html  200\n');
+
     // 2. Direct route destinations
     const routes = [
       'pos',
