@@ -9,6 +9,8 @@ import {
   BackupSnapshot,
   UserRole,
   AdminTab,
+  WarehouseTab,
+  StoreAdminTab,
   POSSession,
 } from './types';
 import { storage } from './services/storage';
@@ -52,10 +54,16 @@ import { WarehousePortal } from './components/warehouse/WarehousePortal';
 import { parseCurrentRoute, updateRoute } from './utils/router';
 
 export const App: React.FC = () => {
-  // Navigation Role & Admin Tab state initialized from the current URL
+  // Navigation Role & Tab state initialized from the current URL
   const initialRoute = parseCurrentRoute();
   const [currentRole, setCurrentRole] = useState<UserRole>(initialRoute.role);
   const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>(initialRoute.adminTab);
+  const [activeWarehouseTab, setActiveWarehouseTab] = useState<WarehouseTab>(
+    initialRoute.warehouseTab || 'dashboard'
+  );
+  const [activeStoreAdminTab, setActiveStoreAdminTab] = useState<StoreAdminTab>(
+    initialRoute.storeAdminTab || 'overview'
+  );
 
   // Per-Portal Authentication States
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(
@@ -121,7 +129,9 @@ export const App: React.FC = () => {
     const route = parseCurrentRoute();
     setCurrentRole(route.role);
     setActiveAdminTab(route.adminTab);
-    updateRoute(route.role, route.adminTab, true);
+    if (route.warehouseTab) setActiveWarehouseTab(route.warehouseTab);
+    if (route.storeAdminTab) setActiveStoreAdminTab(route.storeAdminTab);
+    updateRoute(route.role, route.adminTab, true, route.warehouseTab, route.storeAdminTab);
   }, []);
 
   // Listen for browser Back/Forward navigation (popstate & hashchange)
@@ -130,6 +140,8 @@ export const App: React.FC = () => {
       const route = parseCurrentRoute();
       setCurrentRole(route.role);
       setActiveAdminTab(route.adminTab);
+      if (route.warehouseTab) setActiveWarehouseTab(route.warehouseTab);
+      if (route.storeAdminTab) setActiveStoreAdminTab(route.storeAdminTab);
     };
 
     window.addEventListener('popstate', handleLocationChange);
@@ -199,13 +211,33 @@ export const App: React.FC = () => {
   const handleAdminTabSelect = (tab: AdminTab) => {
     setActiveAdminTab(tab);
     if (currentRole === 'admin') {
-      updateRoute('admin', tab);
+      updateRoute('admin', tab, false);
+    }
+  };
+
+  const handleWarehouseTabChange = (tab: WarehouseTab) => {
+    setActiveWarehouseTab(tab);
+    if (currentRole === 'warehouse') {
+      updateRoute('warehouse', undefined, false, tab, undefined);
+    }
+  };
+
+  const handleStoreAdminTabChange = (tab: string) => {
+    setActiveStoreAdminTab(tab as StoreAdminTab);
+    if (currentRole === 'store_admin') {
+      updateRoute('store_admin', undefined, false, undefined, tab as StoreAdminTab);
     }
   };
 
   const navigateToRole = (role: UserRole) => {
     setCurrentRole(role);
-    updateRoute(role, role === 'admin' ? activeAdminTab : undefined);
+    updateRoute(
+      role,
+      role === 'admin' ? activeAdminTab : undefined,
+      false,
+      role === 'warehouse' ? activeWarehouseTab : undefined,
+      role === 'store_admin' ? activeStoreAdminTab : undefined
+    );
   };
 
   // Auth Handler: Admin
@@ -381,6 +413,8 @@ export const App: React.FC = () => {
             ) : (
               <div className="animate-in fade-in duration-150">
                 <StoreAdminDashboard
+                  initialTab={activeStoreAdminTab}
+                  onTabChange={handleStoreAdminTabChange}
                   onLogout={handleStoreAdminLogout}
                   onNavigateToWarehouse={() => navigateToRole('warehouse')}
                   onNavigateToAdmin={() => navigateToRole('admin')}
@@ -426,6 +460,8 @@ export const App: React.FC = () => {
             ) : (
               <div className="animate-in fade-in duration-150">
                 <WarehousePortal
+                  currentTab={activeWarehouseTab}
+                  onTabChange={handleWarehouseTabChange}
                   layoutMode={warehouseLayoutMode}
                   onToggleLayoutMode={toggleWarehouseLayoutMode}
                 />

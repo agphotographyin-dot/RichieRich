@@ -52,6 +52,8 @@ import { isToday, getLocalDateString } from '../../utils/dateUtils';
 
 interface StoreAdminDashboardProps {
   initialStoreId?: string;
+  initialTab?: string;
+  onTabChange?: (tab: 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory') => void;
   onLogout: () => void;
   onNavigateToWarehouse?: () => void;
   onNavigateToAdmin?: () => void;
@@ -59,6 +61,8 @@ interface StoreAdminDashboardProps {
 
 export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
   initialStoreId,
+  initialTab,
+  onTabChange,
   onLogout,
   onNavigateToWarehouse,
   onNavigateToAdmin,
@@ -89,7 +93,27 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
     return authState.storeId || initialStoreId || stores[0]?.id || 'bopal';
   });
 
-  const [activeTab, setActiveTab] = useState<'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory'>('financials');
+  const mapPropToTab = (tab?: string): 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' => {
+    if (!tab) return 'financials';
+    if (tab === 'expenses') return 'expenses';
+    if (tab === 'sales_orders' || tab === 'orders') return 'sales_orders';
+    if (tab === 'staff_counters' || tab === 'staff') return 'staff_counters';
+    if (tab === 'store_inventory' || tab === 'inventory') return 'store_inventory';
+    return 'financials';
+  };
+
+  const [activeTab, setActiveTab] = useState<'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory'>(() => mapPropToTab(initialTab));
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(mapPropToTab(initialTab));
+    }
+  }, [initialTab]);
+
+  const handleTabSelect = (tab: 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory') => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
 
   // Add Expense modal state
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
@@ -586,7 +610,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
         {/* ========================================================================= */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-slate-200">
           <button
-            onClick={() => setActiveTab('financials')}
+            onClick={() => handleTabSelect('financials')}
             className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === 'financials'
                 ? 'bg-[#1E293B] text-white shadow-xs'
@@ -598,7 +622,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('expenses')}
+            onClick={() => handleTabSelect('expenses')}
             className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === 'expenses'
                 ? 'bg-[#1E293B] text-white shadow-xs'
@@ -610,7 +634,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('sales_orders')}
+            onClick={() => handleTabSelect('sales_orders')}
             className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === 'sales_orders'
                 ? 'bg-[#1E293B] text-white shadow-xs'
@@ -622,7 +646,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('staff_counters')}
+            onClick={() => handleTabSelect('staff_counters')}
             className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === 'staff_counters'
                 ? 'bg-[#1E293B] text-white shadow-xs'
@@ -634,7 +658,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('store_inventory')}
+            onClick={() => handleTabSelect('store_inventory')}
             className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
               activeTab === 'store_inventory'
                 ? 'bg-[#1E293B] text-white shadow-xs'

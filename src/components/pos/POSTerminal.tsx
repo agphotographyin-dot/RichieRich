@@ -49,15 +49,19 @@ interface CartItem extends OrderItem {
   priceType?: 'fixed' | 'variable';
 }
 
-export const POSTerminal: React.FC<POSTerminalProps> = ({
+interface POSActiveTerminalProps extends POSTerminalProps {
+  posSession: POSSession;
+  onSwitchCounter?: () => void;
+}
+
+const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
   inventory,
   categories,
   customers,
   onOpenScanner,
+  posSession,
+  onSwitchCounter,
 }) => {
-  // Session state
-  const [posSession, setPosSession] = useState<POSSession | null>(storage.getActivePOSSession());
-
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -341,25 +345,6 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
     return () => clearTimeout(timer);
   }, [lastScannedFeedback]);
 
-  // Keep session synchronized with storage
-  useEffect(() => {
-    const unsub = storage.subscribe(() => {
-      setPosSession(storage.getActivePOSSession());
-    });
-    return unsub;
-  }, []);
-
-  // If no active session, show Store & Counter PIN selection screen
-  if (!posSession) {
-    return (
-      <POSStoreCounterLogin
-        onLoginSuccess={(session) => {
-          setPosSession(session);
-        }}
-      />
-    );
-  }
-
   // Get store specific available stock for this counter's branch
   const getItemStoreStock = (item: InventoryItem): number => {
     if (item.storeAllocations && posSession.storeId in item.storeAllocations) {
@@ -421,12 +406,12 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
   };
 
   const handleLogout = () => {
-    if (cart.length > 0 && !confirm('Active cart will be cleared on logout. Continue?')) {
+    if (cart.length > 0 && !confirm('Active cart will be cleared on switching counter. Continue?')) {
       return;
     }
     storage.clearPOSSession();
-    setPosSession(null);
     setCart([]);
+    onSwitchCounter?.();
   };
 
   // Customer Phone Lookup
@@ -1361,6 +1346,49 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
         }}
       />
     </div>
+  );
+};
+
+export const POSTerminal: React.FC<POSTerminalProps> = ({
+  inventory,
+  categories,
+  customers,
+  onOpenScanner,
+}) => {
+  const [posSession, setPosSession] = useState<POSSession | null>(() => storage.getActivePOSSession());
+
+  useEffect(() => {
+    const unsub = storage.subscribe(() => {
+      setPosSession(storage.getActivePOSSession());
+    });
+    return unsub;
+  }, []);
+
+  const handleSwitchCounter = () => {
+    storage.clearPOSSession();
+    setPosSession(null);
+  };
+
+  if (!posSession) {
+    return (
+      <POSStoreCounterLogin
+        onLoginSuccess={(session) => {
+          setPosSession(session);
+        }}
+      />
+    );
+  }
+
+  return (
+    <POSActiveTerminal
+      key={`${posSession.storeId}-${posSession.counterNumber}-${posSession.cashierName}`}
+      posSession={posSession}
+      inventory={inventory}
+      categories={categories}
+      customers={customers}
+      onOpenScanner={onOpenScanner}
+      onSwitchCounter={handleSwitchCounter}
+    />
   );
 };
 
