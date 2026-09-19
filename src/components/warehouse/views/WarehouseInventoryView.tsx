@@ -41,7 +41,7 @@ import {
 } from 'lucide-react';
 import { InventoryItem, Category } from '../../../types';
 import { BatchRecord, Warehouse } from '../../../types/warehouse';
-import { CURRENCY, storage } from '../../../services/storage';
+import { CURRENCY, storage, getItemStockSummary, getCatalogStockMetrics } from '../../../services/storage';
 import { warehouseStorage } from '../../../services/warehouseStorage';
 import { pdfReportService } from '../../../services/pdfReportService';
 import { excelInventoryService } from '../../../services/excelInventoryService';
@@ -174,14 +174,19 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
         (item.vendors && item.vendors.includes(vendorFilter));
 
       let matchesStatus = true;
+      const summary = getItemStockSummary(item);
+      const isTotalOut = summary.totalNetworkStock <= 0;
+      const isTotalLow = summary.totalNetworkStock <= item.lowStockThreshold && summary.totalNetworkStock > 0;
+      const isTotalCritical = summary.totalNetworkStock > 0 && summary.totalNetworkStock <= Math.ceil(item.lowStockThreshold * 0.4);
+
       if (stockStatusFilter === 'low') {
-        matchesStatus = item.stockQuantity <= item.lowStockThreshold && item.stockQuantity > 0;
+        matchesStatus = isTotalLow || (summary.centralWHStock <= item.lowStockThreshold && summary.centralWHStock > 0);
       } else if (stockStatusFilter === 'critical') {
-        matchesStatus = item.stockQuantity > 0 && item.stockQuantity <= Math.ceil(item.lowStockThreshold * 0.4);
+        matchesStatus = isTotalCritical || (summary.centralWHStock > 0 && summary.centralWHStock <= Math.ceil(item.lowStockThreshold * 0.4));
       } else if (stockStatusFilter === 'out_of_stock') {
-        matchesStatus = item.stockQuantity <= 0;
+        matchesStatus = isTotalOut || summary.centralWHStock <= 0;
       } else if (stockStatusFilter === 'healthy') {
-        matchesStatus = item.stockQuantity > item.lowStockThreshold;
+        matchesStatus = summary.totalNetworkStock > item.lowStockThreshold && summary.centralWHStock > 0;
       } else if (stockStatusFilter === 'high_margin') {
         matchesStatus = (item.marginPercentage || 0) >= 55;
       } else if (stockStatusFilter === 'tax_exempt') {
@@ -197,10 +202,18 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
     return [...filteredInventory].sort((a, b) => {
       let comp = 0;
       if (sortBy === 'name') comp = a.name.localeCompare(b.name);
-      else if (sortBy === 'stock') comp = a.stockQuantity - b.stockQuantity;
+      else if (sortBy === 'stock') {
+        const aSum = getItemStockSummary(a).totalNetworkStock;
+        const bSum = getItemStockSummary(b).totalNetworkStock;
+        comp = aSum - bSum;
+      }
       else if (sortBy === 'profit') comp = (a.profitPerUnit || 0) - (b.profitPerUnit || 0);
       else if (sortBy === 'margin') comp = (a.marginPercentage || 0) - (b.marginPercentage || 0);
-      else if (sortBy === 'valuation') comp = a.stockQuantity * a.costPrice - b.stockQuantity * b.costPrice;
+      else if (sortBy === 'valuation') {
+        const aVal = getItemStockSummary(a).totalNetworkStock * a.costPrice;
+        const bVal = getItemStockSummary(b).totalNetworkStock * b.costPrice;
+        comp = aVal - bVal;
+      }
 
       return sortOrder === 'asc' ? comp : -comp;
     });
@@ -281,9 +294,13 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
     soundEffects.playClick();
   };
 
-  const totalValuation = useMemo(() => inventory.reduce((sum, i) => sum + i.stockQuantity * i.costPrice, 0), [inventory]);
-  const totalStockUnits = useMemo(() => inventory.reduce((sum, i) => sum + i.stockQuantity, 0), [inventory]);
-  const lowStockCount = useMemo(() => inventory.filter((i) => i.stockQuantity <= i.lowStockThreshold).length, [inventory]);
+  const catalogMetrics = useMemo(() => getCatalogStockMetrics(inventory), [inventory]);
+  const totalValuation = catalogMetrics.totalValuationCost;
+  const totalStockUnits = catalogMetrics.totalNetworkStockUnits;
+  const centralStockUnits = catalogMetrics.centralWHStockUnits;
+  const storesStockUnits = catalogMetrics.storesTotalStockUnits;
+  const lowStockCount = catalogMetrics.lowStockSKUs;
+  const outOfStockCount = catalogMetrics.outOfStockSKUs;
 
   const renderPaginationFooter = () => {
     if (sortedInventory.length === 0) return null;
@@ -366,9 +383,20 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
               <Boxes className="w-6 h-6 text-indigo-600" />
               <span>Master Inventory & Catalog Hub</span>
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold font-mono">
-              {inventory.length} SKUs ({totalStockUnits} Units)
-            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold font-mono">
+                {inventory.length} SKUs
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold font-mono" title="Stock physically in Central Warehouse">
+                WH: {centralStockUnits}
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold font-mono" title="Stock distributed across retail store outlets">
+                Stores: {storesStockUnits}
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-slate-900 text-white text-xs font-extrabold font-mono" title="Total active SKU network inventory">
+                Total: {totalStockUnits} Units
+              </span>
+            </div>
           </div>
           <p className="text-xs text-slate-500 mt-1">
             Centralized product catalog, retail pricing, bill tax rules, FIFO batches, barcode binding, and multi-counter distribution.
@@ -808,13 +836,15 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                     const margin = item.marginPercentage || 
                       (item.sellingPrice > 0 ? Math.round(((item.sellingPrice - item.costPrice) / item.sellingPrice) * 100) : 0);
                     
-                    const isLow = item.stockQuantity <= item.lowStockThreshold && item.stockQuantity > 0;
-                    const isCritical = item.stockQuantity > 0 && item.stockQuantity <= Math.ceil(item.lowStockThreshold * 0.4);
-                    const isOut = item.stockQuantity <= 0;
+                    const summary = getItemStockSummary(item);
+                    const centralWHStock = summary.centralWHStock;
+                    const storesSum = summary.totalStoresStock;
+                    const totalSKUStock = summary.totalNetworkStock;
 
-                    const alloc = item.storeAllocations || {};
-                    const storesSum = Object.values(alloc).reduce<number>((acc, val) => acc + (typeof val === 'number' ? val : 0), 0);
-                    const centralWHStock = Math.max(0, item.stockQuantity - storesSum);
+                    const isOut = totalSKUStock <= 0;
+                    const isWHOut = centralWHStock <= 0 && storesSum > 0;
+                    const isLow = totalSKUStock <= item.lowStockThreshold && totalSKUStock > 0;
+                    const isCritical = totalSKUStock > 0 && totalSKUStock <= Math.ceil(item.lowStockThreshold * 0.4);
 
                     return (
                       <tr key={item.id ? `${item.id}-${idx}` : `inv-${idx}`} className="hover:bg-slate-50/80 transition-colors">
@@ -955,38 +985,52 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
 
                         {/* Stock Level with Stepper */}
                         <td className="py-3 px-4 text-center">
-                          <div className="flex flex-col items-center gap-1">
-                            <div className="flex items-center gap-1.5">
+                          <div className="flex flex-col items-center gap-1.5">
+                            <div className="flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200 shadow-2xs">
                               <button
                                 onClick={() => handleStockAdjust(item.id, -1)}
-                                title="Decrease by 1"
-                                className="w-5 h-5 rounded bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 flex items-center justify-center font-bold text-xs cursor-pointer border border-slate-200"
+                                title="Decrease Central WH stock by 1"
+                                className="w-5 h-5 rounded bg-white hover:bg-rose-100 text-slate-600 hover:text-rose-700 flex items-center justify-center font-bold text-xs cursor-pointer border border-slate-200 transition-colors"
                               >
                                 -
                               </button>
-                              <span className="font-mono font-extrabold text-sm text-slate-900 min-w-[32px]">
-                                {item.stockQuantity}
-                              </span>
+                              <div className="flex flex-col items-center px-1">
+                                <span className="font-mono font-black text-sm text-indigo-700 min-w-[28px] text-center">
+                                  {centralWHStock}
+                                </span>
+                                <span className="text-[8px] uppercase font-bold text-indigo-500 tracking-wider">WH Stock</span>
+                              </div>
                               <button
                                 onClick={() => handleStockAdjust(item.id, 1)}
-                                title="Increase by 1"
-                                className="w-5 h-5 rounded bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-700 flex items-center justify-center font-bold text-xs cursor-pointer border border-slate-200"
+                                title="Increase Central WH stock by 1"
+                                className="w-5 h-5 rounded bg-white hover:bg-emerald-100 text-slate-600 hover:text-emerald-700 flex items-center justify-center font-bold text-xs cursor-pointer border border-slate-200 transition-colors"
                               >
                                 +
                               </button>
                             </div>
 
-                            <div className="flex items-center gap-1 text-[10px]">
+                            <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                              <span className="text-slate-500" title="Live auto-fetched aggregate stock across all retail outlets">
+                                Stores: <strong className="text-slate-700 font-bold">{storesSum}</strong>
+                              </span>
+                              <span className="text-slate-300">•</span>
+                              <span className="text-slate-900 font-bold" title="Accurate total SKU stock across Central WH & Retail Stores">
+                                Total: <strong className="text-slate-950 font-black">{totalSKUStock}</strong> {item.unit}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1 text-[9px]">
                               {isOut ? (
-                                <span className="px-1.5 py-0.2 rounded font-bold bg-rose-600 text-white">OUT</span>
+                                <span className="px-1.5 py-0.5 rounded font-bold bg-rose-600 text-white">OUT OF STOCK</span>
+                              ) : isWHOut ? (
+                                <span className="px-1.5 py-0.5 rounded font-bold bg-amber-500 text-white">WH DEPLETED</span>
                               ) : isCritical ? (
-                                <span className="px-1.5 py-0.2 rounded font-bold bg-rose-100 text-rose-800 animate-pulse">CRITICAL</span>
+                                <span className="px-1.5 py-0.5 rounded font-bold bg-rose-100 text-rose-800 animate-pulse">CRITICAL</span>
                               ) : isLow ? (
-                                <span className="px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-800">LOW</span>
+                                <span className="px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-800">LOW</span>
                               ) : (
-                                <span className="px-1.5 py-0.2 rounded font-bold bg-emerald-100 text-emerald-800">OK</span>
+                                <span className="px-1.5 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800">HEALTHY</span>
                               )}
-                              <span className="text-slate-400 font-mono">WH: {centralWHStock} / Str: {storesSum}</span>
                             </div>
                           </div>
                         </td>
@@ -1151,13 +1195,13 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono">
                 {paginatedInventory.map((item, idx) => {
-                  const alloc = item.storeAllocations || {};
-                  const gota = alloc['gota'] || 0;
-                  const bopal = alloc['bopal'] || 0;
-                  const sindhu = alloc['sindhubhavan'] || 0;
-                  const sgh = alloc['sg_highway'] || 0;
-                  const storesSum = gota + bopal + sindhu + sgh;
-                  const central = Math.max(0, item.stockQuantity - storesSum);
+                  const summary = getItemStockSummary(item);
+                  const central = summary.centralWHStock;
+                  const gota = summary.storesStock['gota'] || 0;
+                  const bopal = summary.storesStock['bopal'] || 0;
+                  const sindhu = summary.storesStock['sindhubhavan'] || 0;
+                  const sgh = summary.storesStock['sg_highway'] || 0;
+                  const totalAll = summary.totalNetworkStock;
 
                   return (
                     <tr key={item.id ? `${item.id}-${idx}` : `alloc-${idx}`} className="hover:bg-slate-50">
@@ -1165,18 +1209,39 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                         <div className="font-bold text-slate-900">{item.name}</div>
                         <div className="text-[10px] text-slate-400 font-mono">SKU: {item.sku}</div>
                       </td>
-                      <td className="py-2.5 px-3 text-center font-bold text-indigo-700">{central}</td>
+                      <td className="py-2.5 px-3 text-center font-bold text-indigo-700 bg-indigo-50/40">{central}</td>
                       <td className="py-2.5 px-3 text-center text-slate-700">{gota}</td>
                       <td className="py-2.5 px-3 text-center text-slate-700">{bopal}</td>
                       <td className="py-2.5 px-3 text-center text-slate-700">{sindhu}</td>
                       <td className="py-2.5 px-3 text-center text-slate-700">{sgh}</td>
-                      <td className="py-2.5 px-3 text-center font-extrabold text-slate-900 bg-slate-50/60">
-                        {item.stockQuantity} {item.unit}
+                      <td className="py-2.5 px-3 text-center font-extrabold text-slate-900 bg-slate-100/70">
+                        {totalAll} {item.unit}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
+              <tfoot className="bg-slate-100/90 font-bold border-t-2 border-slate-300 text-[11px] font-mono">
+                <tr>
+                  <td className="py-3 px-3 font-sans uppercase text-slate-700">Total Units in Catalog ({inventory.length} SKUs)</td>
+                  <td className="py-3 px-3 text-center text-indigo-800 bg-indigo-100/60 font-black">{catalogMetrics.centralWHStockUnits}</td>
+                  <td className="py-3 px-3 text-center text-slate-800">
+                    {inventory.reduce((sum, i) => sum + (i.storeAllocations?.['gota'] || 0), 0)}
+                  </td>
+                  <td className="py-3 px-3 text-center text-slate-800">
+                    {inventory.reduce((sum, i) => sum + (i.storeAllocations?.['bopal'] || 0), 0)}
+                  </td>
+                  <td className="py-3 px-3 text-center text-slate-800">
+                    {inventory.reduce((sum, i) => sum + (i.storeAllocations?.['sindhubhavan'] || 0), 0)}
+                  </td>
+                  <td className="py-3 px-3 text-center text-slate-800">
+                    {inventory.reduce((sum, i) => sum + (i.storeAllocations?.['sg_highway'] || 0), 0)}
+                  </td>
+                  <td className="py-3 px-3 text-center text-slate-950 bg-slate-200/90 font-black">
+                    {catalogMetrics.totalNetworkStockUnits} Units
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
           {renderPaginationFooter()}

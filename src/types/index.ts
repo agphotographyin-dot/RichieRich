@@ -302,4 +302,32 @@ export interface StoreFinancialStats {
   totalInventoryValue: number;
   totalCustomersCount: number;
   loyaltyPointsIssued: number;
+  // Multi-tier inventory metrics
+  centralStockUnits?: number;
+  storesStockUnits?: number;
+  totalStockUnits?: number;
+  centralInventoryValue?: number;
+  storesInventoryValue?: number;
+}
+
+export interface ItemStockSummary {
+  centralWHStock: number;
+  storesStock: Record<string, number>;
+  totalStoresStock: number;
+  totalNetworkStock: number;
+}
+
+export interface CatalogStockMetrics {
+  totalSKUs: number;
+  activeSKUs: number;
+  inStockSKUs: number;
+  lowStockSKUs: number;
+  outOfStockSKUs: number;
+  centralWHStockUnits: number;
+  storesTotalStockUnits: number;
+  totalNetworkStockUnits: number;
+  totalValuationCost: number;
+  totalValuationRetail: number;
+  centralValuationCost: number;
+  storesValuationCost: number;
 }

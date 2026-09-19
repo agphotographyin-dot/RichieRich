@@ -1,11 +1,28 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Plus, Trash2, PackagePlus, Building2, Calendar, FileText, Link2, CheckCircle2, Package, Layers } from 'lucide-react';
+import {
+  X,
+  Plus,
+  Trash2,
+  PackagePlus,
+  Building2,
+  Calendar,
+  FileText,
+  Link2,
+  CheckCircle2,
+  Package,
+  Layers,
+  FileSpreadsheet,
+  ShieldCheck,
+  AlertCircle,
+  ExternalLink,
+} from 'lucide-react';
 import { Supplier, Warehouse, PurchaseBillItem, PurchaseOrder } from '../../../types/warehouse';
 import { InventoryItem } from '../../../types';
 import { CURRENCY } from '../../../services/storage';
 import { warehouseStorage } from '../../../services/warehouseStorage';
 import { ItemAutocompleteInput } from '../../common/ItemAutocompleteInput';
 import { getSupplierProducts } from '../../../utils/supplierProductMatching';
+import { DocumentManifestModal } from '../../common/DocumentManifestModal';
 
 interface InwardBillModalProps {
   isOpen: boolean;
@@ -42,7 +59,9 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
   const [includeGst, setIncludeGst] = useState<boolean>(initialPO ? (initialPO.taxTotal > 0) : false);
   const [taxPercent, setTaxPercent] = useState<number>(initialPO?.items[0]?.taxPercent || 5);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPOManifestModal, setShowPOManifestModal] = useState(false);
 
+  const selectedPO = useMemo(() => purchaseOrders.find((p) => p.id === selectedPoId), [purchaseOrders, selectedPoId]);
   const selectedSupplier = suppliers.find((s) => s.id === supplierId);
   const supplierProducts = useMemo(() => {
     return getSupplierProducts(selectedSupplier, inventory);
@@ -218,12 +237,13 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
       warehouseStorage.createPurchaseBill({
         supplierId,
         supplierName: selectedSupplier?.name || 'Supplier',
-        warehouseId: defaultWh.id,
-        warehouseName: defaultWh.name,
+        warehouseId: 'wh-central-amd',
+        warehouseName: 'Central Warehouse',
         supplierInvoiceNo: invoiceNo,
         billDate: invoiceDate,
         receivedDate: new Date().toISOString().split('T')[0],
         poReferenceId: selectedPoId || undefined,
+        poNumber: selectedPO?.poNumber || undefined,
         items: billItems,
         subtotal: subTotal,
         gstAmount,
@@ -281,7 +301,7 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
             <select
               value={selectedPoId}
               onChange={(e) => handleSelectPO(e.target.value)}
-              className="px-3 py-1.5 bg-white border border-emerald-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="px-3 py-1.5 bg-white border border-emerald-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
             >
               <option value="">-- Direct Inward (Without PO) --</option>
               {purchaseOrders.map((po) => (
@@ -290,6 +310,100 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Linked Purchase Order Information & Manifest Card */}
+          {selectedPO && (
+            <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-200/70 pb-2.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono font-bold text-xs bg-indigo-700 text-white px-2.5 py-0.5 rounded shadow-xs">
+                    {selectedPO.poNumber}
+                  </span>
+                  <span className="text-xs font-bold text-indigo-950">
+                    Purchase Order Attached
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                      selectedPO.status === 'received'
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : selectedPO.status === 'approved'
+                        ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                        : 'bg-amber-100 text-amber-800 border border-amber-300'
+                    }`}
+                  >
+                    {selectedPO.status.replace('_', ' ')}
+                  </span>
+                </div>
+
+                {/* PO Manifest Trigger Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowPOManifestModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-lg border border-indigo-300 transition-colors shadow-xs cursor-pointer w-fit"
+                  title="Click to view full Purchase Order Manifest & Print Slip"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+                  <span>View PO Manifest</span>
+                </button>
+              </div>
+
+              {/* PO Info Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                <div>
+                  <span className="text-[10px] text-slate-500 block uppercase font-medium">Order Date</span>
+                  <span className="font-semibold text-slate-800">{selectedPO.orderDate}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block uppercase font-medium">Expected Delivery</span>
+                  <span className="font-semibold text-slate-800">{selectedPO.expectedDeliveryDate}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block uppercase font-medium">PO Grand Total</span>
+                  <span className="font-bold text-slate-900 font-mono">
+                    {CURRENCY}{selectedPO.grandTotal.toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block uppercase font-medium">Payment Terms</span>
+                  <span className="font-semibold text-slate-800">{selectedPO.paymentTerms || 'Standard'}</span>
+                </div>
+              </div>
+
+              {/* PO Items Quick Comparison Manifest */}
+              <div className="pt-2 border-t border-indigo-200/50">
+                <span className="text-[10px] font-bold text-indigo-900 uppercase block mb-1.5 tracking-wider">
+                  PO Items Manifest ({selectedPO.items?.length || 0} line items)
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {selectedPO.items?.map((poi, pIdx) => (
+                    <span
+                      key={pIdx}
+                      className="text-[11px] bg-white border border-indigo-200 text-slate-700 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-medium shadow-xs"
+                    >
+                      <span className="font-bold text-slate-900">{poi.name}</span>
+                      <span className="font-mono text-indigo-700 font-bold">
+                        Qty: {poi.quantityOrdered} {poi.unit}
+                      </span>
+                      <span className="text-slate-400 font-mono">@{CURRENCY}{poi.unitPrice}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Central Warehouse Inward Policy Banner */}
+          <div className="p-3 bg-emerald-50/90 border border-emerald-200/90 rounded-xl flex items-start gap-2.5">
+            <Building2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+            <div className="text-xs">
+              <span className="font-bold text-emerald-950 block">
+                Receiving Hub: Central Warehouse (WH-AMD-01) — Stock Credited to Central WH Only
+              </span>
+              <p className="text-emerald-800 text-[11px] leading-relaxed mt-0.5">
+                All inwarded quantities from this GRN are added <strong>exclusively to Central Warehouse inventory</strong>. Store outlets (Gota, Bopal, Sindhu Bhavan, SG Highway) receive stock solely via internal Dispatch Transfers & Gate Passes.
+              </p>
+            </div>
           </div>
 
           {/* Supplier, Single Warehouse & Invoice info */}
@@ -388,102 +502,121 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
             </div>
 
             <div className="space-y-3">
-              {items.map((row, idx) => (
-                <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
-                    {/* Autocomplete Input Box */}
-                    <div className="sm:col-span-6">
-                      <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
-                        Item Name / Search Catalog & History
-                      </label>
-                      <ItemAutocompleteInput
-                        value={row.name}
-                        placeholder={`Search ${supplierProducts.length} items from ${selectedSupplier?.name || 'supplier'}...`}
-                        inventory={supplierProducts}
-                        onSelect={(sel) => handleItemSelect(idx, sel)}
-                        onChange={(val) => handleFieldChange(idx, 'name', val)}
-                        inputClassName="bg-white"
-                      />
-                    </div>
+              {items.map((row, idx) => {
+                const matchingPOItem = selectedPO?.items?.find(
+                  (pi) =>
+                    pi.itemId === row.itemId ||
+                    (pi.sku && pi.sku === row.sku) ||
+                    pi.name.toLowerCase() === row.name.toLowerCase()
+                );
 
-                    <div className="sm:col-span-2">
-                      <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
-                        Inward Qty
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="Qty"
-                        value={row.quantity}
-                        onChange={(e) => handleFieldChange(idx, 'quantity', parseInt(e.target.value) || 1)}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-center font-bold text-slate-900"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-2">
-                      <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
-                        Unit Cost ({CURRENCY})
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="Cost"
-                        value={row.unitCost}
-                        onChange={(e) => handleFieldChange(idx, 'unitCost', parseFloat(e.target.value) || 0)}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-right font-bold text-slate-900"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-2 flex items-center justify-between sm:justify-end gap-2 pt-3 sm:pt-0">
-                      <div className="text-right font-mono text-xs font-bold text-slate-800">
-                        {CURRENCY}{((Number(row.quantity) || 0) * (Number(row.unitCost) || 0)).toLocaleString('en-IN')}
+                return (
+                  <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                      {/* Autocomplete Input Box */}
+                      <div className="sm:col-span-6">
+                        <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
+                          Item Name / Search Catalog & History
+                        </label>
+                        <ItemAutocompleteInput
+                          value={row.name}
+                          placeholder={`Search ${supplierProducts.length} items from ${selectedSupplier?.name || 'supplier'}...`}
+                          inventory={supplierProducts}
+                          onSelect={(sel) => handleItemSelect(idx, sel)}
+                          onChange={(val) => handleFieldChange(idx, 'name', val)}
+                          inputClassName="bg-white"
+                        />
                       </div>
 
-                      {items.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(idx)}
-                          className="text-rose-500 hover:text-rose-700 p-1 rounded-lg hover:bg-rose-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
+                          Inward Qty
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="Qty"
+                          value={row.quantity}
+                          onChange={(e) => handleFieldChange(idx, 'quantity', parseInt(e.target.value) || 1)}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-center font-bold text-slate-900"
+                        />
+                        {matchingPOItem && (
+                          <span className="text-[10px] text-indigo-700 font-mono font-bold block mt-0.5 text-center">
+                            PO: {matchingPOItem.quantityOrdered} {matchingPOItem.unit}
+                          </span>
+                        )}
+                      </div>
 
-                  {/* Batch Number & Expiry fields */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-slate-200/60">
-                    <div>
-                      <label className="text-[10px] text-slate-500 font-semibold block">Batch Number</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. BATCH-2026-A"
-                        value={row.batchNumber}
-                        onChange={(e) => handleFieldChange(idx, 'batchNumber', e.target.value)}
-                        className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono"
-                      />
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
+                          Unit Cost ({CURRENCY})
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="Cost"
+                          value={row.unitCost}
+                          onChange={(e) => handleFieldChange(idx, 'unitCost', parseFloat(e.target.value) || 0)}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-right font-bold text-slate-900"
+                        />
+                        {matchingPOItem && (
+                          <span className="text-[10px] text-slate-500 font-mono block mt-0.5 text-right">
+                            PO: {CURRENCY}{matchingPOItem.unitPrice}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="sm:col-span-2 flex items-center justify-between sm:justify-end gap-2 pt-3 sm:pt-0">
+                        <div className="text-right font-mono text-xs font-bold text-slate-800">
+                          {CURRENCY}{((Number(row.quantity) || 0) * (Number(row.unitCost) || 0)).toLocaleString('en-IN')}
+                        </div>
+
+                        {items.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(idx)}
+                            className="text-rose-500 hover:text-rose-700 p-1 rounded-lg hover:bg-rose-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-[10px] text-slate-500 font-semibold block">Manufacturing Date</label>
-                      <input
-                        type="date"
-                        value={row.mfgDate}
-                        onChange={(e) => handleFieldChange(idx, 'mfgDate', e.target.value)}
-                        className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-slate-500 font-semibold block">Expiry Date</label>
-                      <input
-                        type="date"
-                        value={row.expiryDate}
-                        onChange={(e) => handleFieldChange(idx, 'expiryDate', e.target.value)}
-                        className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono"
-                      />
+
+                    {/* Batch Number & Expiry fields */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-slate-200/60">
+                      <div>
+                        <label className="text-[10px] text-slate-500 font-semibold block">Batch Number</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. BATCH-2026-A"
+                          value={row.batchNumber}
+                          onChange={(e) => handleFieldChange(idx, 'batchNumber', e.target.value)}
+                          className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-500 font-semibold block">Manufacturing Date</label>
+                        <input
+                          type="date"
+                          value={row.mfgDate}
+                          onChange={(e) => handleFieldChange(idx, 'mfgDate', e.target.value)}
+                          className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-500 font-semibold block">Expiry Date</label>
+                        <input
+                          type="date"
+                          value={row.expiryDate}
+                          onChange={(e) => handleFieldChange(idx, 'expiryDate', e.target.value)}
+                          className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -577,6 +710,16 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
           </div>
         </form>
       </div>
+
+      {/* PO Manifest Document Modal */}
+      {showPOManifestModal && selectedPO && (
+        <DocumentManifestModal
+          isOpen={showPOManifestModal}
+          onClose={() => setShowPOManifestModal(false)}
+          documentType="purchase_order"
+          documentData={selectedPO}
+        />
+      )}
     </div>
   );
 };

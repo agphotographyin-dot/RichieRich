@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   FileSpreadsheet,
   Building2,
+  Store,
   IndianRupee,
   Plus,
   Search,
@@ -83,7 +84,9 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
       !q ||
       b.billNumber.toLowerCase().includes(q) ||
       b.supplierName.toLowerCase().includes(q) ||
-      b.supplierInvoiceNo.toLowerCase().includes(q)
+      b.supplierInvoiceNo.toLowerCase().includes(q) ||
+      (b.poNumber && b.poNumber.toLowerCase().includes(q)) ||
+      (b.poReferenceId && b.poReferenceId.toLowerCase().includes(q))
     );
   });
 
@@ -235,7 +238,23 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                         <div className="font-semibold text-slate-900">{po.supplierName}</div>
                         <div className="text-[10px] text-slate-400 font-mono">GSTIN: {po.supplierGstin}</div>
                       </td>
-                      <td className="py-3 px-3 font-sans text-slate-600">{po.destinationWarehouseName}</td>
+                      <td className="py-3 px-3 font-sans text-slate-600">
+                        <div className="flex items-center gap-1.5 font-medium text-slate-800">
+                          {po.destinationWarehouseId?.startsWith('wh') ? (
+                            <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          ) : (
+                            <Store className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          )}
+                          <span>{po.destinationWarehouseName}</span>
+                        </div>
+                        <span className={`inline-block mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                          po.destinationWarehouseId?.startsWith('wh')
+                            ? 'text-indigo-700 bg-indigo-50 border-indigo-200'
+                            : 'text-purple-700 bg-purple-50 border-purple-200'
+                        }`}>
+                          {po.destinationWarehouseId?.startsWith('wh') ? 'Warehouse' : 'Store Direct'}
+                        </span>
+                      </td>
                       <td className="py-3 px-3 text-slate-600">{po.orderDate}</td>
                       <td className="py-3 px-3 text-slate-600">{po.expectedDeliveryDate}</td>
                       <td className="py-3 px-3 text-right font-bold text-slate-900">
@@ -290,7 +309,8 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                 <tr>
                   <th className="py-3.5 px-4">Bill Ref</th>
                   <th className="py-3.5 px-4">Supplier & Invoice</th>
-                  <th className="py-3.5 px-3">Received At Warehouse</th>
+                  <th className="py-3.5 px-3">Purchase Order / Manifest</th>
+                  <th className="py-3.5 px-3">Receiving Location</th>
                   <th className="py-3.5 px-3">Bill Date</th>
                   <th className="py-3.5 px-3 text-right">Grand Total</th>
                   <th className="py-3.5 px-3 text-right">Due Amount</th>
@@ -302,59 +322,113 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
               <tbody className="divide-y divide-slate-100 font-mono">
                 {filteredBills.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-400 font-sans">
+                    <td colSpan={9} className="py-8 text-center text-slate-400 font-sans">
                       No purchase bills recorded.
                     </td>
                   </tr>
                 ) : (
-                  filteredBills.map((b) => (
-                    <tr key={b.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3 px-4 font-bold text-slate-900">{b.billNumber}</td>
-                      <td className="py-3 px-4 font-sans">
-                        <div className="font-semibold text-slate-900">{b.supplierName}</div>
-                        <div className="text-[10px] text-slate-400 font-mono">Inv: {b.supplierInvoiceNo}</div>
-                      </td>
-                      <td className="py-3 px-3 font-sans text-slate-600">{b.warehouseName}</td>
-                      <td className="py-3 px-3 text-slate-600">{b.billDate}</td>
-                      <td className="py-3 px-3 text-right font-bold text-slate-900">
-                        {CURRENCY}{b.grandTotal.toLocaleString('en-IN')}
-                      </td>
-                      <td className="py-3 px-3 text-right font-bold text-rose-600">
-                        {CURRENCY}{b.dueAmount.toLocaleString('en-IN')}
-                      </td>
-                      <td className="py-3 px-3 text-center font-sans">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          b.paymentStatus === 'paid'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : b.paymentStatus === 'partial'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-rose-100 text-rose-800'
-                        }`}>
-                          {b.paymentStatus.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right font-sans">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => setManifestDoc({ isOpen: true, type: 'purchase_bill', data: b })}
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-1 cursor-pointer border border-slate-200"
-                            title="View / Print Goods Receipt Note (GRN) Slip"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>GRN Slip</span>
-                          </button>
-                          {b.dueAmount > 0 && (
-                            <button
-                              onClick={() => onOpenRecordPayment(b.supplierId)}
-                              className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs transition-colors border border-indigo-200"
-                            >
-                              Pay Due
-                            </button>
+                  filteredBills.map((b) => {
+                    const linkedPO = purchaseOrders.find(
+                      (p) => p.id === b.poReferenceId || p.poNumber === b.poNumber || (b.poReferenceId && p.poNumber === b.poReferenceId)
+                    );
+
+                    return (
+                      <tr key={b.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 px-4 font-bold text-slate-900">{b.billNumber}</td>
+                        <td className="py-3 px-4 font-sans">
+                          <div className="font-semibold text-slate-900">{b.supplierName}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">Inv: {b.supplierInvoiceNo}</div>
+                        </td>
+
+                        {/* Linked PO / Manifest Column */}
+                        <td className="py-3 px-3 font-sans">
+                          {linkedPO ? (
+                            <div className="space-y-1">
+                              <button
+                                onClick={() => setManifestDoc({ isOpen: true, type: 'purchase_order', data: linkedPO })}
+                                className="inline-flex items-center gap-1.5 font-mono font-bold text-xs text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-200 cursor-pointer transition-colors shadow-2xs"
+                                title="Click to view full Purchase Order Manifest"
+                              >
+                                <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>{linkedPO.poNumber}</span>
+                              </button>
+                              <div className="text-[10px] text-slate-500 font-sans">
+                                PO Val: <strong className="text-slate-700 font-mono">{CURRENCY}{linkedPO.grandTotal.toLocaleString('en-IN')}</strong>
+                              </div>
+                            </div>
+                          ) : b.poNumber ? (
+                            <div className="font-mono text-xs text-slate-700 font-semibold bg-slate-100 px-2 py-0.5 rounded w-fit">
+                              {b.poNumber}
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic">Direct Inward</span>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+
+                        {/* Receiving Location (Central WH Only) */}
+                        <td className="py-3 px-3 font-sans text-slate-600">
+                          <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span>{b.warehouseName || 'Central Warehouse'}</span>
+                          </div>
+                          <span className="inline-block mt-0.5 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                            Central Stock Only
+                          </span>
+                        </td>
+
+                        <td className="py-3 px-3 text-slate-600">{b.billDate}</td>
+                        <td className="py-3 px-3 text-right font-bold text-slate-900">
+                          {CURRENCY}{b.grandTotal.toLocaleString('en-IN')}
+                        </td>
+                        <td className="py-3 px-3 text-right font-bold text-rose-600">
+                          {CURRENCY}{b.dueAmount.toLocaleString('en-IN')}
+                        </td>
+                        <td className="py-3 px-3 text-center font-sans">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              b.paymentStatus === 'paid'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : b.paymentStatus === 'partial'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}
+                          >
+                            {b.paymentStatus.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right font-sans">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {linkedPO && (
+                              <button
+                                onClick={() => setManifestDoc({ isOpen: true, type: 'purchase_order', data: linkedPO })}
+                                className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs transition-colors flex items-center gap-1 cursor-pointer border border-indigo-200"
+                                title="View / Print linked Purchase Order Manifest"
+                              >
+                                <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>PO Manifest</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setManifestDoc({ isOpen: true, type: 'purchase_bill', data: b })}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-1 cursor-pointer border border-slate-200"
+                              title="View / Print Goods Receipt Note (GRN) Slip"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>GRN Slip</span>
+                            </button>
+                            {b.dueAmount > 0 && (
+                              <button
+                                onClick={() => onOpenRecordPayment(b.supplierId)}
+                                className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs transition-colors border border-indigo-200"
+                              >
+                                Pay Due
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

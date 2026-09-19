@@ -14,6 +14,8 @@ import {
   StoreExpense,
   StoreExpenseCategory,
   StoreFinancialSummary,
+  ItemStockSummary,
+  CatalogStockMetrics,
 } from '../types';
 import { soundEffects } from './audio';
 import { validateAndSanitizeBackupPayload } from './backupIntegrityService';
@@ -1713,7 +1715,24 @@ export class StorageService {
           if (!item || typeof item !== 'object') continue;
 
           let itemId = item.id ? String(item.id).trim() : '';
-          const itemSku = item.sku ? String(item.sku).trim().toLowerCase() : '';
+          let itemSku = item.sku ? String(item.sku).trim().toUpperCase() : '';
+
+          // If empty SKU, attempt to restore from INITIAL_INVENTORY or generate
+          if (!itemSku) {
+            const matchedInit = INITIAL_INVENTORY.find(
+              (init) => init.id === itemId || (init.name && item.name && init.name.trim().toLowerCase() === String(item.name).trim().toLowerCase())
+            );
+            if (matchedInit && matchedInit.sku) {
+              itemSku = matchedInit.sku.toUpperCase();
+            } else {
+              const catPrefix = normalizeProductCategory(item.category).substring(0, 3).toUpperCase();
+              itemSku = `SKU-${catPrefix}-${String(i + 1).padStart(3, '0')}`;
+            }
+            item.sku = itemSku;
+            hadDuplicatesOrUnnormalized = true;
+          } else {
+            item.sku = itemSku;
+          }
 
           // If duplicate ID or empty ID
           if (!itemId || seenIds.has(itemId)) {
@@ -1723,8 +1742,9 @@ export class StorageService {
           }
 
           // If duplicate SKU, disambiguate
-          if (itemSku && seenSkus.has(itemSku)) {
-            item.sku = `${item.sku}-${i + 1}`;
+          const skuKey = itemSku.toLowerCase();
+          if (seenSkus.has(skuKey)) {
+            item.sku = `${itemSku}-${i + 1}`;
             hadDuplicatesOrUnnormalized = true;
           }
 
@@ -1740,6 +1760,24 @@ export class StorageService {
 
           sanitized.push(item);
         }
+
+        // Guarantee that all catalog items and SKUs from INITIAL_INVENTORY are always present
+        INITIAL_INVENTORY.forEach((initItem) => {
+          const initSku = initItem.sku ? initItem.sku.trim().toLowerCase() : '';
+          const alreadyPresent = sanitized.some(
+            (s) => s.id === initItem.id || (initSku && s.sku && s.sku.trim().toLowerCase() === initSku)
+          );
+          if (!alreadyPresent) {
+            sanitized.push({
+              ...initItem,
+              sku: (initItem.sku || `SKU-${initItem.id}`).toUpperCase(),
+              category: normalizeProductCategory(initItem.category),
+              stockQuantity: initItem.stockQuantity ?? 50,
+              storeAllocations: initItem.storeAllocations || { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
+            });
+            hadDuplicatesOrUnnormalized = true;
+          }
+        });
 
         if (hadDuplicatesOrUnnormalized && typeof window !== 'undefined') {
           try {
@@ -2596,6 +2634,17 @@ export class StorageService {
     this.notify();
   }
 
+  // --- STOCK SUMMARY & METRICS HELPERS ---
+
+  getItemStockSummary(item: InventoryItem): ItemStockSummary {
+    return getItemStockSummary(item);
+  }
+
+  getCatalogStockMetrics(inventoryList?: InventoryItem[]): CatalogStockMetrics {
+    const list = inventoryList || this.getInventory();
+    return getCatalogStockMetrics(list);
+  }
+
   // --- FINANCIAL STATS & ANALYTICS ---
 
   getFinancialStats(): StoreFinancialStats {
@@ -2616,9 +2665,7 @@ export class StorageService {
     });
 
     const overallMarginPercent = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
-    const lowStockItemsCount = inventory.filter((i) => i.stockQuantity <= i.lowStockThreshold && i.stockQuantity > 0).length;
-    const outOfStockCount = inventory.filter((i) => i.stockQuantity === 0).length;
-    const totalInventoryValue = inventory.reduce((sum, item) => sum + item.costPrice * item.stockQuantity, 0);
+    const metrics = getCatalogStockMetrics(inventory);
     const loyaltyPointsIssued = customers.reduce((sum, c) => sum + c.loyaltyPoints, 0);
 
     return {
@@ -2627,11 +2674,16 @@ export class StorageService {
       grossProfit: Math.round(totalProfit * 100) / 100,
       overallMarginPercent: Math.round(overallMarginPercent * 10) / 10,
       totalOrdersCount: orders.length,
-      lowStockItemsCount,
-      outOfStockCount,
-      totalInventoryValue: Math.round(totalInventoryValue * 100) / 100,
+      lowStockItemsCount: metrics.lowStockSKUs,
+      outOfStockCount: metrics.outOfStockSKUs,
+      totalInventoryValue: Math.round(metrics.totalValuationCost * 100) / 100,
       totalCustomersCount: customers.length,
       loyaltyPointsIssued,
+      centralStockUnits: metrics.centralWHStockUnits,
+      storesStockUnits: metrics.storesTotalStockUnits,
+      totalStockUnits: metrics.totalNetworkStockUnits,
+      centralInventoryValue: Math.round(metrics.centralValuationCost * 100) / 100,
+      storesInventoryValue: Math.round(metrics.storesValuationCost * 100) / 100,
     };
   }
 
@@ -2655,15 +2707,21 @@ export class StorageService {
     csv += `Overall Profit Margin (%),${stats.overallMarginPercent.toFixed(1)}%\n`;
     csv += `Total Orders Processed,${stats.totalOrdersCount}\n`;
     csv += `Total Active Customer Profiles,${stats.totalCustomersCount}\n`;
+    csv += `Central WH Stock Units,${stats.centralStockUnits || 0}\n`;
+    csv += `Store Outlets Stock Units,${stats.storesStockUnits || 0}\n`;
+    csv += `Total Network Stock Units,${stats.totalStockUnits || 0}\n`;
     csv += `Total Inventory Valuation (Cost),${CURRENCY}${stats.totalInventoryValue.toFixed(2)}\n`;
+    csv += `Central WH Valuation (Cost),${CURRENCY}${(stats.centralInventoryValue || 0).toFixed(2)}\n`;
+    csv += `Stores Valuation (Cost),${CURRENCY}${(stats.storesInventoryValue || 0).toFixed(2)}\n`;
     csv += `Low Stock Alerts Pending,${stats.lowStockItemsCount}\n\n`;
 
-    csv += `INVENTORY ITEM PROFIT MARGIN MATRIX\n`;
-    csv += `SKU,Barcode,Item Name,Category,Cost Price (${CURRENCY}),Selling Price (${CURRENCY}),Profit/Unit (${CURRENCY}),Margin (%),Stock Qty,Stock Status\n`;
+    csv += `INVENTORY ITEM PROFIT MARGIN & STOCK BREAKDOWN MATRIX\n`;
+    csv += `SKU,Barcode,Item Name,Category,Cost Price (${CURRENCY}),Selling Price (${CURRENCY}),Profit/Unit (${CURRENCY}),Margin (%),Central WH Stock,Stores Stock,Total Network Stock,Stock Status\n`;
 
     inventory.forEach((item) => {
-      const status = item.stockQuantity === 0 ? 'OUT OF STOCK' : item.stockQuantity <= item.lowStockThreshold ? 'LOW STOCK' : 'HEALTHY';
-      csv += `"${item.sku}","${item.barcode}","${item.name.replace(/"/g, '""')}","${item.category}",${item.costPrice},${item.sellingPrice},${item.profitPerUnit || 0},${item.marginPercentage || 0}%,${item.stockQuantity},"${status}"\n`;
+      const summary = getItemStockSummary(item);
+      const status = summary.totalNetworkStock === 0 ? 'OUT OF STOCK' : summary.totalNetworkStock <= item.lowStockThreshold ? 'LOW STOCK' : 'HEALTHY';
+      csv += `"${item.sku}","${item.barcode}","${item.name.replace(/"/g, '""')}","${item.category}",${item.costPrice},${item.sellingPrice},${item.profitPerUnit || 0},${item.marginPercentage || 0}%,${summary.centralWHStock},${summary.totalStoresStock},${summary.totalNetworkStock},"${status}"\n`;
     });
 
     csv += `\nTRANSACTION SALES AUDIT LOG\n`;
@@ -3072,3 +3130,94 @@ export class StorageService {
 }
 
 export const storage = StorageService.getInstance();
+
+/**
+ * Calculates current stock for a single inventory item across Central Warehouse and Retail Stores
+ */
+export function getItemStockSummary(item: InventoryItem): ItemStockSummary {
+  const centralWHStock = Math.max(0, Number(item?.stockQuantity) || 0);
+  const alloc = item?.storeAllocations || {};
+  let totalStoresStock = 0;
+  const storesStock: Record<string, number> = {};
+
+  for (const [storeId, qty] of Object.entries(alloc)) {
+    const validQty = Math.max(0, typeof qty === 'number' && !isNaN(qty) ? Math.floor(qty) : 0);
+    storesStock[storeId] = validQty;
+    totalStoresStock += validQty;
+  }
+
+  const totalNetworkStock = centralWHStock + totalStoresStock;
+
+  return {
+    centralWHStock,
+    storesStock,
+    totalStoresStock,
+    totalNetworkStock,
+  };
+}
+
+/**
+ * Calculates global catalog stock metrics across all items, stores, and Central Warehouse
+ */
+export function getCatalogStockMetrics(inventoryList: InventoryItem[]): CatalogStockMetrics {
+  const list = inventoryList || [];
+  let activeSKUs = 0;
+  let inStockSKUs = 0;
+  let lowStockSKUs = 0;
+  let outOfStockSKUs = 0;
+  let centralWHStockUnits = 0;
+  let storesTotalStockUnits = 0;
+  let totalValuationCost = 0;
+  let totalValuationRetail = 0;
+  let centralValuationCost = 0;
+  let storesValuationCost = 0;
+
+  for (let i = 0; i < list.length; i++) {
+    const item = list[i];
+    if (!item) continue;
+
+    if (item.status !== 'inactive') {
+      activeSKUs++;
+    }
+
+    const summary = getItemStockSummary(item);
+    centralWHStockUnits += summary.centralWHStock;
+    storesTotalStockUnits += summary.totalStoresStock;
+
+    const itemCost = Number(item.costPrice) || 0;
+    const itemRetail = Number(item.sellingPrice) || 0;
+
+    centralValuationCost += summary.centralWHStock * itemCost;
+    storesValuationCost += summary.totalStoresStock * itemCost;
+
+    totalValuationCost += summary.totalNetworkStock * itemCost;
+    totalValuationRetail += summary.totalNetworkStock * itemRetail;
+
+    const threshold = item.lowStockThreshold || 10;
+    if (summary.totalNetworkStock === 0) {
+      outOfStockSKUs++;
+    } else if (summary.totalNetworkStock <= threshold) {
+      lowStockSKUs++;
+      inStockSKUs++;
+    } else {
+      inStockSKUs++;
+    }
+  }
+
+  const totalNetworkStockUnits = centralWHStockUnits + storesTotalStockUnits;
+
+  return {
+    totalSKUs: list.length,
+    activeSKUs,
+    inStockSKUs,
+    lowStockSKUs,
+    outOfStockSKUs,
+    centralWHStockUnits,
+    storesTotalStockUnits,
+    totalNetworkStockUnits,
+    totalValuationCost,
+    totalValuationRetail,
+    centralValuationCost,
+    storesValuationCost,
+  };
+}

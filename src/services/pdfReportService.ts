@@ -2,7 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Order, StoreLocation, InventoryItem } from '../types';
 import { Supplier, WarehouseOverviewStats } from '../types/warehouse';
-import { storage } from './storage';
+import { storage, getItemStockSummary } from './storage';
 
 // Helper for formatting currency
 const formatCurrency = (num: number): string => {
@@ -587,11 +587,22 @@ export const pdfReportService = {
       `Total Inventory Value: ${formatCurrency(stats.totalInventoryValuationFIFO)} | Central WH + All Outlets`
     );
 
+    let totalCentralUnits = 0;
+    let totalStoresUnits = 0;
+    let grandTotalUnits = 0;
+    let grandTotalValuation = 0;
+
     const rows = inventory.map((i) => {
-      const alloc = i.storeAllocations || {};
-      const storesSum = Object.values(alloc).reduce<number>((acc, val) => acc + (typeof val === 'number' ? val : 0), 0);
-      const centralStock = Math.max(0, Number(i.stockQuantity) - storesSum);
-      const totalVal = i.stockQuantity * i.costPrice;
+      const summary = getItemStockSummary(i);
+      const centralStock = summary.centralWHStock;
+      const storesSum = summary.totalStoresStock;
+      const totalUnits = summary.totalNetworkStock;
+      const totalVal = totalUnits * i.costPrice;
+
+      totalCentralUnits += centralStock;
+      totalStoresUnits += storesSum;
+      grandTotalUnits += totalUnits;
+      grandTotalValuation += totalVal;
 
       return [
         i.sku,
@@ -599,7 +610,7 @@ export const pdfReportService = {
         i.category,
         centralStock.toString(),
         storesSum.toString(),
-        `${i.stockQuantity} ${i.unit}`,
+        `${totalUnits} ${i.unit}`,
         formatCurrency(i.costPrice),
         formatCurrency(i.sellingPrice),
         formatCurrency(totalVal),
@@ -618,7 +629,7 @@ export const pdfReportService = {
         8: { fontStyle: 'bold', halign: 'right' },
       },
       foot: [
-        ['TOTALS', `${inventory.length} Items`, '-', '-', '-', '-', '-', '-', formatCurrency(stats.totalInventoryValuationFIFO)],
+        ['TOTALS', `${inventory.length} SKUs`, '-', totalCentralUnits.toString(), totalStoresUnits.toString(), grandTotalUnits.toString(), '-', '-', formatCurrency(grandTotalValuation)],
       ],
       footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 7.5 },
       margin: { left: 14, right: 14 },

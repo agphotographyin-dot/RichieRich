@@ -147,8 +147,153 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
   },
 ];
 export const INITIAL_LEDGER_ENTRIES: SupplierLedgerEntry[] = [];
-export const INITIAL_PURCHASE_ORDERS: PurchaseOrder[] = [];
-export const INITIAL_PURCHASE_BILLS: PurchaseBill[] = [];
+export const INITIAL_PURCHASE_ORDERS: PurchaseOrder[] = [
+  {
+    id: 'po-seed-101',
+    poNumber: 'PO-2026-001',
+    supplierId: 'sup-101',
+    supplierName: 'Calcutta Paan Supply Co.',
+    supplierGstin: '19AAACC1234F1Z8',
+    destinationWarehouseId: 'wh-central-amd',
+    destinationWarehouseName: 'Central Warehouse',
+    orderDate: '2026-09-15',
+    expectedDeliveryDate: '2026-09-18',
+    status: 'received',
+    items: [
+      {
+        itemId: 'item-101',
+        sku: 'PAN-MAG-01',
+        name: 'Royal Maghai Meetha Paan',
+        category: 'Paan',
+        quantityOrdered: 200,
+        quantityReceived: 200,
+        unit: 'pieces',
+        unitPrice: 20,
+        taxPercent: 5,
+        taxAmount: 200,
+        totalAmount: 4200,
+      },
+      {
+        itemId: 'item-103',
+        sku: 'PAN-ICE-03',
+        name: 'Sub-Zero Ice Smoke Paan',
+        category: 'Paan',
+        quantityOrdered: 100,
+        quantityReceived: 100,
+        unit: 'pieces',
+        unitPrice: 35,
+        taxPercent: 5,
+        taxAmount: 175,
+        totalAmount: 3675,
+      },
+    ],
+    subtotal: 7500,
+    taxTotal: 375,
+    freightCharge: 250,
+    grandTotal: 8125,
+    createdByName: 'Vikramsinh Vaghela (WH Inward Officer)',
+    approvedByName: 'Rajesh Patel (Admin / General Manager)',
+    paymentTerms: 'Net 30 Days',
+    paymentStatus: 'unpaid',
+    notes: 'Premium batch ordered for Central Warehouse cold storage replenishment.',
+  },
+  {
+    id: 'po-seed-102',
+    poNumber: 'PO-2026-002',
+    supplierId: 'sup-102',
+    supplierName: 'Banaras Heritage Betel Leaves',
+    supplierGstin: '09AABCB5678G2Z1',
+    destinationWarehouseId: 'wh-central-amd',
+    destinationWarehouseName: 'Central Warehouse',
+    orderDate: '2026-09-17',
+    expectedDeliveryDate: '2026-09-20',
+    status: 'approved',
+    items: [
+      {
+        itemId: 'item-102',
+        sku: 'PAN-FIR-02',
+        name: 'Signature Chocolate Fire Paan',
+        category: 'Paan',
+        quantityOrdered: 150,
+        quantityReceived: 0,
+        unit: 'pieces',
+        unitPrice: 45,
+        taxPercent: 5,
+        taxAmount: 338,
+        totalAmount: 7088,
+      },
+    ],
+    subtotal: 6750,
+    taxTotal: 338,
+    freightCharge: 200,
+    grandTotal: 7288,
+    createdByName: 'Vikramsinh Vaghela (WH Inward Officer)',
+    approvedByName: 'Rajesh Patel (Admin / General Manager)',
+    paymentTerms: 'Net 15 Days',
+    paymentStatus: 'unpaid',
+    notes: 'Approved PO awaiting physical delivery to Central Warehouse for Inward GRN inspection.',
+  },
+];
+
+export const INITIAL_PURCHASE_BILLS: PurchaseBill[] = [
+  {
+    id: 'pb-seed-101',
+    billNumber: 'PB-2026-001',
+    poReferenceId: 'po-seed-101',
+    poNumber: 'PO-2026-001',
+    supplierId: 'sup-101',
+    supplierName: 'Calcutta Paan Supply Co.',
+    supplierInvoiceNo: 'INV-CAL-9942',
+    warehouseId: 'wh-central-amd',
+    warehouseName: 'Central Warehouse',
+    billDate: '2026-09-18',
+    receivedDate: '2026-09-18',
+    items: [
+      {
+        itemId: 'item-101',
+        sku: 'PAN-MAG-01',
+        name: 'Royal Maghai Meetha Paan',
+        category: 'Paan',
+        quantity: 200,
+        unit: 'pieces',
+        unitCost: 20,
+        taxRate: 5,
+        taxAmount: 200,
+        totalCost: 4200,
+        batchNumber: 'BATCH-MAG-2026-09A',
+        mfgDate: '2026-09-17',
+        expiryDate: '2026-10-17',
+      },
+      {
+        itemId: 'item-103',
+        sku: 'PAN-ICE-03',
+        name: 'Sub-Zero Ice Smoke Paan',
+        category: 'Paan',
+        quantity: 100,
+        unit: 'pieces',
+        unitCost: 35,
+        taxRate: 5,
+        taxAmount: 175,
+        totalCost: 3675,
+        batchNumber: 'BATCH-ICE-2026-09B',
+        mfgDate: '2026-09-17',
+        expiryDate: '2026-10-17',
+      },
+    ],
+    subtotal: 7500,
+    gstAmount: 375,
+    freightCharges: 250,
+    roundOff: 0,
+    grandTotal: 8125,
+    paidAmount: 0,
+    dueAmount: 8125,
+    dueDate: '2026-10-18',
+    paymentStatus: 'due',
+    grnStatus: 'verified_stocked',
+    receivedBy: 'Vikramsinh Vaghela (Inward Officer)',
+    notes: 'Inward GRN against PO-2026-001. All items physically verified and stocked into Central Warehouse cold vaults.',
+  },
+];
 export const INITIAL_BATCHES: BatchRecord[] = [];
 export const INITIAL_TRANSFERS: StockTransfer[] = [];
 export const INITIAL_INDENTS: StoreStockIndent[] = [];
@@ -523,7 +668,12 @@ export const warehouseStorage = {
           this.savePurchaseOrders(INITIAL_PURCHASE_ORDERS);
           return INITIAL_PURCHASE_ORDERS;
         }
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed) && parsed.length === 0 && INITIAL_PURCHASE_ORDERS.length > 0) {
+          this.savePurchaseOrders(INITIAL_PURCHASE_ORDERS);
+          return INITIAL_PURCHASE_ORDERS;
+        }
+        return parsed;
       } catch {
         return INITIAL_PURCHASE_ORDERS;
       }
@@ -581,7 +731,12 @@ export const warehouseStorage = {
           this.savePurchaseBills(INITIAL_PURCHASE_BILLS);
           return INITIAL_PURCHASE_BILLS;
         }
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed) && parsed.length === 0 && INITIAL_PURCHASE_BILLS.length > 0) {
+          this.savePurchaseBills(INITIAL_PURCHASE_BILLS);
+          return INITIAL_PURCHASE_BILLS;
+        }
+        return parsed;
       } catch {
         return INITIAL_PURCHASE_BILLS;
       }
@@ -601,10 +756,23 @@ export const warehouseStorage = {
   createPurchaseBill(billData: Omit<PurchaseBill, 'id' | 'billNumber'>): PurchaseBill {
     const bills = this.getPurchaseBills();
     const billNumber = `PB-2026-${(bills.length + 83).toString().padStart(3, '0')}`;
+    
+    // Resolve poNumber if poReferenceId was provided
+    let poNumber = billData.poNumber;
+    if (!poNumber && billData.poReferenceId) {
+      const linkedPO = this.getPurchaseOrders().find((p) => p.id === billData.poReferenceId);
+      if (linkedPO) {
+        poNumber = linkedPO.poNumber;
+      }
+    }
+
     const newBill: PurchaseBill = {
       ...billData,
       id: `pb-${Date.now()}`,
       billNumber,
+      poNumber,
+      warehouseId: 'wh-central-amd',
+      warehouseName: 'Central Warehouse',
     };
     this.savePurchaseBills([newBill, ...bills]);
 
@@ -633,7 +801,7 @@ export const warehouseStorage = {
       this.saveSupplierLedger([newLedger, ...ledgers]);
     }
 
-    // 2. Generate and store Batches with Expiry Tracking
+    // 2. Generate and store Batches with Expiry Tracking (Central Warehouse Only)
     const batches = this.getBatches();
     const newBatches: BatchRecord[] = newBill.items.map((item, idx) => {
       const daysToExpiry = Math.ceil(
@@ -650,8 +818,8 @@ export const warehouseStorage = {
         name: item.name,
         category: item.category,
         batchNumber: item.batchNumber || `BATCH-${item.sku.slice(0, 3)}-${Date.now().toString().slice(-4)}`,
-        warehouseId: newBill.warehouseId,
-        warehouseName: newBill.warehouseName,
+        warehouseId: 'wh-central-amd',
+        warehouseName: 'Central Warehouse',
         mfgDate: item.mfgDate || newBill.billDate,
         expiryDate: item.expiryDate,
         initialQuantity: item.quantity,
@@ -667,10 +835,12 @@ export const warehouseStorage = {
     this.saveBatches([...newBatches, ...batches]);
 
     // 3. Update Master Inventory Central Stock (Batched)
+    // NOTE: Inward GRN stock is credited strictly to Central Master Warehouse vaults.
+    // Store allocations (Gota, Bopal, Sindhu Bhavan, SG Highway) remain untouched.
     const stockDeltas = newBill.items.map((item) => ({
       id: item.itemId,
       delta: item.quantity,
-      reason: `Inward Purchase Bill ${billNumber} (Supplier: ${newBill.supplierName})`,
+      reason: `Inward Purchase Bill ${billNumber} (Supplier: ${newBill.supplierName}) [Central WH Only]`,
     }));
     storage.batchAdjustStock(stockDeltas);
 
@@ -683,26 +853,37 @@ export const warehouseStorage = {
       batchNumber: item.batchNumber,
       movementType: 'purchase_inward' as const,
       fromLocation: `Supplier: ${newBill.supplierName}`,
-      toLocation: newBill.warehouseName,
+      toLocation: 'Central Warehouse (WH-AMD-01)',
       quantity: item.quantity,
       unit: item.unit,
       balanceAfter: item.quantity,
       unitCost: item.unitCost,
       totalCostImpact: item.totalCost,
-      performedBy: newBill.receivedBy || 'Warehouse Manager',
+      performedBy: newBill.receivedBy || 'Warehouse Inward Officer',
       userRole: 'Warehouse Manager' as const,
-      notes: `Inward GRN stock verified. Invoice No: ${newBill.supplierInvoiceNo}`,
+      notes: `Inward GRN stock verified and placed strictly into Central Warehouse vaults (No store allocation). Invoice No: ${newBill.supplierInvoiceNo}`,
     }));
     this.addAuditRecords(auditRecords);
 
-    // 4. Update PO status if linked
+    // 4. Update PO status & received quantities if linked
     if (newBill.poReferenceId) {
-      this.updatePOStatus(newBill.poReferenceId, 'received');
+      const orders = this.getPurchaseOrders();
+      const po = orders.find((p) => p.id === newBill.poReferenceId);
+      if (po) {
+        po.status = 'received';
+        newBill.items.forEach((bi) => {
+          const poi = po.items.find((it) => it.itemId === bi.itemId || it.sku === bi.sku);
+          if (poi) {
+            poi.quantityReceived = (poi.quantityReceived || 0) + bi.quantity;
+          }
+        });
+        this.savePurchaseOrders(orders);
+      }
     }
 
     storage.addNotification({
-      title: `Goods Received & Stocked: ${billNumber}`,
-      message: `Received ₹${newBill.grandTotal.toLocaleString('en-IN')} worth stock from ${newBill.supplierName} into ${newBill.warehouseName}.`,
+      title: `Goods Received in Central Warehouse: ${billNumber}`,
+      message: `Inwarded ${newBill.items.reduce((s, i) => s + i.quantity, 0)} units from ${newBill.supplierName} into Central Master Warehouse only.`,
       type: 'order_update',
       targetRole: 'admin',
       read: false,

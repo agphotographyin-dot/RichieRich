@@ -467,6 +467,7 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
         onClose={() => setIsPOModalOpen(false)}
         suppliers={suppliers}
         warehouses={warehouses}
+        stores={stores}
         inventory={inventory}
         onSuccess={loadData}
       />

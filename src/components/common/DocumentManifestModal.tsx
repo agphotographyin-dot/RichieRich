@@ -23,6 +23,7 @@ import {
 import { PurchaseOrder, StockTransfer, PurchaseBill, StoreStockIndent } from '../../types/warehouse';
 import { Order } from '../../types';
 import { CURRENCY } from '../../services/storage';
+import { warehouseStorage } from '../../services/warehouseStorage';
 import { BarcodeVisualizer } from './BarcodeVisualizer';
 
 export type ManifestDocumentType =
@@ -87,8 +88,12 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [printFormat, setPrintFormat] = useState<'a4' | 'thermal'>('a4');
+  const [viewOverride, setViewOverride] = useState<{ type: ManifestDocumentType; data: any } | null>(null);
 
   if (!isOpen || !documentData) return null;
+
+  const currentType = viewOverride ? viewOverride.type : documentType;
+  const currentData = viewOverride ? viewOverride.data : documentData;
 
   const handlePrint = () => {
     window.print();
@@ -96,20 +101,20 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
 
   const handleCopySummary = () => {
     let text = '';
-    if (documentType === 'purchase_order') {
-      const po = documentData as PurchaseOrder;
+    if (currentType === 'purchase_order') {
+      const po = currentData as PurchaseOrder;
       text = `[PURCHASE ORDER MANIFEST]\nPO Number: ${po.poNumber}\nSupplier: ${po.supplierName} (GSTIN: ${po.supplierGstin})\nDestination: ${po.destinationWarehouseName}\nOrder Date: ${po.orderDate}\nTotal Amount: ${CURRENCY}${po.grandTotal}\nItems: ${po.items.map(i => `${i.quantityOrdered}x ${i.name}`).join(', ')}`;
-    } else if (documentType === 'stock_transfer') {
-      const st = documentData as StockTransfer;
+    } else if (currentType === 'stock_transfer') {
+      const st = currentData as StockTransfer;
       text = `[STOCK TRANSFER MANIFEST & GATE PASS]\nTransfer Ref: ${st.transferNumber}\nRoute: ${st.sourceName} -> ${st.destinationName}\nStatus: ${st.status.toUpperCase()}\nSecurity OTP/PIN: ${st.otpOrPin || 'N/A'}\nVehicle: ${st.vehicleNumber || 'Standard Delivery'}\nTotal Valuation: ${CURRENCY}${st.totalValuation}\nItems: ${st.items.map(i => `${i.dispatchedQty}x ${i.name}`).join(', ')}`;
-    } else if (documentType === 'purchase_bill') {
-      const pb = documentData as PurchaseBill;
-      text = `[GOODS RECEIPT NOTE (GRN) INWARD MANIFEST]\nGRN Ref: ${pb.billNumber}\nSupplier: ${pb.supplierName}\nInvoice No: ${pb.supplierInvoiceNo}\nWarehouse: ${pb.warehouseName}\nTotal Inwarded: ${CURRENCY}${pb.grandTotal}\nItems: ${pb.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}`;
-    } else if (documentType === 'retail_order') {
-      const ord = documentData as Order;
+    } else if (currentType === 'purchase_bill') {
+      const pb = currentData as PurchaseBill;
+      text = `[GOODS RECEIPT NOTE (GRN) INWARD MANIFEST]\nGRN Ref: ${pb.billNumber}\nSupplier: ${pb.supplierName}\nInvoice No: ${pb.supplierInvoiceNo}\nWarehouse: ${pb.warehouseName} (Central WH Only)\nTotal Inwarded: ${CURRENCY}${pb.grandTotal}\nItems: ${pb.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}`;
+    } else if (currentType === 'retail_order') {
+      const ord = currentData as Order;
       text = `[RETAIL TAX INVOICE]\nInvoice No: ${ord.orderNumber}\nOutlet: ${ord.storeName || 'Gota Main'}\nDate: ${new Date(ord.createdAt).toLocaleString()}\nTotal: ${CURRENCY}${ord.grandTotal}\nItems: ${ord.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}`;
-    } else if (documentType === 'store_indent') {
-      const ind = documentData as StoreStockIndent;
+    } else if (currentType === 'store_indent') {
+      const ind = currentData as StoreStockIndent;
       text = `[STORE INDENT REQUISITION]\nIndent Ref: ${ind.indentNumber}\nStore: ${ind.storeName}\nWarehouse: ${ind.targetWarehouseName}\nDate: ${ind.requestDate}\nUrgency: ${ind.urgency.toUpperCase()}\nItems: ${ind.items.map(i => `${i.requestedQty}x ${i.name}`).join(', ')}`;
     }
 
@@ -119,7 +124,7 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
   };
 
   const getDocTitle = () => {
-    switch (documentType) {
+    switch (currentType) {
       case 'purchase_order':
         return 'Purchase Order Manifest';
       case 'stock_transfer':
@@ -134,17 +139,17 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
   };
 
   const getDocNumber = () => {
-    switch (documentType) {
+    switch (currentType) {
       case 'purchase_order':
-        return (documentData as PurchaseOrder).poNumber;
+        return (currentData as PurchaseOrder).poNumber;
       case 'stock_transfer':
-        return (documentData as StockTransfer).transferNumber;
+        return (currentData as StockTransfer).transferNumber;
       case 'purchase_bill':
-        return (documentData as PurchaseBill).billNumber;
+        return (currentData as PurchaseBill).billNumber;
       case 'store_indent':
-        return (documentData as StoreStockIndent).indentNumber;
+        return (currentData as StoreStockIndent).indentNumber;
       case 'retail_order':
-        return (documentData as Order).orderNumber;
+        return (currentData as Order).orderNumber;
     }
   };
 
@@ -219,6 +224,24 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
           </div>
         </div>
 
+        {/* Override Navigation Banner when inspecting Linked Document */}
+        {viewOverride && (
+          <div className="no-print bg-indigo-700 text-white px-5 py-2.5 flex items-center justify-between text-xs border-b border-indigo-800">
+            <div className="flex items-center gap-2 font-medium">
+              <FileSpreadsheet className="w-4 h-4 text-amber-300" />
+              <span>
+                Inspecting Linked Document: <strong>{getDocTitle()} ({docNumber})</strong>
+              </span>
+            </div>
+            <button
+              onClick={() => setViewOverride(null)}
+              className="px-3 py-1 bg-white text-indigo-900 hover:bg-amber-100 font-bold rounded-lg text-xs transition-colors cursor-pointer shadow-xs"
+            >
+              ← Return to Original Document
+            </button>
+          </div>
+        )}
+
         {/* Document Body Area */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-100/60">
           {/* ========================================================================= */}
@@ -274,32 +297,32 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
                 <div>
                   <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Creation / Date</span>
                   <span className="font-semibold text-slate-800">
-                    {documentType === 'purchase_order' && (documentData as PurchaseOrder).orderDate}
-                    {documentType === 'stock_transfer' && (documentData as StockTransfer).requestedDate}
-                    {documentType === 'purchase_bill' && (documentData as PurchaseBill).billDate}
-                    {documentType === 'store_indent' && (documentData as StoreStockIndent).requestDate}
-                    {documentType === 'retail_order' && new Date((documentData as Order).createdAt).toLocaleDateString()}
+                    {currentType === 'purchase_order' && (currentData as PurchaseOrder).orderDate}
+                    {currentType === 'stock_transfer' && (currentData as StockTransfer).requestedDate}
+                    {currentType === 'purchase_bill' && (currentData as PurchaseBill).billDate}
+                    {currentType === 'store_indent' && (currentData as StoreStockIndent).requestDate}
+                    {currentType === 'retail_order' && new Date((currentData as Order).createdAt).toLocaleDateString()}
                   </span>
                 </div>
 
                 <div>
                   <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Status</span>
                   <span className="font-bold text-xs uppercase px-2 py-0.5 rounded inline-block mt-0.5 bg-emerald-100 text-emerald-800">
-                    {'status' in documentData ? String(documentData.status).replace(/_/g, ' ') : 'VERIFIED'}
+                    {'status' in currentData ? String(currentData.status).replace(/_/g, ' ') : 'VERIFIED'}
                   </span>
                 </div>
 
                 <div>
                   <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">
-                    {documentType === 'stock_transfer' ? 'Security OTP/PIN' : 'Authorized By'}
+                    {currentType === 'stock_transfer' ? 'Security OTP/PIN' : 'Authorized By'}
                   </span>
                   <span className="font-mono font-bold text-indigo-700 text-xs">
-                    {documentType === 'stock_transfer'
-                      ? (documentData as StockTransfer).otpOrPin || 'PIN-9421'
-                      : 'createdByName' in documentData
-                      ? (documentData as PurchaseOrder).createdByName
-                      : 'dispatchedBy' in documentData
-                      ? (documentData as StockTransfer).dispatchedBy || 'Logistics Head'
+                    {currentType === 'stock_transfer'
+                      ? (currentData as StockTransfer).otpOrPin || 'PIN-9421'
+                      : 'createdByName' in currentData
+                      ? (currentData as PurchaseOrder).createdByName
+                      : 'dispatchedBy' in currentData
+                      ? (currentData as StockTransfer).dispatchedBy || 'Logistics Head'
                       : 'Admin Master'}
                   </span>
                 </div>
@@ -308,8 +331,8 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
               {/* ------------------------------------------------------------- */}
               {/* SPECIFIC VIEW: PURCHASE ORDER MANIFEST                        */}
               {/* ------------------------------------------------------------- */}
-              {documentType === 'purchase_order' && (() => {
-                const po = documentData as PurchaseOrder;
+              {currentType === 'purchase_order' && (() => {
+                const po = currentData as PurchaseOrder;
                 return (
                   <div className="space-y-5">
                     {/* Two-Column Supplier & Destination */}
@@ -327,12 +350,25 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
 
                       <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
                         <div className="font-bold text-slate-900 uppercase text-[11px] text-indigo-700 flex items-center gap-1.5">
-                          <Store className="w-3.5 h-3.5" />
+                          {po.destinationWarehouseId?.startsWith('wh') ? (
+                            <Building2 className="w-3.5 h-3.5" />
+                          ) : (
+                            <Store className="w-3.5 h-3.5" />
+                          )}
                           <span>Deliver To (Consignee):</span>
                         </div>
-                        <div className="font-extrabold text-slate-900 text-sm">{po.destinationWarehouseName}</div>
+                        <div className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                          <span>{po.destinationWarehouseName}</span>
+                          {!po.destinationWarehouseId?.startsWith('wh') && (
+                            <span className="text-[10px] bg-purple-100 text-purple-800 font-semibold px-1.5 py-0.2 rounded border border-purple-200">
+                              Retail Store Delivery
+                            </span>
+                          )}
+                        </div>
                         <div className="text-slate-600">Expected Delivery: <strong>{po.expectedDeliveryDate}</strong></div>
-                        <div className="text-slate-500">Authorized Receiver: Central Warehouse Inward Gate</div>
+                        <div className="text-slate-500">
+                          Authorized Receiver: {po.destinationWarehouseId?.startsWith('wh') ? 'Central Warehouse Inward Gate' : `${po.destinationWarehouseName} Store Manager`}
+                        </div>
                         <div className="text-slate-500">Contact: +91 79 4890 2424 (Extension 102)</div>
                       </div>
                     </div>
@@ -518,25 +554,68 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
               {/* ------------------------------------------------------------- */}
               {/* SPECIFIC VIEW: GOODS RECEIPT NOTE (GRN) INWARD MANIFEST       */}
               {/* ------------------------------------------------------------- */}
-              {documentType === 'purchase_bill' && (() => {
-                const pb = documentData as PurchaseBill;
+              {currentType === 'purchase_bill' && (() => {
+                const pb = currentData as PurchaseBill;
+                const linkedPO = warehouseStorage.getPurchaseOrders().find(
+                  (p) =>
+                    p.id === pb.poReferenceId ||
+                    p.poNumber === pb.poNumber ||
+                    (pb.poReferenceId && p.poNumber === pb.poReferenceId)
+                );
+
                 return (
                   <div className="space-y-5">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                      {/* Vendor & Invoice Details */}
                       <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
                         <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Vendor Invoice Details</span>
                         <div className="font-bold text-slate-900 text-sm">{pb.supplierName}</div>
                         <div className="text-slate-600">Supplier Inv: <strong>{pb.supplierInvoiceNo}</strong></div>
-                        <div className="text-slate-500">PO Ref: {pb.poNumber || 'Direct Inward'}</div>
+                        
+                        {/* Linked PO Information & Manifest Switch */}
+                        {linkedPO ? (
+                          <div className="pt-2 border-t border-slate-200 mt-2">
+                            <span className="text-[10px] text-indigo-700 font-bold uppercase tracking-wider block">Linked Purchase Order</span>
+                            <div className="flex items-center justify-between gap-1.5 mt-1">
+                              <span className="font-mono font-bold text-xs text-indigo-950">{linkedPO.poNumber}</span>
+                              <button
+                                type="button"
+                                onClick={() => setViewOverride({ type: 'purchase_order', data: linkedPO })}
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 hover:text-indigo-950 bg-white hover:bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded cursor-pointer transition-colors shadow-2xs"
+                                title="Click to view full Purchase Order Manifest"
+                              >
+                                <FileSpreadsheet className="w-3 h-3 text-indigo-600" />
+                                <span>View PO Manifest</span>
+                              </button>
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">
+                              PO Val: {CURRENCY}{linkedPO.grandTotal.toLocaleString('en-IN')} • Status: {linkedPO.status.toUpperCase()}
+                            </div>
+                          </div>
+                        ) : pb.poNumber ? (
+                          <div className="text-slate-600 pt-1 text-[11px]">
+                            PO Ref: <span className="font-mono font-bold text-slate-900">{pb.poNumber}</span>
+                          </div>
+                        ) : (
+                          <div className="text-slate-400 italic pt-1 text-[11px]">Direct Inward (Without PO)</div>
+                        )}
                       </div>
 
+                      {/* Inward Warehouse Hub - Central WH Only */}
                       <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Inward Warehouse</span>
-                        <div className="font-bold text-slate-900 text-sm">{pb.warehouseName}</div>
-                        <div className="text-slate-600">Received Date: {pb.receivedDate}</div>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Receiving Destination Hub</span>
+                        <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                          <Building2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>{pb.warehouseName || 'Central Warehouse'}</span>
+                        </div>
+                        <div className="inline-block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded">
+                          Central WH Stock Only
+                        </div>
+                        <div className="text-slate-600 pt-1">Received Date: <strong>{pb.receivedDate}</strong></div>
                         <div className="text-slate-500">Received By: {pb.receivedBy || 'GRN Clerk'}</div>
                       </div>
 
+                      {/* QC & Payment Status */}
                       <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-200 space-y-1">
                         <span className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider block">QC & GRN Status</span>
                         <div className="font-bold text-emerald-900 uppercase text-xs">{pb.grnStatus.replace('_', ' ')}</div>
@@ -545,6 +624,7 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
                       </div>
                     </div>
 
+                    {/* Items Table */}
                     <div className="border border-slate-200 rounded-xl overflow-hidden">
                       <table className="w-full text-left text-xs">
                         <thead className="bg-slate-900 text-white text-[11px] uppercase font-bold">
@@ -579,6 +659,7 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
                       </table>
                     </div>
 
+                    {/* Total Summary */}
                     <div className="flex justify-between items-center bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs font-mono">
                       <div>
                         <span className="text-slate-500 block text-[11px] font-sans">Total Goods Receipt Value:</span>
@@ -591,6 +672,17 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
                         <span className="text-base font-extrabold text-slate-900">{CURRENCY}{pb.grandTotal.toFixed(2)}</span>
                       </div>
                     </div>
+
+                    {/* Central WH Stock Guarantee Banner */}
+                    <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-950">
+                      <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block">Central Warehouse Stock Receipt Isolation Guarantee</span>
+                        <p className="text-emerald-800 text-[11px] leading-relaxed mt-0.5">
+                          Physical stock received from this GRN has been inspected, logged, and credited <strong>exclusively to the Central Warehouse master balance</strong>. Retail outlet stores (Gota, Bopal, Sindhu Bhavan, SG Highway) receive inventory strictly via internal Dispatch Transfers & Gate Passes.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 );
               })()}
@@ -598,8 +690,8 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
               {/* ------------------------------------------------------------- */}
               {/* SPECIFIC VIEW: RETAIL TAX INVOICE & CASH MEMO                 */}
               {/* ------------------------------------------------------------- */}
-              {documentType === 'retail_order' && (() => {
-                const ord = documentData as Order;
+              {currentType === 'retail_order' && (() => {
+                const ord = currentData as Order;
                 return (
                   <div className="space-y-5">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
@@ -676,8 +768,8 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
               {/* ------------------------------------------------------------- */}
               {/* SPECIFIC VIEW: STORE INDENT REQUISITION                       */}
               {/* ------------------------------------------------------------- */}
-              {documentType === 'store_indent' && (() => {
-                const ind = documentData as StoreStockIndent;
+              {currentType === 'store_indent' && (() => {
+                const ind = currentData as StoreStockIndent;
                 return (
                   <div className="space-y-5">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -785,13 +877,13 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
                   <span>{new Date().toLocaleDateString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>STATUS: {'status' in documentData ? String(documentData.status).toUpperCase() : 'VERIFIED'}</span>
+                  <span>STATUS: {'status' in currentData ? String(currentData.status).toUpperCase() : 'VERIFIED'}</span>
                   <span>FORMAT: 80MM</span>
                 </div>
-                {documentType === 'stock_transfer' && (
+                {currentType === 'stock_transfer' && (
                   <div className="flex justify-between text-indigo-900 font-bold pt-1">
                     <span>SECURITY OTP/PIN:</span>
-                    <span>{(documentData as StockTransfer).otpOrPin || 'PIN-9421'}</span>
+                    <span>{(currentData as StockTransfer).otpOrPin || 'PIN-9421'}</span>
                   </div>
                 )}
               </div>
@@ -804,8 +896,8 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
                   <span>VALUATION</span>
                 </div>
 
-                {'items' in documentData &&
-                  (documentData as any).items.map((it: any, idx: number) => {
+                {'items' in currentData &&
+                  (currentData as any).items.map((it: any, idx: number) => {
                     const qty = it.quantityOrdered || it.dispatchedQty || it.quantity || 1;
                     const rate = it.unitPrice || it.unitCost || it.price || 0;
                     const tot = it.totalAmount || it.totalValuation || it.totalCost || it.subtotal || qty * rate;

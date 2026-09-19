@@ -14,10 +14,12 @@ import {
   Flame,
   Info,
   Layers,
+  Search,
 } from 'lucide-react';
 import { Warehouse, StoreStockIndentItem } from '../../types/warehouse';
 import { InventoryItem, StoreLocation } from '../../types';
 import { warehouseStorage } from '../../services/warehouseStorage';
+import { storage, INITIAL_INVENTORY } from '../../services/storage';
 import { soundEffects } from '../../services/audio';
 import { getLocalDateString } from '../../utils/dateUtils';
 
@@ -25,7 +27,7 @@ interface CreateStoreIndentModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentStore: StoreLocation;
-  inventory: InventoryItem[];
+  inventory?: InventoryItem[];
   onSuccess: () => void;
   preselectedItem?: InventoryItem | null;
   adminName?: string;
@@ -61,6 +63,47 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
   const [requestedBy, setRequestedBy] = useState<string>(adminName || 'Store Manager');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
+
+  // Master Inventory: Guarantees 100% of master products and SKUs are available to order from warehouse
+  const masterInventory: InventoryItem[] = useMemo(() => {
+    const live = storage.getInventory();
+    if (live && live.length > 0) return live;
+    if (inventory && inventory.length > 0) return inventory;
+    return INITIAL_INVENTORY;
+  }, [isOpen, inventory]);
+
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    masterInventory.forEach((i) => {
+      if (i.category) cats.add(i.category);
+    });
+    return Array.from(cats).sort();
+  }, [masterInventory]);
+
+  const sortedMasterInventory = useMemo(() => {
+    return [...masterInventory].sort((a, b) => {
+      if (a.category !== b.category) {
+        return a.category.localeCompare(b.category);
+      }
+      return (a.sku || '').localeCompare(b.sku || '') || a.name.localeCompare(b.name);
+    });
+  }, [masterInventory]);
+
+  // Quick search filter for master catalog
+  const filteredCatalogItems = useMemo(() => {
+    if (!catalogSearchQuery.trim()) return [];
+    const q = catalogSearchQuery.toLowerCase().trim();
+    return sortedMasterInventory
+      .filter(
+        (item) =>
+          item.name.toLowerCase().includes(q) ||
+          (item.sku && item.sku.toLowerCase().includes(q)) ||
+          (item.category && item.category.toLowerCase().includes(q)) ||
+          (item.barcode && item.barcode.includes(q))
+      )
+      .slice(0, 10);
+  }, [sortedMasterInventory, catalogSearchQuery]);
 
   // Initialize draft items
   const [items, setItems] = useState<IndentLineDraft[]>([]);
@@ -88,8 +131,8 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
           },
         ]);
         setUrgency(storeStock <= (preselectedItem.lowStockThreshold || 10) ? 'urgent_low_stock' : 'routine');
-      } else if (items.length === 0 && inventory.length > 0) {
-        const first = inventory[0];
+      } else if (items.length === 0 && sortedMasterInventory.length > 0) {
+        const first = sortedMasterInventory[0];
         const storeStock = first.storeAllocations?.[currentStore.id] ?? 0;
         setItems([
           {
@@ -104,8 +147,10 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
           },
         ]);
       }
+    } else {
+      setCatalogSearchQuery('');
     }
-  }, [isOpen, preselectedItem, currentStore.id, inventory]);
+  }, [isOpen, preselectedItem, currentStore.id, sortedMasterInventory]);
 
   if (!isOpen) return null;
 
@@ -115,8 +160,8 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
       name: 'Ahmedabad Central Logistics Hub',
     };
 
-  // Find all low stock items in current store
-  const lowStockItemsInStore = inventory.filter((item) => {
+  // Find all low stock items in current store from master inventory
+  const lowStockItemsInStore = sortedMasterInventory.filter((item) => {
     const stock = item.storeAllocations?.[currentStore.id] ?? 0;
     return stock <= (item.lowStockThreshold || 10);
   });
@@ -124,7 +169,7 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
   const handleAddRow = () => {
     // Find first item not already in draft
     const existingIds = new Set(items.map((i) => i.itemId));
-    const candidate = inventory.find((i) => !existingIds.has(i.id)) || inventory[0];
+    const candidate = sortedMasterInventory.find((i) => !existingIds.has(i.id)) || sortedMasterInventory[0];
     if (!candidate) return;
 
     const storeStock = candidate.storeAllocations?.[currentStore.id] ?? 0;
@@ -141,6 +186,29 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
         unit: candidate.unit || 'units',
       },
     ]);
+  };
+
+  const handleAddSpecificProduct = (product: InventoryItem) => {
+    const storeStock = product.storeAllocations?.[currentStore.id] ?? 0;
+    const threshold = product.lowStockThreshold || 10;
+    const suggested = Math.max(threshold * 3 - storeStock, 25);
+
+    setItems((prev) => [
+      ...prev,
+      {
+        itemId: product.id,
+        name: product.name,
+        sku: product.sku || 'SKU-IND',
+        category: product.category,
+        currentStoreStock: storeStock,
+        minThreshold: threshold,
+        requestedQty: suggested,
+        unit: product.unit || 'units',
+      },
+    ]);
+
+    setCatalogSearchQuery('');
+    soundEffects.playScanBeep();
   };
 
   const handlePopulateAllLowStock = () => {
@@ -171,7 +239,7 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
   };
 
   const handleItemSelect = (index: number, itemId: string) => {
-    const selected = inventory.find((i) => i.id === itemId);
+    const selected = sortedMasterInventory.find((i) => i.id === itemId);
     if (!selected) return;
 
     const storeStock = selected.storeAllocations?.[currentStore.id] ?? 0;
@@ -218,17 +286,21 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      const indentItems: StoreStockIndentItem[] = items.map((it) => ({
-        itemId: it.itemId,
-        sku: it.sku,
-        name: it.name,
-        currentStoreStock: it.currentStoreStock,
-        minThreshold: it.minThreshold,
-        requestedQty: it.requestedQty,
-        unit: it.unit,
-      }));
+      const indentItems: StoreStockIndentItem[] = items.map((it) => {
+        const cleanSku = it.sku ? it.sku.trim().toUpperCase() : 'SKU-IND';
+        const formattedName = it.name.startsWith(`[${cleanSku}]`) ? it.name : `[${cleanSku}] ${it.name}`;
+        return {
+          itemId: it.itemId,
+          sku: cleanSku,
+          name: formattedName,
+          currentStoreStock: it.currentStoreStock,
+          minThreshold: it.minThreshold,
+          requestedQty: it.requestedQty,
+          unit: it.unit,
+        };
+      });
 
-      const created = warehouseStorage.createStoreIndent({
+      warehouseStorage.createStoreIndent({
         storeId: currentStore.id,
         storeName: currentStore.name,
         targetWarehouseId: targetWarehouse.id,
@@ -261,16 +333,19 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
               <Package className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-lg sm:text-xl font-black tracking-tight text-white">
                   Order Stock from Warehouse
                 </h2>
                 <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-extrabold uppercase">
                   Store Indent
                 </span>
+                <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                  {sortedMasterInventory.length} SKUs Available
+                </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Raise an official stock requisition for <strong className="text-white">{currentStore.name}</strong>
+                Raise an official stock requisition for <strong className="text-white">{currentStore.name}</strong> from Master Central Inventory
               </p>
             </div>
           </div>
@@ -288,10 +363,15 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
           {/* Rules / Policy Note */}
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 flex items-start gap-3 text-xs text-amber-900">
             <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold">Store Indent Policy Notice</p>
-              <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
-                Stores can order inventory stock exclusively from Central Warehouse Hubs. Your request is queued directly into the Central Warehouse dispatch pipeline.
+            <div className="space-y-0.5">
+              <p className="font-bold flex items-center gap-2">
+                <span>Master Warehouse Catalog Replenishment</span>
+                <span className="text-[10px] bg-amber-200/80 text-amber-950 px-2 py-0.2 rounded font-mono font-black">
+                  All {sortedMasterInventory.length} Master SKUs Loaded
+                </span>
+              </p>
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                Stores can order replenishment stock for every SKU listed in the Master Inventory. All product selections clearly list their master SKU code, current store stock, and central warehouse available quantities.
               </p>
             </div>
           </div>
@@ -404,6 +484,76 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
             </div>
           </div>
 
+          {/* Quick Search & Add from Master Catalog */}
+          <div className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-2xl space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold text-amber-950 uppercase tracking-wider flex items-center gap-1.5">
+                <Search className="w-3.5 h-3.5 text-amber-700" />
+                <span>Search & Add Product by Name or SKU ({sortedMasterInventory.length} Master SKUs)</span>
+              </span>
+              {catalogSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setCatalogSearchQuery('')}
+                  className="text-[10px] text-amber-800 hover:text-amber-950 font-bold cursor-pointer underline"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={catalogSearchQuery}
+                onChange={(e) => setCatalogSearchQuery(e.target.value)}
+                placeholder="Search master catalog by SKU (e.g. PAN-MAG-01, ESS-ENR-03) or Product Name..."
+                className="w-full bg-white border border-amber-300 rounded-xl pl-9 pr-3 py-2 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-amber-600 focus:ring-1 focus:ring-amber-600"
+              />
+            </div>
+
+            {catalogSearchQuery.trim() && (
+              <div className="max-h-44 overflow-y-auto divide-y divide-amber-100 bg-white border border-amber-200 rounded-xl shadow-xs">
+                {filteredCatalogItems.length === 0 ? (
+                  <div className="p-3 text-center text-xs text-slate-500">
+                    No products found matching "{catalogSearchQuery}". All {sortedMasterInventory.length} SKUs remain accessible in the dropdown below.
+                  </div>
+                ) : (
+                  filteredCatalogItems.map((prod) => {
+                    const isAlreadyIn = items.some((it) => it.itemId === prod.id);
+                    const storeStock = prod.storeAllocations?.[currentStore.id] ?? 0;
+                    return (
+                      <div
+                        key={prod.id}
+                        className="p-2.5 flex items-center justify-between gap-2 hover:bg-amber-50/50 transition-colors"
+                      >
+                        <div className="min-w-0 flex items-center gap-2">
+                          <span className="font-mono font-black text-amber-900 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded text-[10px] shrink-0">
+                            [{prod.sku}]
+                          </span>
+                          <span className="text-xs font-bold text-slate-800 truncate">
+                            {prod.name}
+                          </span>
+                          <span className="text-[10px] text-slate-500 shrink-0">
+                            ({prod.category}) • Store Stock: {storeStock} {prod.unit || 'units'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleAddSpecificProduct(prod)}
+                          className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] shrink-0 flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>{isAlreadyIn ? 'Add Line' : 'Add to Indent'}</span>
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Line Items Section */}
           <div className="space-y-3 pt-2">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2">
@@ -448,25 +598,47 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
                   className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-slate-300 transition-colors flex flex-col md:flex-row items-start md:items-center justify-between gap-3"
                 >
                   {/* Item Selector */}
-                  <div className="flex-1 w-full space-y-1">
-                    <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center justify-between">
-                      <span>Product #{idx + 1}</span>
-                      <span className="font-mono text-slate-400 text-[9px]">{row.sku}</span>
-                    </label>
+                  <div className="flex-1 w-full space-y-1.5">
+                    <div className="flex items-center justify-between pb-0.5">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                        <span className="bg-slate-200 text-slate-800 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                          #{idx + 1}
+                        </span>
+                        <span className="text-slate-900 font-bold truncate max-w-xs">{row.name}</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase">SKU:</span>
+                        <span className="font-mono font-black text-amber-900 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md text-[11px]">
+                          {row.sku}
+                        </span>
+                      </div>
+                    </div>
+
                     <select
                       value={row.itemId}
                       onChange={(e) => handleItemSelect(idx, e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-hidden focus:border-amber-500"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
                     >
-                      {inventory.map((inv) => (
-                        <option key={inv.id} value={inv.id}>
-                          {inv.name} ({inv.category}) — Current Store Stock:{' '}
-                          {inv.storeAllocations?.[currentStore.id] ?? inv.stockQuantity}{' '}
-                          {inv.unit || 'units'}
-                        </option>
-                      ))}
+                      {categories.map((cat) => {
+                        const catItems = sortedMasterInventory.filter((inv) => inv.category === cat);
+                        if (catItems.length === 0) return null;
+                        return (
+                          <optgroup key={cat} label={`── ${cat.toUpperCase()} CATEGORY (${catItems.length} Products) ──`}>
+                            {catItems.map((inv) => {
+                              const storeQty = inv.storeAllocations?.[currentStore.id] ?? 0;
+                              const whQty = inv.stockQuantity ?? 0;
+                              return (
+                                <option key={inv.id} value={inv.id}>
+                                  [{inv.sku || 'SKU'}] {inv.name} — Store: {storeQty} {inv.unit || 'units'} | Central WH Avail: {whQty} {inv.unit || 'units'}
+                                </option>
+                              );
+                            })}
+                          </optgroup>
+                        );
+                      })}
                     </select>
-                    <div className="flex items-center gap-3 text-[10px] text-slate-500 pt-0.5">
+
+                    <div className="flex items-center gap-3 text-[10px] text-slate-500 pt-0.5 flex-wrap">
                       <span>
                         Current Store Stock:{' '}
                         <strong
@@ -477,6 +649,13 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
                           }
                         >
                           {row.currentStoreStock} {row.unit}
+                        </strong>
+                      </span>
+                      <span>•</span>
+                      <span>
+                        Central WH Avail:{' '}
+                        <strong className="text-indigo-700 font-bold">
+                          {sortedMasterInventory.find((i) => i.id === row.itemId)?.stockQuantity ?? 0} {row.unit}
                         </strong>
                       </span>
                       <span>•</span>

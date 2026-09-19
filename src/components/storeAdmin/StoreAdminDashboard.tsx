@@ -148,6 +148,8 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
   const [orderSearch, setOrderSearch] = useState('');
   const [inventorySearch, setInventorySearch] = useState('');
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState<string>('all');
+  const [inventoryPage, setInventoryPage] = useState(1);
+  const [inventoryPageSize, setInventoryPageSize] = useState<number | 'all'>(25);
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
 
   // Store Inventory Indents State
@@ -226,6 +228,18 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
       return matchSearch && matchCategory;
     });
   }, [storeInventory, inventorySearch, inventoryCategoryFilter]);
+
+  // Paginated inventory slice (max 25 per page default)
+  const totalInventoryPages = useMemo(() => {
+    if (inventoryPageSize === 'all') return 1;
+    return Math.max(1, Math.ceil(filteredInventory.length / (inventoryPageSize as number)));
+  }, [filteredInventory.length, inventoryPageSize]);
+
+  const paginatedInventory = useMemo(() => {
+    if (inventoryPageSize === 'all') return filteredInventory;
+    const startIndex = (inventoryPage - 1) * (inventoryPageSize as number);
+    return filteredInventory.slice(startIndex, startIndex + (inventoryPageSize as number));
+  }, [filteredInventory, inventoryPage, inventoryPageSize]);
 
   // Real-time counter metrics (both today resetting after 12:00 AM midnight and all-time)
   const counterStats = useMemo(() => {
@@ -1232,14 +1246,20 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                   type="text"
                   placeholder="Search inventory by product name, SKU, or barcode..."
                   value={inventorySearch}
-                  onChange={(e) => setInventorySearch(e.target.value)}
+                  onChange={(e) => {
+                    setInventorySearch(e.target.value);
+                    setInventoryPage(1);
+                  }}
                   className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:bg-white focus:border-amber-500"
                 />
               </div>
 
               <select
                 value={inventoryCategoryFilter}
-                onChange={(e) => setInventoryCategoryFilter(e.target.value)}
+                onChange={(e) => {
+                  setInventoryCategoryFilter(e.target.value);
+                  setInventoryPage(1);
+                }}
                 className="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 focus:outline-hidden w-full sm:w-auto"
               >
                 <option value="all">All Categories</option>
@@ -1258,6 +1278,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                       <th className="py-3 px-4">Category</th>
                       <th className="py-3 px-4">Selling Price</th>
                       <th className="py-3 px-4">Store Allocated Stock</th>
+                      <th className="py-3 px-4 text-center">Central WH Stock</th>
                       <th className="py-3 px-4">Status</th>
                       <th className="py-3 px-4 text-right">Order / Indent</th>
                     </tr>
@@ -1265,13 +1286,14 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                   <tbody className="divide-y divide-slate-100">
                     {filteredInventory.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center py-10 text-slate-400">
+                        <td colSpan={7} className="text-center py-10 text-slate-400">
                           No inventory items match your search.
                         </td>
                       </tr>
                     ) : (
-                      filteredInventory.map((item) => {
+                      paginatedInventory.map((item) => {
                         const allocatedStock = item.storeAllocations?.[activeStoreId] ?? 0;
+                        const centralStock = item.stockQuantity ?? 0;
                         const isLowStock = allocatedStock <= (item.lowStockThreshold || 10);
                         return (
                           <tr key={item.id} className="hover:bg-slate-50/70">
@@ -1291,6 +1313,9 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                             </td>
                             <td className="py-3 px-4 font-mono font-bold text-slate-900">
                               {allocatedStock} {item.unit || 'units'}
+                            </td>
+                            <td className="py-3 px-4 font-mono font-bold text-indigo-700 bg-indigo-50/20 text-center" title="Stock physically present and available in Central Warehouse">
+                              {centralStock} {item.unit || 'units'}
                             </td>
                             <td className="py-3 px-4">
                               <span
@@ -1330,6 +1355,88 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination Controls for Store Inventory (max 25 per page default) */}
+              {filteredInventory.length > 0 && (
+                <div className="p-3.5 sm:p-4 border-t border-slate-200 bg-slate-50/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                  <div className="text-slate-500 font-medium">
+                    Showing{' '}
+                    <span className="font-bold text-slate-800 font-mono">
+                      {inventoryPageSize === 'all'
+                        ? 1
+                        : (inventoryPage - 1) * (inventoryPageSize as number) + 1}
+                    </span>{' '}
+                    to{' '}
+                    <span className="font-bold text-slate-800 font-mono">
+                      {inventoryPageSize === 'all'
+                        ? filteredInventory.length
+                        : Math.min(
+                            inventoryPage * (inventoryPageSize as number),
+                            filteredInventory.length
+                          )}
+                    </span>{' '}
+                    of{' '}
+                    <span className="font-bold text-slate-900 font-mono">
+                      {filteredInventory.length}
+                    </span>{' '}
+                    items
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-500 text-[11px] font-semibold">Per page:</span>
+                      <select
+                        value={inventoryPageSize}
+                        onChange={(e) => {
+                          const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
+                          setInventoryPageSize(val);
+                          setInventoryPage(1);
+                        }}
+                        className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-700 cursor-pointer focus:outline-hidden"
+                      >
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                        <option value="all">All ({filteredInventory.length})</option>
+                      </select>
+                    </div>
+
+                    {inventoryPageSize !== 'all' && totalInventoryPages > 1 && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={inventoryPage <= 1}
+                          onClick={() => setInventoryPage((p) => Math.max(1, p - 1))}
+                          className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                            inventoryPage <= 1
+                              ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                              : 'border-slate-200 bg-white hover:bg-slate-100 text-slate-700 shadow-xs'
+                          }`}
+                        >
+                          Previous
+                        </button>
+
+                        <div className="px-2.5 py-1 text-xs font-bold text-slate-700 font-mono">
+                          {inventoryPage} / {totalInventoryPages}
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={inventoryPage >= totalInventoryPages}
+                          onClick={() => setInventoryPage((p) => Math.min(totalInventoryPages, p + 1))}
+                          className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                            inventoryPage >= totalInventoryPages
+                              ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                              : 'border-slate-200 bg-white hover:bg-slate-100 text-slate-700 shadow-xs'
+                          }`}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

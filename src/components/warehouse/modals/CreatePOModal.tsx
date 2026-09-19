@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { X, Plus, Trash2, FileSpreadsheet, Building2, Calendar, AlertCircle, Filter, CheckCircle2, Package, Sparkles, Layers } from 'lucide-react';
+import { X, Plus, Trash2, FileSpreadsheet, Building2, Store, Calendar, AlertCircle, Filter, CheckCircle2, Package, Sparkles, Layers } from 'lucide-react';
 import { Supplier, Warehouse, PurchaseOrderItem } from '../../../types/warehouse';
-import { InventoryItem } from '../../../types';
-import { CURRENCY } from '../../../services/storage';
+import { InventoryItem, StoreLocation } from '../../../types';
+import { CURRENCY, storage } from '../../../services/storage';
 import { warehouseStorage } from '../../../services/warehouseStorage';
 import { ItemAutocompleteInput } from '../../common/ItemAutocompleteInput';
 import { getSupplierProducts } from '../../../utils/supplierProductMatching';
@@ -12,6 +12,7 @@ interface CreatePOModalProps {
   onClose: () => void;
   suppliers: Supplier[];
   warehouses: Warehouse[];
+  stores?: StoreLocation[];
   inventory: InventoryItem[];
   onSuccess: () => void;
 }
@@ -21,6 +22,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
   onClose,
   suppliers,
   warehouses,
+  stores: propStores,
   inventory,
   onSuccess,
 }) => {
@@ -30,6 +32,13 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
     city: 'Ahmedabad',
   };
 
+  // Resolve available stores (from props or storage fallback)
+  const availableStores = useMemo(() => {
+    if (propStores && propStores.length > 0) return propStores;
+    return storage.getStores();
+  }, [propStores]);
+
+  const [destinationId, setDestinationId] = useState<string>(defaultWh.id);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id || '');
   const [filterByVendorOnly, setFilterByVendorOnly] = useState(true);
   const [showQuickAddShelf, setShowQuickAddShelf] = useState(true);
@@ -40,6 +49,26 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
   const [includeGst, setIncludeGst] = useState<boolean>(false);
   const [taxPercent, setTaxPercent] = useState<number>(5);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Sync destination if initial defaultWh changes
+  useEffect(() => {
+    if (!destinationId && defaultWh.id) {
+      setDestinationId(defaultWh.id);
+    }
+  }, [defaultWh.id, destinationId]);
+
+  // Determine destination name and type (Warehouse vs Retail Store)
+  const selectedDestinationInfo = useMemo(() => {
+    const foundWh = warehouses.find((w) => w.id === destinationId);
+    if (foundWh) {
+      return { id: foundWh.id, name: foundWh.name, isStore: false, city: foundWh.city };
+    }
+    const foundStore = availableStores.find((s) => s.id === destinationId);
+    if (foundStore) {
+      return { id: foundStore.id, name: foundStore.name, isStore: true, city: foundStore.city || 'Ahmedabad' };
+    }
+    return { id: defaultWh.id, name: defaultWh.name, isStore: false, city: defaultWh.city };
+  }, [destinationId, warehouses, availableStores, defaultWh]);
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId);
 
@@ -245,8 +274,8 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
         supplierId,
         supplierName: selectedSupplier?.name || 'Supplier',
         supplierGstin: selectedSupplier?.gstin && selectedSupplier.gstin !== 'N/A' ? selectedSupplier.gstin : '',
-        destinationWarehouseId: defaultWh.id,
-        destinationWarehouseName: defaultWh.name,
+        destinationWarehouseId: selectedDestinationInfo.id,
+        destinationWarehouseName: selectedDestinationInfo.name,
         orderDate: new Date().toISOString().split('T')[0],
         expectedDeliveryDate: expectedDate,
         items: poItems,
@@ -278,7 +307,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
             <FileSpreadsheet className="w-5 h-5 text-indigo-400" />
             <div>
               <h3 className="font-bold text-base">Issue New Purchase Order (PO)</h3>
-              <p className="text-[11px] text-slate-400">Order inventory from verified suppliers directly into Central Warehouse</p>
+              <p className="text-[11px] text-slate-400">Order inventory from verified suppliers to central warehouse or retail stores</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white">
@@ -287,7 +316,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-          {/* Supplier & Single Warehouse Info */}
+          {/* Supplier & Receiving Destination (Central WH or Listed Store) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
@@ -307,12 +336,46 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                Receiving Central Warehouse
-              </label>
-              <div className="p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-indigo-600" />
-                <span className="truncate">{defaultWh.name}</span>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 uppercase">
+                  Receiving Destination
+                </label>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                  selectedDestinationInfo.isStore 
+                    ? 'bg-purple-100 text-purple-800 border border-purple-200' 
+                    : 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                }`}>
+                  {selectedDestinationInfo.isStore ? 'Store Delivery' : 'Central Warehouse'}
+                </span>
+              </div>
+              <div className="relative">
+                <select
+                  value={destinationId}
+                  onChange={(e) => setDestinationId(e.target.value)}
+                  className="w-full p-2.5 pl-9 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <optgroup label="🏢 Central Warehouses">
+                    {warehouses.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name} ({w.city || 'Central Hub'})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="🏪 Retail Stores (Direct-to-Store Delivery)">
+                    {availableStores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.area || s.city || 'Store'})
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+                <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                  {selectedDestinationInfo.isStore ? (
+                    <Store className="w-4 h-4 text-purple-600" />
+                  ) : (
+                    <Building2 className="w-4 h-4 text-indigo-600" />
+                  )}
+                </div>
               </div>
             </div>
           </div>
