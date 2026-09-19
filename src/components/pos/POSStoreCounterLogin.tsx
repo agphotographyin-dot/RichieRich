@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Store,
   ShieldCheck,
@@ -12,6 +12,9 @@ import {
   ArrowRight,
   RefreshCw,
   Info,
+  Eye,
+  EyeOff,
+  Keyboard,
 } from 'lucide-react';
 import { StoreLocation, CounterInfo, POSSession } from '../../types';
 import { INITIAL_STORES, storage } from '../../services/storage';
@@ -26,8 +29,10 @@ export const POSStoreCounterLogin: React.FC<POSStoreCounterLoginProps> = ({ onLo
   const [selectedStoreId, setSelectedStoreId] = useState<string>('gota');
   const [selectedCounterId, setSelectedCounterId] = useState<number>(1);
   const [pin, setPin] = useState<string>('');
+  const [showPin, setShowPin] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     const unsub = storage.subscribe(() => {
@@ -82,27 +87,9 @@ export const POSStoreCounterLogin: React.FC<POSStoreCounterLoginProps> = ({ onLo
     setErrorMsg(null);
   };
 
-  const handleKeypadPress = (digit: string) => {
-    if (pin.length < 6) {
-      setPin((prev) => prev + digit);
-      setErrorMsg(null);
-      soundEffects.playScanBeep();
-    }
-  };
-
-  const handleBackspace = () => {
-    setPin((prev) => prev.slice(0, -1));
-    setErrorMsg(null);
-  };
-
-  const handleClear = () => {
-    setPin('');
-    setErrorMsg(null);
-  };
-
-  const handleLogin = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!pin) {
+  const verifyAndLogin = (pinToVerify: string) => {
+    if (isVerifying) return;
+    if (!pinToVerify) {
       setErrorMsg('Please enter counter PIN or password.');
       soundEffects.playWarningChime();
       return;
@@ -112,12 +99,12 @@ export const POSStoreCounterLogin: React.FC<POSStoreCounterLoginProps> = ({ onLo
     setErrorMsg(null);
 
     setTimeout(() => {
-      // Valid if matching counter default pin, or universal staff pin '1234' / '0000'
+      // Valid if matching counter default pin, or universal staff pin '1234' / '0000' / '8899'
       const isValid =
-        pin === selectedCounter.defaultPin ||
-        pin === '1234' ||
-        pin === '0000' ||
-        pin === '8899';
+        pinToVerify === selectedCounter.defaultPin ||
+        pinToVerify === '1234' ||
+        pinToVerify === '0000' ||
+        pinToVerify === '8899';
 
       if (isValid) {
         soundEffects.playSuccessChime();
@@ -137,8 +124,77 @@ export const POSStoreCounterLogin: React.FC<POSStoreCounterLoginProps> = ({ onLo
         setErrorMsg('Invalid salesperson access PIN. Please check your credentials or contact store manager.');
         setIsVerifying(false);
       }
-    }, 300);
+    }, 250);
   };
+
+  const handleKeypadPress = (digit: string) => {
+    if (isVerifying) return;
+    if (pin.length < 8) {
+      const nextPin = pin + digit;
+      setPin(nextPin);
+      setErrorMsg(null);
+      soundEffects.playScanBeep();
+
+      // Auto-validate if matching known valid PIN
+      if (
+        nextPin === selectedCounter.defaultPin ||
+        nextPin === '1234' ||
+        nextPin === '0000' ||
+        nextPin === '8899'
+      ) {
+        verifyAndLogin(nextPin);
+      }
+    }
+  };
+
+  const handleBackspace = () => {
+    if (isVerifying) return;
+    setPin((prev) => prev.slice(0, -1));
+    setErrorMsg(null);
+  };
+
+  const handleClear = () => {
+    if (isVerifying) return;
+    setPin('');
+    setErrorMsg(null);
+  };
+
+  const handleLogin = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    verifyAndLogin(pin);
+  };
+
+  // Keyboard & Numpad listener so physical keyboards and POS keypads work seamlessly
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isVerifying) return;
+
+      // Handle number keys (0-9 and Numpad 0-9)
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        handleKeypadPress(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handleBackspace();
+      } else if (e.key === 'Escape' || e.key === 'Delete') {
+        e.preventDefault();
+        handleClear();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        verifyAndLogin(pin);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [pin, isVerifying, selectedCounter, selectedStore]);
+
+  // Keep input focused so mobile soft-keyboards and POS scanner devices can feed into it
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, [selectedCounterId, selectedStoreId]);
 
   return (
     <div className="w-full max-w-5xl 2xl:max-w-6xl mx-auto py-4 sm:py-8 px-3 sm:px-6">
@@ -289,7 +345,10 @@ export const POSStoreCounterLogin: React.FC<POSStoreCounterLoginProps> = ({ onLo
 
         {/* Right Column: PIN Authorization Keypad */}
         <div className="lg:col-span-5">
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-sm flex flex-col h-full justify-between">
+          <form
+            onSubmit={handleLogin}
+            className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-sm flex flex-col h-full justify-between"
+          >
             <div>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -303,37 +362,115 @@ export const POSStoreCounterLogin: React.FC<POSStoreCounterLoginProps> = ({ onLo
               </div>
 
               {/* Active Terminal Preview Card */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 mb-4 text-xs">
-                <div className="flex justify-between items-center text-slate-500 mb-1">
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 mb-4 text-xs">
+                <div className="flex justify-between items-center text-slate-500 mb-1.5">
                   <span>Selected Station:</span>
-                  <span className="font-bold text-slate-800">{selectedStore.shortName} • Counter {selectedCounter.id}</span>
+                  <span className="font-bold text-slate-800">
+                    {selectedStore.shortName} • Counter {selectedCounter.id}
+                  </span>
                 </div>
-                <div className="flex justify-between items-center text-slate-500">
+                <div className="flex justify-between items-center text-slate-500 mb-2">
                   <span>Cashier in Charge:</span>
                   <span className="font-semibold text-emerald-700">{selectedCounter.cashierName}</span>
                 </div>
+                <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px]">
+                  <span className="text-slate-500 flex items-center gap-1">
+                    <KeyRound className="w-3 h-3 text-amber-600" />
+                    Default PIN: <strong className="font-mono text-slate-800 font-bold">{selectedCounter.defaultPin}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPin(selectedCounter.defaultPin);
+                      setErrorMsg(null);
+                      soundEffects.playScanBeep();
+                      verifyAndLogin(selectedCounter.defaultPin);
+                    }}
+                    className="px-2 py-0.5 rounded-md bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[10px] transition-colors cursor-pointer"
+                    title="Quick sign in using station default PIN"
+                  >
+                    Auto Fill PIN
+                  </button>
+                </div>
               </div>
 
-              {/* PIN Display Field */}
-              <div className="mb-4">
-                <div className="relative flex items-center justify-center bg-slate-950 text-white rounded-xl py-3 px-4 shadow-inner border border-slate-800">
-                  <div className="flex gap-3 items-center">
-                    {[0, 1, 2, 3].map((index) => (
-                      <div
-                        key={index}
-                        className={`w-3.5 h-3.5 rounded-full transition-all ${
-                          pin.length > index
-                            ? 'bg-amber-400 scale-110 shadow-sm shadow-amber-400/50'
-                            : 'bg-slate-700 border border-slate-600'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  {pin.length > 4 && (
-                    <span className="text-xs text-amber-400 font-mono ml-3 font-bold">
-                      ({pin.length} digits)
+              {/* PIN Display Field with Focus & Show/Hide */}
+              <div className="mb-3">
+                <div
+                  onClick={() => inputRef.current?.focus()}
+                  className="relative flex items-center justify-center bg-slate-950 text-white rounded-xl py-3.5 px-4 shadow-inner border border-slate-800 cursor-text group focus-within:ring-2 focus-within:ring-amber-400/50"
+                >
+                  {/* Invisible input to catch mobile keyboard and barcode/RFID input */}
+                  <input
+                    ref={inputRef}
+                    type={showPin ? 'text' : 'password'}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={8}
+                    value={pin}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/\D/g, '').slice(0, 8);
+                      setPin(clean);
+                      setErrorMsg(null);
+                      soundEffects.playScanBeep();
+                      if (
+                        clean === selectedCounter.defaultPin ||
+                        clean === '1234' ||
+                        clean === '0000' ||
+                        clean === '8899'
+                      ) {
+                        verifyAndLogin(clean);
+                      }
+                    }}
+                    className="absolute inset-0 opacity-0 w-full h-full cursor-text"
+                    autoComplete="off"
+                    aria-label="Enter Security PIN"
+                  />
+
+                  {/* Visual Display */}
+                  {showPin ? (
+                    <span className="font-mono text-xl tracking-[0.35em] text-amber-400 font-bold">
+                      {pin ? pin : <span className="text-slate-600 tracking-normal text-sm font-sans font-normal">Enter PIN...</span>}
                     </span>
+                  ) : (
+                    <div className="flex gap-3 items-center">
+                      {[...Array(Math.max(4, pin.length))].map((_, index) => (
+                        <div
+                          key={index}
+                          className={`w-3.5 h-3.5 rounded-full transition-all duration-150 ${
+                            pin.length > index
+                              ? 'bg-amber-400 scale-110 shadow-sm shadow-amber-400/50'
+                              : 'bg-slate-700 border border-slate-600'
+                          }`}
+                        />
+                      ))}
+                    </div>
                   )}
+
+                  {/* Toggle Show/Hide PIN */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowPin(!showPin);
+                      inputRef.current?.focus();
+                    }}
+                    className="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                    title={showPin ? 'Hide PIN dots' : 'Reveal PIN digits'}
+                  >
+                    {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {/* Keypad status bar */}
+                <div className="flex items-center justify-between text-[10.5px] text-slate-500 mt-1.5 px-1">
+                  <span className="flex items-center gap-1">
+                    <Keyboard className="w-3 h-3 text-amber-600" />
+                    Keypad & Numpad enabled
+                  </span>
+                  <span className="text-slate-400">
+                    Press <strong className="font-mono text-slate-600">Enter ↵</strong> or tap digits
+                  </span>
                 </div>
 
                 {errorMsg && (
@@ -343,14 +480,14 @@ export const POSStoreCounterLogin: React.FC<POSStoreCounterLoginProps> = ({ onLo
                 )}
               </div>
 
-              {/* Keypad */}
-              <div className="grid grid-cols-3 gap-2 mb-4">
+              {/* On-Screen Keypad */}
+              <div className="grid grid-cols-3 gap-2 mb-4 select-none">
                 {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
                   <button
                     key={digit}
                     type="button"
                     onClick={() => handleKeypadPress(digit)}
-                    className="h-12 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-800 font-bold text-lg transition-colors cursor-pointer flex items-center justify-center shadow-xs"
+                    className="h-12 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 active:scale-95 text-slate-800 font-bold text-lg transition-all cursor-pointer flex items-center justify-center shadow-xs border border-slate-200/60"
                   >
                     {digit}
                   </button>
@@ -358,21 +495,22 @@ export const POSStoreCounterLogin: React.FC<POSStoreCounterLoginProps> = ({ onLo
                 <button
                   type="button"
                   onClick={handleClear}
-                  className="h-12 rounded-xl bg-slate-100 hover:bg-red-50 text-red-600 font-bold text-xs transition-colors cursor-pointer flex items-center justify-center"
+                  className="h-12 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-600 active:bg-rose-100 active:scale-95 text-slate-600 font-bold text-xs tracking-wider transition-all cursor-pointer flex items-center justify-center border border-slate-200/60"
                 >
                   CLEAR
                 </button>
                 <button
                   type="button"
                   onClick={() => handleKeypadPress('0')}
-                  className="h-12 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-800 font-bold text-lg transition-colors cursor-pointer flex items-center justify-center shadow-xs"
+                  className="h-12 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 active:scale-95 text-slate-800 font-bold text-lg transition-all cursor-pointer flex items-center justify-center shadow-xs border border-slate-200/60"
                 >
                   0
                 </button>
                 <button
                   type="button"
                   onClick={handleBackspace}
-                  className="h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer flex items-center justify-center"
+                  className="h-12 rounded-xl bg-slate-100 hover:bg-amber-50 hover:text-amber-700 active:bg-amber-100 active:scale-95 text-slate-700 font-bold text-sm transition-all cursor-pointer flex items-center justify-center border border-slate-200/60"
+                  title="Backspace"
                 >
                   ⌫
                 </button>
@@ -381,10 +519,9 @@ export const POSStoreCounterLogin: React.FC<POSStoreCounterLoginProps> = ({ onLo
 
             {/* Unlock Button */}
             <button
-              type="button"
-              onClick={() => handleLogin()}
+              type="submit"
               disabled={isVerifying}
-              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 active:scale-[0.99] text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {isVerifying ? (
                 <>
@@ -399,7 +536,7 @@ export const POSStoreCounterLogin: React.FC<POSStoreCounterLoginProps> = ({ onLo
                 </>
               )}
             </button>
-          </div>
+          </form>
         </div>
       </div>
     </div>
