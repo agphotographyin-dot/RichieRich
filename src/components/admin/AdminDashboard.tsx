@@ -29,6 +29,7 @@ import {
   MapPin,
   Phone,
   Filter,
+  Sparkles,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -43,6 +44,9 @@ import { InventoryItem, Order, Customer, StoreFinancialStats, AdminTab, UserRole
 import { CURRENCY, storage } from '../../services/storage';
 import { warehouseStorage } from '../../services/warehouseStorage';
 import { pdfReportService } from '../../services/pdfReportService';
+import { CleanSkusModal } from '../common/CleanSkusModal';
+import { SkuCleanResult } from '../../utils/skuUtils';
+import { soundEffects } from '../../services/audio';
 import { isToday, getLocalDateString } from '../../utils/dateUtils';
 import { Warehouse, Supplier, PurchaseOrder, PurchaseBill, BatchRecord, StockTransfer } from '../../types/warehouse';
 import { CreatePOModal } from '../warehouse/modals/CreatePOModal';
@@ -91,6 +95,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isInwardModalOpen, setIsInwardModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferInitialData, setTransferInitialData] = useState<Partial<StockTransfer> | null>(null);
+  const [skuCleanResult, setSkuCleanResult] = useState<SkuCleanResult | null>(null);
+  const [isCleanSkuModalOpen, setIsCleanSkuModalOpen] = useState(false);
+
+  const handleCleanCurrentSkus = () => {
+    soundEffects.playClick();
+    const result = storage.cleanAllCurrentSkus();
+    setSkuCleanResult(result);
+    setIsCleanSkuModalOpen(true);
+    soundEffects.playSuccessChime();
+  };
 
   const refreshWarehouseData = () => {
     setWarehouses(warehouseStorage.getWarehouses());
@@ -348,6 +362,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <span>Add Item</span>
             </button>
           )}
+
+          <button
+            id="btn-admin-clean-skus"
+            type="button"
+            onClick={handleCleanCurrentSkus}
+            className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+            title="Audit, clean, and standardize all master inventory SKUs"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>Clean SKUs</span>
+          </button>
 
           <button
             id="btn-admin-staff-counters"
@@ -1043,6 +1068,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         batches={batches}
         initialData={transferInitialData}
         onSuccess={refreshWarehouseData}
+      />
+
+      <CleanSkusModal
+        isOpen={isCleanSkuModalOpen}
+        onClose={() => setIsCleanSkuModalOpen(false)}
+        result={skuCleanResult}
       />
     </div>
   );

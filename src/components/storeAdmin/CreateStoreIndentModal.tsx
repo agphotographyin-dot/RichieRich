@@ -19,7 +19,7 @@ import {
 import { Warehouse, StoreStockIndentItem } from '../../types/warehouse';
 import { InventoryItem, StoreLocation } from '../../types';
 import { warehouseStorage } from '../../services/warehouseStorage';
-import { storage, INITIAL_INVENTORY } from '../../services/storage';
+import { storage } from '../../services/storage';
 import { soundEffects } from '../../services/audio';
 import { getLocalDateString } from '../../utils/dateUtils';
 
@@ -65,12 +65,12 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
 
-  // Master Inventory: Guarantees 100% of master products and SKUs are available to order from warehouse
+  // Master Inventory: Uses live inventory items
   const masterInventory: InventoryItem[] = useMemo(() => {
     const live = storage.getInventory();
-    if (live && live.length > 0) return live;
-    if (inventory && inventory.length > 0) return inventory;
-    return INITIAL_INVENTORY;
+    if (live) return live;
+    if (inventory) return inventory;
+    return [];
   }, [isOpen, inventory]);
 
   const categories = useMemo(() => {

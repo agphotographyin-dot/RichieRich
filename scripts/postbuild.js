@@ -46,6 +46,9 @@ if (fs.existsSync(distDir)) {
     // 3. Static host rewrites (_redirects for Netlify & Cloudflare Pages)
     fs.writeFileSync(path.join(distDir, '_redirects'), '/* /index.html 200\n');
 
-    console.log('✓ SPA deep linking fallback pages and _redirects generated successfully in dist/');
+    // 4. Disable Jekyll processing on GitHub Pages so all directories & dotfiles are served intact
+    fs.writeFileSync(path.join(distDir, '.nojekyll'), '');
+
+    console.log('✓ SPA deep linking fallback pages, _redirects, and .nojekyll generated successfully in dist/');
   }
 }

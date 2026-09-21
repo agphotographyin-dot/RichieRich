@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   setDoc,
+  deleteDoc,
   getDocs,
   onSnapshot,
   writeBatch,
@@ -176,8 +177,18 @@ class CloudSyncService {
         (snapshot) => {
           if (this.isWritingToCloud) return; // Prevent echoing local optimistic writes
 
-          // If snapshot is empty, don't wipe out local defaults on initial sync
-          if (snapshot.empty) return;
+          // If snapshot is empty, don't wipe out local defaults on initial sync unless explicitly cleared
+          if (snapshot.empty) {
+            if (safeStorage.getItem('rr_inventory_cleared') === 'true' && collectionName === COLLECTIONS.INVENTORY) {
+              safeStorage.setItem(storageKey, JSON.stringify([]));
+              if (isWarehouse) {
+                this.onWarehouseChangeNotify?.();
+              } else {
+                this.onStorageChangeNotify?.();
+              }
+            }
+            return;
+          }
 
           const remoteDocs: T[] = [];
           snapshot.forEach((docSnap) => {
@@ -256,6 +267,68 @@ class CloudSyncService {
   }
 
   /**
+   * Delete a document from Firestore in real-time when deleted locally
+   */
+  public async deleteDocument(collectionName: string, id: string) {
+    if (!isFirebaseConfigured() || !db || this.isApplyingRemoteUpdate) return;
+    try {
+      this.isWritingToCloud = true;
+      const cleanId = String(id || '').trim();
+      if (!cleanId) return;
+      const docRef = doc(db, collectionName, cleanId);
+      await deleteDoc(docRef);
+    } catch (err: any) {
+      console.warn(`[CloudSync] Failed to delete document from ${collectionName}:`, err);
+    } finally {
+      this.isWritingToCloud = false;
+    }
+  }
+
+  /**
+   * Clears the entire inventory collection from Cloud Firestore in batched operations
+   */
+  public async clearInventoryFromCloud(): Promise<boolean> {
+    if (!isFirebaseConfigured() || !db) return true;
+
+    try {
+      this.isWritingToCloud = true;
+      this.setState({ status: 'syncing' });
+
+      const snap = await getDocs(collection(db, COLLECTIONS.INVENTORY));
+      if (!snap.empty) {
+        let batch = writeBatch(db);
+        let opCount = 0;
+
+        for (const d of snap.docs) {
+          batch.delete(d.ref);
+          opCount++;
+          if (opCount >= 400) {
+            await batch.commit();
+            batch = writeBatch(db);
+            opCount = 0;
+          }
+        }
+        if (opCount > 0) {
+          await batch.commit();
+        }
+      }
+
+      this.setState({
+        status: 'connected',
+        isLive: true,
+        lastSyncedAt: new Date(),
+      });
+      return true;
+    } catch (err: any) {
+      console.warn('[CloudSync] Failed to clear inventory from Firestore:', err);
+      this.setState({ status: 'error', errorMessage: err?.message });
+      return false;
+    } finally {
+      this.isWritingToCloud = false;
+    }
+  }
+
+  /**
    * Sync an entire collection in debounced batches
    */
   public debouncedSyncCollection(collectionName: string, items: any[], delay = 300) {
@@ -326,10 +399,13 @@ class CloudSyncService {
         }
       }
 
-      // Seed inventory
-      for (const item of inventory) {
-        if (item.id) {
-          batch.set(doc(db, COLLECTIONS.INVENTORY, String(item.id)), item, { merge: true });
+      // Seed inventory (only if not explicitly cleared by user and not empty)
+      const isInventoryCleared = safeStorage.getItem('rr_inventory_cleared') === 'true';
+      if (!isInventoryCleared && inventory.length > 0) {
+        for (const item of inventory) {
+          if (item.id) {
+            batch.set(doc(db, COLLECTIONS.INVENTORY, String(item.id)), item, { merge: true });
+          }
         }
       }
 

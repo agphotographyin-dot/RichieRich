@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X,
   Plus,
@@ -15,11 +15,13 @@ import {
   Barcode as BarcodeIcon,
   Tag,
   Building,
+  AlertTriangle,
 } from 'lucide-react';
 import { Category, InventoryItem } from '../../types';
 import { CURRENCY, storage, normalizeProductCategory } from '../../services/storage';
 import { warehouseStorage } from '../../services/warehouseStorage';
 import { soundEffects } from '../../services/audio';
+import { cleanSingleSku, checkIsSkuDuplicate, generateUniqueSku } from '../../utils/skuUtils';
 import { BarcodeVisualizer } from '../common/BarcodeVisualizer';
 import { Html5Qrcode } from 'html5-qrcode';
 
@@ -69,6 +71,12 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
 
   // Registered suppliers
   const suppliers = warehouseStorage.getSuppliers();
+  const currentInventory = useMemo(() => storage.getInventory(), [isOpen]);
+
+  const skuDuplicateCheck = useMemo(() => {
+    if (!sku.trim()) return { isDuplicate: false, conflictingItem: undefined, duplicateCount: 0 };
+    return checkIsSkuDuplicate(sku, currentInventory);
+  }, [sku, currentInventory]);
 
   // Initialize or reset state whenever modal is opened
   useEffect(() => {
@@ -180,7 +188,10 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
       .map((i) => i.trim())
       .filter(Boolean);
 
-    const generatedSku = sku.trim() || `SKU-${Date.now().toString().slice(-4)}`;
+    const rawCleanSku = cleanSingleSku(sku, { name, category });
+    const generatedSku = checkIsSkuDuplicate(rawCleanSku, currentInventory).isDuplicate
+      ? generateUniqueSku(rawCleanSku, currentInventory)
+      : rawCleanSku;
     const generatedBarcode = barcode.trim() || `8901${Math.floor(10000 + Math.random() * 90000)}`;
 
     const initialStock = Number(stockQuantity) || 0;
@@ -351,21 +362,59 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
               <div>
                 <div className="flex items-center justify-between">
                   <label className="text-xs text-slate-700 font-bold">SKU Code</label>
-                  <button
-                    type="button"
-                    onClick={autoGenerateSkuBarcode}
-                    className="text-[10px] text-amber-700 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
-                  >
-                    <Sparkles className="w-2.5 h-2.5" /> Auto Fill SKU
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSku((prev) => cleanSingleSku(prev, { name, category }));
+                        soundEffects.playClick();
+                      }}
+                      className="text-[10px] text-emerald-700 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-2.5 h-2.5" /> Clean SKU
+                    </button>
+                    <button
+                      type="button"
+                      onClick={autoGenerateSkuBarcode}
+                      className="text-[10px] text-amber-700 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-2.5 h-2.5" /> Auto Fill
+                    </button>
+                  </div>
                 </div>
                 <input
                   type="text"
                   value={sku}
-                  onChange={(e) => setSku(e.target.value)}
+                  onChange={(e) => setSku(e.target.value.toUpperCase())}
+                  onBlur={() => setSku((prev) => cleanSingleSku(prev, { name, category }))}
                   placeholder="e.g. PAN-ROY-01"
-                  className="w-full mt-1 bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 font-mono placeholder-slate-400 focus:outline-hidden focus:border-slate-400"
+                  className={`w-full mt-1 bg-white border rounded-xl px-3.5 py-2 text-xs text-slate-900 font-mono placeholder-slate-400 focus:outline-hidden ${
+                    skuDuplicateCheck.isDuplicate
+                      ? 'border-amber-400 ring-1 ring-amber-300'
+                      : 'border-slate-200 focus:border-slate-400'
+                  }`}
                 />
+                {skuDuplicateCheck.isDuplicate && (
+                  <div className="mt-1.5 p-2 bg-amber-50 rounded-lg border border-amber-200 text-[11px] text-amber-900 flex items-start gap-1.5 animate-in fade-in duration-150">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold leading-tight">
+                        Duplicate SKU detected! Already assigned to &ldquo;{skuDuplicateCheck.conflictingItem?.name}&rdquo;.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextUnique = generateUniqueSku(sku, currentInventory);
+                          setSku(nextUnique);
+                          soundEffects.playClick();
+                        }}
+                        className="mt-1 text-[10px] font-bold text-amber-800 underline hover:text-amber-950 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Sparkles className="w-2.5 h-2.5" /> Auto-assign unique code
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>

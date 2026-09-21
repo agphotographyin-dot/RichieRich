@@ -22,6 +22,16 @@ import { validateAndSanitizeBackupPayload } from './backupIntegrityService';
 import { safeStorage } from '../utils/safeStorage';
 import { getLocalDateString, isToday, isSameDay } from '../utils/dateUtils';
 import { cloudSync } from './cloudSync';
+import {
+  cleanSingleSku,
+  cleanAndStandardizeInventorySkus,
+  bulkRemoveDuplicateSkus,
+  detectDuplicateSkus,
+  checkIsSkuDuplicate,
+  generateUniqueSku,
+  SkuCleanResult,
+  BulkDuplicateRemovalResult,
+} from '../utils/skuUtils';
 
 const STORAGE_KEYS = {
   INVENTORY: 'rr_panhouse_inventory',
@@ -1285,18 +1295,25 @@ export class StorageService {
   private initDefaultData() {
     if (typeof window === 'undefined') return;
 
-    // Check and seed/merge inventory
+    // User requested "Remove all Product & SKU":
+    // Ensures clean slate with 0 products and 0 SKUs across local storage and Firestore
+    const removedAllFlag = safeStorage.getItem('rr_wh_removed_all_products_v2');
+    if (!removedAllFlag) {
+      safeStorage.setItem('rr_inventory_cleared', 'true');
+      safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify([]));
+      safeStorage.setItem('rr_wh_removed_all_products_v2', 'true');
+      this.setCached(STORAGE_KEYS.INVENTORY, []);
+      cloudSync.clearInventoryFromCloud();
+    }
+
+    const isInventoryCleared = safeStorage.getItem('rr_inventory_cleared') === 'true';
     const existingInventory = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
     const cleanedFlag = safeStorage.getItem('rr_wh_cleaned_dummy_v1');
 
-    if (!existingInventory) {
-      const zeroStockInit = INITIAL_INVENTORY.map((item) => ({
-        ...item,
-        category: normalizeProductCategory(item.category),
-        stockQuantity: 0,
-        storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-      }));
-      safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(zeroStockInit));
+    if (isInventoryCleared || !existingInventory) {
+      if (!existingInventory || existingInventory !== '[]') {
+        safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify([]));
+      }
     } else {
       try {
         const parsed: InventoryItem[] = JSON.parse(existingInventory);
@@ -1385,31 +1402,11 @@ export class StorageService {
           }
         });
 
-        // Ensure catalog items exist
-        INITIAL_INVENTORY.forEach((initItem) => {
-          const found = uniqueParsed.find((i) => i.id === initItem.id || i.sku === initItem.sku);
-          if (!found) {
-            uniqueParsed.push({
-              ...initItem,
-              category: normalizeProductCategory(initItem.category),
-              stockQuantity: 0,
-              storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-            });
-            hasChanges = true;
-          }
-        });
-
         if (hasChanges || uniqueParsed.length !== parsed.length) {
           safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(uniqueParsed));
         }
       } catch {
-        const zeroStockInit = INITIAL_INVENTORY.map((item) => ({
-          ...item,
-          category: normalizeProductCategory(item.category),
-          stockQuantity: 0,
-          storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-        }));
-        safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(zeroStockInit));
+        safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify([]));
       }
     }
 
@@ -1702,10 +1699,14 @@ export class StorageService {
   getInventory(): InventoryItem[] {
     return this.getCached(STORAGE_KEYS.INVENTORY, () => {
       try {
+        if (typeof window !== 'undefined' && safeStorage.getItem('rr_inventory_cleared') === 'true') {
+          return [];
+        }
+
         const data = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
-        if (!data) return INITIAL_INVENTORY;
+        if (!data) return [];
         const rawList: any = JSON.parse(data);
-        if (!Array.isArray(rawList)) return INITIAL_INVENTORY;
+        if (!Array.isArray(rawList) || rawList.length === 0) return [];
 
         const seenIds = new Set<string>();
         const seenSkus = new Set<string>();
@@ -1719,17 +1720,10 @@ export class StorageService {
           let itemId = item.id ? String(item.id).trim() : '';
           let itemSku = item.sku ? String(item.sku).trim().toUpperCase() : '';
 
-          // If empty SKU, attempt to restore from INITIAL_INVENTORY or generate
+          // If empty SKU, generate clean SKU
           if (!itemSku) {
-            const matchedInit = INITIAL_INVENTORY.find(
-              (init) => init.id === itemId || (init.name && item.name && init.name.trim().toLowerCase() === String(item.name).trim().toLowerCase())
-            );
-            if (matchedInit && matchedInit.sku) {
-              itemSku = matchedInit.sku.toUpperCase();
-            } else {
-              const catPrefix = normalizeProductCategory(item.category).substring(0, 3).toUpperCase();
-              itemSku = `SKU-${catPrefix}-${String(i + 1).padStart(3, '0')}`;
-            }
+            const catPrefix = normalizeProductCategory(item.category).substring(0, 3).toUpperCase();
+            itemSku = `SKU-${catPrefix}-${String(i + 1).padStart(3, '0')}`;
             item.sku = itemSku;
             hadDuplicatesOrUnnormalized = true;
           } else {
@@ -1763,24 +1757,6 @@ export class StorageService {
           sanitized.push(item);
         }
 
-        // Guarantee that all catalog items and SKUs from INITIAL_INVENTORY are always present
-        INITIAL_INVENTORY.forEach((initItem) => {
-          const initSku = initItem.sku ? initItem.sku.trim().toLowerCase() : '';
-          const alreadyPresent = sanitized.some(
-            (s) => s.id === initItem.id || (initSku && s.sku && s.sku.trim().toLowerCase() === initSku)
-          );
-          if (!alreadyPresent) {
-            sanitized.push({
-              ...initItem,
-              sku: (initItem.sku || `SKU-${initItem.id}`).toUpperCase(),
-              category: normalizeProductCategory(initItem.category),
-              stockQuantity: initItem.stockQuantity ?? 50,
-              storeAllocations: initItem.storeAllocations || { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-            });
-            hadDuplicatesOrUnnormalized = true;
-          }
-        });
-
         if (hadDuplicatesOrUnnormalized && typeof window !== 'undefined') {
           try {
             safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(sanitized));
@@ -1791,12 +1767,20 @@ export class StorageService {
 
         return sanitized;
       } catch {
-        return INITIAL_INVENTORY;
+        return [];
       }
     });
   }
 
   saveInventory(items: InventoryItem[]) {
+    if (!items || items.length === 0) {
+      this.setCached(STORAGE_KEYS.INVENTORY, []);
+      safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify([]));
+      this.notify();
+      cloudSync.debouncedSyncCollection('inventory', []);
+      return;
+    }
+
     // calculate profit and margin on each item and guarantee unique IDs & normalized categories
     const seenIds = new Set<string>();
     const seenSkus = new Set<string>();
@@ -1809,9 +1793,18 @@ export class StorageService {
       }
       seenIds.add(itemId);
 
-      let itemSku = item.sku ? String(item.sku).trim() : `SKU-${idx + 1}`;
-      if (seenSkus.has(itemSku.toLowerCase())) {
-        itemSku = `${itemSku}-${idx + 1}`;
+      let itemSku = cleanSingleSku(item.sku, {
+        name: item.name,
+        category: item.category,
+        id: itemId,
+        index: idx,
+      });
+
+      const baseSku = itemSku;
+      let disambiguateIdx = 1;
+      while (seenSkus.has(itemSku.toLowerCase())) {
+        disambiguateIdx++;
+        itemSku = `${baseSku}-${String(disambiguateIdx).padStart(2, '0')}`;
       }
       seenSkus.add(itemSku.toLowerCase());
 
@@ -1839,7 +1832,37 @@ export class StorageService {
     }, 40);
   }
 
+  cleanAllCurrentSkus(): SkuCleanResult {
+    const current = this.getInventory();
+    const result = cleanAndStandardizeInventorySkus(current);
+    this.saveInventory(result.items);
+
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('skusCleaned', { detail: result }));
+      }
+    } catch {}
+
+    return result;
+  }
+
+  bulkRemoveDuplicateSkus(): BulkDuplicateRemovalResult {
+    const current = this.getInventory();
+    const result = bulkRemoveDuplicateSkus(current);
+    this.saveInventory(result.cleanedItems);
+
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('inventoryUpdated', { detail: result.cleanedItems }));
+        window.dispatchEvent(new CustomEvent('duplicateSkusRemoved', { detail: result }));
+      }
+    } catch {}
+
+    return result;
+  }
+
   addInventoryItem(item: Omit<InventoryItem, 'id' | 'profitPerUnit' | 'marginPercentage'>): InventoryItem {
+    safeStorage.removeItem('rr_inventory_cleared');
     const items = this.getInventory();
     const normalizedCategory = normalizeProductCategory(item.category);
     const newItem: InventoryItem = {
@@ -1880,9 +1903,44 @@ export class StorageService {
     const filtered = items.filter((i) => i.id !== id);
     if (filtered.length !== items.length) {
       this.saveInventory(filtered);
+      cloudSync.deleteDocument('inventory', id);
       return true;
     }
     return false;
+  }
+
+  /**
+   * Completely removes all Products and SKUs from local storage and Cloud Firestore
+   */
+  clearAllInventory(): { success: boolean; removedCount: number } {
+    const current = this.getInventory();
+    const count = current.length;
+
+    // Explicitly mark catalog as cleared so initial mock data never auto-populates
+    safeStorage.setItem('rr_inventory_cleared', 'true');
+    this.setCached(STORAGE_KEYS.INVENTORY, []);
+    safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify([]));
+    this.notify();
+
+    // Trigger Firestore collection wipe
+    cloudSync.clearInventoryFromCloud();
+
+    return { success: true, removedCount: count };
+  }
+
+  /**
+   * Restores the default Richie Rich master catalog if user requests a sample baseline
+   */
+  restoreInitialCatalog(): InventoryItem[] {
+    safeStorage.removeItem('rr_inventory_cleared');
+    const zeroStockInit = INITIAL_INVENTORY.map((item) => ({
+      ...item,
+      category: normalizeProductCategory(item.category),
+      stockQuantity: 0,
+      storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
+    }));
+    this.saveInventory(zeroStockInit);
+    return zeroStockInit;
   }
 
   importInventoryBatch(
@@ -2022,6 +2080,9 @@ export class StorageService {
       }
     });
 
+    if (currentInventory.length > 0) {
+      safeStorage.removeItem('rr_inventory_cleared');
+    }
     this.saveInventory(currentInventory);
 
     this.addNotification({
@@ -3228,3 +3289,13 @@ export function getCatalogStockMetrics(inventoryList: InventoryItem[]): CatalogS
     storesValuationCost,
   };
 }
+
+export {
+  cleanSingleSku,
+  cleanAndStandardizeInventorySkus,
+  bulkRemoveDuplicateSkus,
+  detectDuplicateSkus,
+  checkIsSkuDuplicate,
+  generateUniqueSku,
+};
+export type { SkuCleanResult, BulkDuplicateRemovalResult };

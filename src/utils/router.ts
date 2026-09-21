@@ -1,5 +1,31 @@
 import { Role, AdminTab, WarehouseTab, StoreAdminTab } from '../types';
 
+export function getBasePath(): string {
+  if (typeof window === 'undefined') return '';
+  const envBase = (import.meta as any).env?.BASE_URL || '';
+  if (envBase && envBase !== '/' && envBase !== './') {
+    return envBase.replace(/\/+$/, '');
+  }
+  // Check if current URL pathname starts with a subfolder (e.g. on GitHub Pages: /repository-name/pos)
+  const segments = (window.location?.pathname || '').split('/').filter(Boolean);
+  const knownRootRoutes = [
+    'pos',
+    'admin',
+    'warehouse',
+    'store-admin',
+    'storeadmin',
+    'customer',
+    'order',
+    'menu',
+    'index.html',
+    '404.html',
+  ];
+  if (segments.length > 0 && !knownRootRoutes.includes(segments[0].toLowerCase())) {
+    return `/${segments[0]}`;
+  }
+  return '';
+}
+
 export interface RouteState {
   role: Role;
   adminTab: AdminTab;
@@ -150,6 +176,8 @@ export function parseCurrentRoute(): RouteState {
     if (
       normalizedPath === '/pos' ||
       normalizedPath.startsWith('/pos/') ||
+      normalizedPath.endsWith('/pos') ||
+      normalizedPath.includes('/pos/') ||
       normalizedPath.includes('/point-of-sale') ||
       normalizedPath.includes('/counter') ||
       normalizedPath.includes('/billing')
@@ -161,6 +189,8 @@ export function parseCurrentRoute(): RouteState {
     if (
       normalizedPath === '/customer' ||
       normalizedPath.startsWith('/customer/') ||
+      normalizedPath.endsWith('/customer') ||
+      normalizedPath.includes('/customer/') ||
       normalizedPath.includes('/order') ||
       normalizedPath.includes('/menu') ||
       normalizedPath.includes('/shop')
@@ -171,7 +201,9 @@ export function parseCurrentRoute(): RouteState {
     // Check Master Admin Management
     if (
       normalizedPath === '/admin' ||
-      normalizedPath.startsWith('/admin/')
+      normalizedPath.startsWith('/admin/') ||
+      normalizedPath.endsWith('/admin') ||
+      normalizedPath.includes('/admin/')
     ) {
       if (tabQuery === ('inventory' as any) || normalizedPath.includes('/admin/inventory')) {
         return { role: 'warehouse', adminTab: 'dashboard', warehouseTab: 'inventory', storeAdminTab: 'overview' };
@@ -211,19 +243,20 @@ export function updateRoute(
   if (typeof window === 'undefined') return;
 
   try {
-    let targetUrl = '/';
+    const basePath = getBasePath();
+    let targetUrl = basePath || '/';
     if (role === 'landing') {
-      targetUrl = '/';
+      targetUrl = basePath ? `${basePath}/` : '/';
     } else if (role === 'store_admin') {
-      targetUrl = storeAdminTab && storeAdminTab !== 'overview' ? `/store-admin?store_tab=${storeAdminTab}` : '/store-admin';
+      targetUrl = `${basePath}/store-admin` + (storeAdminTab && storeAdminTab !== 'overview' ? `?store_tab=${storeAdminTab}` : '');
     } else if (role === 'warehouse') {
-      targetUrl = warehouseTab && warehouseTab !== 'dashboard' ? `/warehouse?wh_tab=${warehouseTab}` : '/warehouse';
+      targetUrl = `${basePath}/warehouse` + (warehouseTab && warehouseTab !== 'dashboard' ? `?wh_tab=${warehouseTab}` : '');
     } else if (role === 'pos') {
-      targetUrl = '/pos';
+      targetUrl = `${basePath}/pos`;
     } else if (role === 'customer') {
-      targetUrl = '/customer';
+      targetUrl = `${basePath}/customer`;
     } else if (role === 'admin') {
-      targetUrl = adminTab && adminTab !== 'dashboard' ? `/admin?tab=${adminTab}` : '/admin';
+      targetUrl = `${basePath}/admin` + (adminTab && adminTab !== 'dashboard' ? `?tab=${adminTab}` : '');
     }
 
     const currentPathWithSearch = (window.location?.pathname || '') + (window.location?.search || '');
@@ -261,12 +294,14 @@ export function getFullUrlForRole(
   if (typeof window === 'undefined') return '';
   try {
     const origin = window.location?.origin || '';
-    if (role === 'landing') return `${origin}/`;
-    if (role === 'store_admin') return storeAdminTab && storeAdminTab !== 'overview' ? `${origin}/store-admin?store_tab=${storeAdminTab}` : `${origin}/store-admin`;
-    if (role === 'warehouse') return whTab && whTab !== 'dashboard' ? `${origin}/warehouse?wh_tab=${whTab}` : `${origin}/warehouse`;
-    if (role === 'pos') return `${origin}/pos`;
-    if (role === 'customer') return `${origin}/customer`;
-    return tab && tab !== 'dashboard' ? `${origin}/admin?tab=${tab}` : `${origin}/admin`;
+    const basePath = getBasePath();
+    const prefix = `${origin}${basePath}`;
+    if (role === 'landing') return `${prefix}/`;
+    if (role === 'store_admin') return storeAdminTab && storeAdminTab !== 'overview' ? `${prefix}/store-admin?store_tab=${storeAdminTab}` : `${prefix}/store-admin`;
+    if (role === 'warehouse') return whTab && whTab !== 'dashboard' ? `${prefix}/warehouse?wh_tab=${whTab}` : `${prefix}/warehouse`;
+    if (role === 'pos') return `${prefix}/pos`;
+    if (role === 'customer') return `${prefix}/customer`;
+    return tab && tab !== 'dashboard' ? `${prefix}/admin?tab=${tab}` : `${prefix}/admin`;
   } catch {
     return '';
   }
