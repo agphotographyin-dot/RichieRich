@@ -15,6 +15,7 @@ import {
   ArrowUpDown,
   X,
   Zap,
+  Radio,
 } from 'lucide-react';
 import { cloudSync, CloudSyncState } from '../../services/cloudSync';
 
@@ -26,6 +27,7 @@ interface CloudSyncModalProps {
 export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose }) => {
   const [syncState, setSyncState] = useState<CloudSyncState>(cloudSync.getState());
   const [isPushing, setIsPushing] = useState(false);
+  const [isTestingPing, setIsTestingPing] = useState(false);
   const [pushMessage, setPushMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,6 +39,22 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const handleTestPing = async () => {
+    setIsTestingPing(true);
+    setPushMessage(null);
+    try {
+      const res = await cloudSync.testConnection();
+      if (res.success) {
+        setPushMessage(`✅ Cloud Firestore ping successful! Latency: ${res.latencyMs}ms. Real-time stream verified.`);
+      } else {
+        setPushMessage(`⚠️ Ping check: ${res.message}`);
+      }
+    } finally {
+      setIsTestingPing(false);
+      setTimeout(() => setPushMessage(null), 8000);
+    }
+  };
 
   const handleForceUpload = async () => {
     setIsPushing(true);
@@ -147,14 +165,27 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
               )}
             </div>
 
-            <button
-              onClick={handleForceUpload}
-              disabled={isPushing}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all shrink-0"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isPushing ? 'animate-spin' : ''}`} />
-              <span>{isPushing ? 'Syncing...' : 'Force Sync All'}</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleTestPing}
+                disabled={isTestingPing}
+                type="button"
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+              >
+                <Radio className={`w-3.5 h-3.5 text-indigo-600 ${isTestingPing ? 'animate-spin' : ''}`} />
+                <span>{isTestingPing ? 'Pinging...' : 'Test Cloud Ping'}</span>
+              </button>
+
+              <button
+                onClick={handleForceUpload}
+                disabled={isPushing}
+                type="button"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isPushing ? 'animate-spin' : ''}`} />
+                <span>{isPushing ? 'Syncing...' : 'Force Sync All'}</span>
+              </button>
+            </div>
           </div>
 
           {pushMessage && (

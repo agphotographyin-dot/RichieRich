@@ -158,8 +158,11 @@ export const App: React.FC = () => {
   // Initialize Cloud Firestore Real-Time Sync Engine
   useEffect(() => {
     cloudSync.registerNotifiers(
-      () => storage.notifySubscribers(),
-      () => warehouseStorage.notifySubscribers()
+      (key) => storage.notifySubscribers(key),
+      (key) => {
+        warehouseStorage.clearCache(key);
+        warehouseStorage.notifySubscribers();
+      }
     );
     cloudSync.init();
 

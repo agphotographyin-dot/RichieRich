@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   setDoc,
+  getDoc,
   deleteDoc,
   getDocs,
   onSnapshot,
@@ -77,10 +78,10 @@ class CloudSyncService {
   private debounceTimers: Record<string, any> = {};
 
   // External notification hooks (injected from storage / warehouseStorage)
-  private onStorageChangeNotify?: () => void;
-  private onWarehouseChangeNotify?: () => void;
+  private onStorageChangeNotify?: (key?: string) => void;
+  private onWarehouseChangeNotify?: (key?: string) => void;
 
-  public registerNotifiers(storageNotify: () => void, warehouseNotify: () => void) {
+  public registerNotifiers(storageNotify: (key?: string) => void, warehouseNotify: (key?: string) => void) {
     this.onStorageChangeNotify = storageNotify;
     this.onWarehouseChangeNotify = warehouseNotify;
   }
@@ -182,9 +183,9 @@ class CloudSyncService {
             if (safeStorage.getItem('rr_inventory_cleared') === 'true' && collectionName === COLLECTIONS.INVENTORY) {
               safeStorage.setItem(storageKey, JSON.stringify([]));
               if (isWarehouse) {
-                this.onWarehouseChangeNotify?.();
+                this.onWarehouseChangeNotify?.(storageKey);
               } else {
-                this.onStorageChangeNotify?.();
+                this.onStorageChangeNotify?.(storageKey);
               }
             }
             return;
@@ -195,16 +196,20 @@ class CloudSyncService {
             remoteDocs.push(docSnap.data() as T);
           });
 
+          if (collectionName === COLLECTIONS.INVENTORY && remoteDocs.length > 0) {
+            safeStorage.removeItem('rr_inventory_cleared');
+          }
+
           this.isApplyingRemoteUpdate = true;
           try {
             // Save to browser cache
             safeStorage.setItem(storageKey, JSON.stringify(remoteDocs));
             
-            // Notify UI subscribers
+            // Invalidate and notify UI subscribers
             if (isWarehouse) {
-              this.onWarehouseChangeNotify?.();
+              this.onWarehouseChangeNotify?.(storageKey);
             } else {
-              this.onStorageChangeNotify?.();
+              this.onStorageChangeNotify?.(storageKey);
             }
 
             this.setState({
@@ -458,6 +463,68 @@ class CloudSyncService {
     } catch (err: any) {
       this.setState({ status: 'error', errorMessage: err?.message });
       return false;
+    }
+  }
+
+  /**
+   * Diagnostic ping test: writes and reads a verification document to confirm two-way Firestore communication
+   */
+  public async testConnection(): Promise<{ success: boolean; latencyMs: number; message: string }> {
+    if (!isFirebaseConfigured() || !db) {
+      return {
+        success: false,
+        latencyMs: 0,
+        message: 'Cloud Firestore is not configured or missing credentials.',
+      };
+    }
+
+    try {
+      const startTime = performance.now();
+      const testDocRef = doc(db, COLLECTIONS.META, 'connection_ping');
+      await setDoc(
+        testDocRef,
+        {
+          lastPing: serverTimestamp(),
+          clientTimestamp: new Date().toISOString(),
+          status: 'verified',
+        },
+        { merge: true }
+      );
+
+      const snap = await getDoc(testDocRef);
+      const latencyMs = Math.round(performance.now() - startTime);
+
+      if (snap.exists()) {
+        this.setState({
+          status: 'connected',
+          isLive: true,
+          lastSyncedAt: new Date(),
+          errorMessage: undefined,
+        });
+        return {
+          success: true,
+          latencyMs,
+          message: `Two-way real-time duplex stream verified! Latency: ${latencyMs}ms. Database: ${
+            this.state.databaseId || '(default)'
+          }`,
+        };
+      } else {
+        return {
+          success: false,
+          latencyMs,
+          message: 'Ping document was written but could not be read back from Firestore.',
+        };
+      }
+    } catch (err: any) {
+      this.setState({
+        status: 'error',
+        errorMessage: err?.message || 'Ping failed',
+      });
+      return {
+        success: false,
+        latencyMs: 0,
+        message: err?.message || 'Error connecting to Cloud Firestore',
+      };
     }
   }
 

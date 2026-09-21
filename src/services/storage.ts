@@ -1245,7 +1245,12 @@ export class StorageService {
     };
   }
 
-  notifySubscribers() {
+  notifySubscribers(key?: string) {
+    if (key) {
+      this.memoryCache.delete(key);
+    } else {
+      this.memoryCache.clear();
+    }
     this.notify();
   }
 

@@ -362,6 +362,10 @@ export const warehouseStorage = {
     };
   },
 
+  clearCache(key?: string): void {
+    clearWhCache(key);
+  },
+
   notifySubscribers(): void {
     if (isWhNotifyPending) return;
     isWhNotifyPending = true;
