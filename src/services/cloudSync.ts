@@ -2,8 +2,6 @@ import {
   collection,
   doc,
   setDoc,
-  getDoc,
-  deleteDoc,
   getDocs,
   onSnapshot,
   writeBatch,
@@ -78,10 +76,10 @@ class CloudSyncService {
   private debounceTimers: Record<string, any> = {};
 
   // External notification hooks (injected from storage / warehouseStorage)
-  private onStorageChangeNotify?: (key?: string) => void;
-  private onWarehouseChangeNotify?: (key?: string) => void;
+  private onStorageChangeNotify?: () => void;
+  private onWarehouseChangeNotify?: () => void;
 
-  public registerNotifiers(storageNotify: (key?: string) => void, warehouseNotify: (key?: string) => void) {
+  public registerNotifiers(storageNotify: () => void, warehouseNotify: () => void) {
     this.onStorageChangeNotify = storageNotify;
     this.onWarehouseChangeNotify = warehouseNotify;
   }
@@ -178,38 +176,24 @@ class CloudSyncService {
         (snapshot) => {
           if (this.isWritingToCloud) return; // Prevent echoing local optimistic writes
 
-          // If snapshot is empty, don't wipe out local defaults on initial sync unless explicitly cleared
-          if (snapshot.empty) {
-            if (safeStorage.getItem('rr_inventory_cleared') === 'true' && collectionName === COLLECTIONS.INVENTORY) {
-              safeStorage.setItem(storageKey, JSON.stringify([]));
-              if (isWarehouse) {
-                this.onWarehouseChangeNotify?.(storageKey);
-              } else {
-                this.onStorageChangeNotify?.(storageKey);
-              }
-            }
-            return;
-          }
+          // If snapshot is empty, don't wipe out local defaults on initial sync
+          if (snapshot.empty) return;
 
           const remoteDocs: T[] = [];
           snapshot.forEach((docSnap) => {
             remoteDocs.push(docSnap.data() as T);
           });
 
-          if (collectionName === COLLECTIONS.INVENTORY && remoteDocs.length > 0) {
-            safeStorage.removeItem('rr_inventory_cleared');
-          }
-
           this.isApplyingRemoteUpdate = true;
           try {
             // Save to browser cache
             safeStorage.setItem(storageKey, JSON.stringify(remoteDocs));
             
-            // Invalidate and notify UI subscribers
+            // Notify UI subscribers
             if (isWarehouse) {
-              this.onWarehouseChangeNotify?.(storageKey);
+              this.onWarehouseChangeNotify?.();
             } else {
-              this.onStorageChangeNotify?.(storageKey);
+              this.onStorageChangeNotify?.();
             }
 
             this.setState({
@@ -266,68 +250,6 @@ class CloudSyncService {
       });
     } catch (err: any) {
       console.warn(`[CloudSync] Failed to sync document to ${collectionName}:`, err);
-    } finally {
-      this.isWritingToCloud = false;
-    }
-  }
-
-  /**
-   * Delete a document from Firestore in real-time when deleted locally
-   */
-  public async deleteDocument(collectionName: string, id: string) {
-    if (!isFirebaseConfigured() || !db || this.isApplyingRemoteUpdate) return;
-    try {
-      this.isWritingToCloud = true;
-      const cleanId = String(id || '').trim();
-      if (!cleanId) return;
-      const docRef = doc(db, collectionName, cleanId);
-      await deleteDoc(docRef);
-    } catch (err: any) {
-      console.warn(`[CloudSync] Failed to delete document from ${collectionName}:`, err);
-    } finally {
-      this.isWritingToCloud = false;
-    }
-  }
-
-  /**
-   * Clears the entire inventory collection from Cloud Firestore in batched operations
-   */
-  public async clearInventoryFromCloud(): Promise<boolean> {
-    if (!isFirebaseConfigured() || !db) return true;
-
-    try {
-      this.isWritingToCloud = true;
-      this.setState({ status: 'syncing' });
-
-      const snap = await getDocs(collection(db, COLLECTIONS.INVENTORY));
-      if (!snap.empty) {
-        let batch = writeBatch(db);
-        let opCount = 0;
-
-        for (const d of snap.docs) {
-          batch.delete(d.ref);
-          opCount++;
-          if (opCount >= 400) {
-            await batch.commit();
-            batch = writeBatch(db);
-            opCount = 0;
-          }
-        }
-        if (opCount > 0) {
-          await batch.commit();
-        }
-      }
-
-      this.setState({
-        status: 'connected',
-        isLive: true,
-        lastSyncedAt: new Date(),
-      });
-      return true;
-    } catch (err: any) {
-      console.warn('[CloudSync] Failed to clear inventory from Firestore:', err);
-      this.setState({ status: 'error', errorMessage: err?.message });
-      return false;
     } finally {
       this.isWritingToCloud = false;
     }
@@ -404,13 +326,10 @@ class CloudSyncService {
         }
       }
 
-      // Seed inventory (only if not explicitly cleared by user and not empty)
-      const isInventoryCleared = safeStorage.getItem('rr_inventory_cleared') === 'true';
-      if (!isInventoryCleared && inventory.length > 0) {
-        for (const item of inventory) {
-          if (item.id) {
-            batch.set(doc(db, COLLECTIONS.INVENTORY, String(item.id)), item, { merge: true });
-          }
+      // Seed inventory
+      for (const item of inventory) {
+        if (item.id) {
+          batch.set(doc(db, COLLECTIONS.INVENTORY, String(item.id)), item, { merge: true });
         }
       }
 
@@ -463,68 +382,6 @@ class CloudSyncService {
     } catch (err: any) {
       this.setState({ status: 'error', errorMessage: err?.message });
       return false;
-    }
-  }
-
-  /**
-   * Diagnostic ping test: writes and reads a verification document to confirm two-way Firestore communication
-   */
-  public async testConnection(): Promise<{ success: boolean; latencyMs: number; message: string }> {
-    if (!isFirebaseConfigured() || !db) {
-      return {
-        success: false,
-        latencyMs: 0,
-        message: 'Cloud Firestore is not configured or missing credentials.',
-      };
-    }
-
-    try {
-      const startTime = performance.now();
-      const testDocRef = doc(db, COLLECTIONS.META, 'connection_ping');
-      await setDoc(
-        testDocRef,
-        {
-          lastPing: serverTimestamp(),
-          clientTimestamp: new Date().toISOString(),
-          status: 'verified',
-        },
-        { merge: true }
-      );
-
-      const snap = await getDoc(testDocRef);
-      const latencyMs = Math.round(performance.now() - startTime);
-
-      if (snap.exists()) {
-        this.setState({
-          status: 'connected',
-          isLive: true,
-          lastSyncedAt: new Date(),
-          errorMessage: undefined,
-        });
-        return {
-          success: true,
-          latencyMs,
-          message: `Two-way real-time duplex stream verified! Latency: ${latencyMs}ms. Database: ${
-            this.state.databaseId || '(default)'
-          }`,
-        };
-      } else {
-        return {
-          success: false,
-          latencyMs,
-          message: 'Ping document was written but could not be read back from Firestore.',
-        };
-      }
-    } catch (err: any) {
-      this.setState({
-        status: 'error',
-        errorMessage: err?.message || 'Ping failed',
-      });
-      return {
-        success: false,
-        latencyMs: 0,
-        message: err?.message || 'Error connecting to Cloud Firestore',
-      };
     }
   }
 

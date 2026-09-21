@@ -262,11 +262,6 @@ export const authService = {
     return { success: true };
   },
 
-  validateWarehousePassword(password: string): boolean {
-    const cleanPassword = (password || '').trim();
-    return cleanPassword === 'RRwarehouse' || cleanPassword === 'RRadmin' || cleanPassword === 'admin123';
-  },
-
   logoutWarehouse(): void {
     safeStorage.removeItem(WAREHOUSE_STORAGE_KEY);
   },

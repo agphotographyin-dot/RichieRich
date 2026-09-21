@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Database,
   Download,
@@ -17,11 +17,6 @@ import {
   ShieldAlert,
   FileCheck2,
   AlertTriangle,
-  Cloud,
-  RefreshCw,
-  Zap,
-  Wifi,
-  Radio,
 } from 'lucide-react';
 import { BackupSnapshot } from '../../types';
 import { storage } from '../../services/storage';
@@ -30,8 +25,6 @@ import {
   verifyAndSanitizeImportFile,
   BackupValidationResult,
 } from '../../services/backupIntegrityService';
-import { cloudSync, CloudSyncState } from '../../services/cloudSync';
-import { CloudSyncModal } from '../common/CloudSyncModal';
 
 interface AdminBackupsSecurityProps {
   backups: BackupSnapshot[];
@@ -44,31 +37,6 @@ export const AdminBackupsSecurity: React.FC<AdminBackupsSecurityProps> = ({ back
   const [posPin, setPosPin] = useState('1234');
   const [showPin, setShowPin] = useState(false);
   const [maskCustomerData, setMaskCustomerData] = useState(true);
-
-  // Cloud Sync State & Diagnostics
-  const [syncState, setSyncState] = useState<CloudSyncState>(cloudSync.getState());
-  const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
-  const [isTestingPing, setIsTestingPing] = useState(false);
-  const [pingResult, setPingResult] = useState<{ success: boolean; message: string } | null>(null);
-
-  useEffect(() => {
-    const unsub = cloudSync.subscribe((state) => {
-      setSyncState(state);
-    });
-    return unsub;
-  }, []);
-
-  const handleTestCloudPing = async () => {
-    setIsTestingPing(true);
-    setPingResult(null);
-    try {
-      const res = await cloudSync.testConnection();
-      setPingResult(res);
-      setTimeout(() => setPingResult(null), 8000);
-    } finally {
-      setIsTestingPing(false);
-    }
-  };
 
   // Secure Import & Integrity Modal state
   const [isVerifyingFile, setIsVerifyingFile] = useState(false);
@@ -312,108 +280,6 @@ export const AdminBackupsSecurity: React.FC<AdminBackupsSecurityProps> = ({ back
         </div>
       )}
 
-      {/* Cloud Firestore Real-Time Database Connection & Status */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 shrink-0">
-              <Cloud className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-slate-800">Cloud Firestore Real-Time Sync</h3>
-                {syncState.status === 'connected' ? (
-                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 flex items-center gap-1.5 border border-emerald-200">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Live Duplex Active
-                  </span>
-                ) : syncState.status === 'syncing' ? (
-                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 flex items-center gap-1.5 border border-amber-200">
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                    Syncing...
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 flex items-center gap-1.5 border border-slate-200">
-                    <AlertCircle className="w-3 h-3 text-slate-500" />
-                    Local Offline
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Multi-branch live synchronization between Central Warehouse, Bopal, Gota, Sindhu Bhavan & SG Highway stores.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handleTestCloudPing}
-              disabled={isTestingPing}
-              type="button"
-              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg border border-slate-300 flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Radio className={`w-3.5 h-3.5 text-indigo-600 ${isTestingPing ? 'animate-spin' : ''}`} />
-              <span>{isTestingPing ? 'Pinging Cloud...' : 'Test Real-Time Ping'}</span>
-            </button>
-
-            <button
-              onClick={() => setIsCloudModalOpen(true)}
-              type="button"
-              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-300" />
-              <span>Inspect Live Channels</span>
-            </button>
-          </div>
-        </div>
-
-        {pingResult && (
-          <div
-            className={`p-3 rounded-lg text-xs font-medium border flex items-center gap-2 ${
-              pingResult.success
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                : 'bg-rose-50 border-rose-200 text-rose-800'
-            }`}
-          >
-            {pingResult.success ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            )}
-            <span>{pingResult.message}</span>
-          </div>
-        )}
-
-        {/* Sync Spec Badges */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-            <span className="text-[11px] text-slate-500 font-medium block">Cloud Project ID</span>
-            <span className="font-mono font-bold text-slate-800 truncate block mt-0.5">
-              {syncState.projectId || 'None'}
-            </span>
-          </div>
-          <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-            <span className="text-[11px] text-slate-500 font-medium block">Firestore Database ID</span>
-            <span className="font-mono font-bold text-slate-800 truncate block mt-0.5" title={syncState.databaseId}>
-              {syncState.databaseId ? syncState.databaseId.substring(0, 18) + '...' : '(default)'}
-            </span>
-          </div>
-          <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-            <span className="text-[11px] text-slate-500 font-medium block">Active Real-Time Listeners</span>
-            <span className="font-bold text-emerald-600 block mt-0.5 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              {syncState.activeListenersCount || 9} Live Snapshot Streams
-            </span>
-          </div>
-          <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-            <span className="text-[11px] text-slate-500 font-medium block">Last Cloud Sync Event</span>
-            <span className="font-bold text-slate-700 block mt-0.5">
-              {syncState.lastSyncedAt ? syncState.lastSyncedAt.toLocaleTimeString() : 'Ready / Listening'}
-            </span>
-          </div>
-        </div>
-      </div>
-
       {/* Automated Backup Schedule Card */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white border border-slate-200 p-5 rounded-xl shadow-xs">
@@ -596,8 +462,6 @@ export const AdminBackupsSecurity: React.FC<AdminBackupsSecurityProps> = ({ back
           </div>
         </div>
       </div>
-
-      <CloudSyncModal isOpen={isCloudModalOpen} onClose={() => setIsCloudModalOpen(false)} />
     </div>
   );
 };
