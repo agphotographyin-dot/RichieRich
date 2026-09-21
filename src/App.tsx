@@ -14,6 +14,8 @@ import {
   POSSession,
 } from './types';
 import { storage } from './services/storage';
+import { warehouseStorage } from './services/warehouseStorage';
+import { cloudSync } from './services/cloudSync';
 import { authService } from './services/auth';
 import { Header } from './components/common/Header';
 import { BarcodeScannerModal } from './components/common/BarcodeScannerModal';
@@ -150,6 +152,19 @@ export const App: React.FC = () => {
     return () => {
       window.removeEventListener('popstate', handleLocationChange);
       window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
+
+  // Initialize Cloud Firestore Real-Time Sync Engine
+  useEffect(() => {
+    cloudSync.registerNotifiers(
+      () => storage.notifySubscribers(),
+      () => warehouseStorage.notifySubscribers()
+    );
+    cloudSync.init();
+
+    return () => {
+      cloudSync.destroy();
     };
   }, []);
 

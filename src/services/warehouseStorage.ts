@@ -14,6 +14,7 @@ import {
   WarehouseSubRole,
 } from '../types/warehouse';
 import { storage } from './storage';
+import { cloudSync } from './cloudSync';
 
 const WH_KEYS = {
   WAREHOUSES: 'rr_wh_locations',
@@ -559,6 +560,7 @@ export const warehouseStorage = {
       setWhCached(WH_KEYS.SUPPLIERS, list);
       safeStorage.setItem(WH_KEYS.SUPPLIERS, JSON.stringify(list));
       this.notifySubscribers();
+      cloudSync.debouncedSyncCollection('suppliers', list);
     } catch (e) {
       console.error(e);
     }
@@ -685,6 +687,7 @@ export const warehouseStorage = {
       setWhCached(WH_KEYS.PURCHASE_ORDERS, list);
       safeStorage.setItem(WH_KEYS.PURCHASE_ORDERS, JSON.stringify(list));
       this.notifySubscribers();
+      cloudSync.debouncedSyncCollection('purchase_orders', list);
     } catch (e) {
       console.error(e);
     }
@@ -748,6 +751,7 @@ export const warehouseStorage = {
       setWhCached(WH_KEYS.PURCHASE_BILLS, list);
       safeStorage.setItem(WH_KEYS.PURCHASE_BILLS, JSON.stringify(list));
       this.notifySubscribers();
+      cloudSync.debouncedSyncCollection('inward_bills', list);
     } catch (e) {
       console.error(e);
     }
@@ -956,6 +960,7 @@ export const warehouseStorage = {
       setWhCached(WH_KEYS.TRANSFERS, list);
       safeStorage.setItem(WH_KEYS.TRANSFERS, JSON.stringify(list));
       this.notifySubscribers();
+      cloudSync.debouncedSyncCollection('stock_transfers', list);
     } catch (e) {
       console.error(e);
     }
@@ -1286,6 +1291,7 @@ export const warehouseStorage = {
       setWhCached(WH_KEYS.INDENTS, list);
       safeStorage.setItem(WH_KEYS.INDENTS, JSON.stringify(list));
       this.notifySubscribers();
+      cloudSync.debouncedSyncCollection('store_indents', list);
     } catch (e) {
       console.error(e);
     }

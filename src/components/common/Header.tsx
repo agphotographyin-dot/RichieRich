@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Role, PushNotification, AdminTab, Customer, POSSession } from '../../types';
 import { RichieRichLogo } from './RichieRichLogo';
+import { CloudSyncBadge } from './CloudSyncBadge';
 
 interface HeaderProps {
   currentRole: Role;
@@ -167,6 +168,9 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="sm:hidden">{lowStockCount} Low</span>
               </div>
             )}
+
+            {/* Real-time Cloud Sync Status Badge */}
+            <CloudSyncBadge />
 
             {/* Barcode Scanner Modal Button (Admin & POS) */}
             {(currentRole === 'admin' || currentRole === 'pos') && onOpenScanner && (

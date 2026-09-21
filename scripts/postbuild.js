@@ -43,6 +43,9 @@ if (fs.existsSync(distDir)) {
       fs.writeFileSync(path.join(routeDir, 'index.html'), htmlContent);
     });
 
-    console.log('✓ SPA deep linking fallback pages generated successfully in dist/');
+    // 3. Static host rewrites (_redirects for Netlify & Cloudflare Pages)
+    fs.writeFileSync(path.join(distDir, '_redirects'), '/* /index.html 200\n');
+
+    console.log('✓ SPA deep linking fallback pages and _redirects generated successfully in dist/');
   }
 }

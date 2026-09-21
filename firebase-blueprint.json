@@ -1,0 +1,67 @@
+{
+  "entities": {
+    "stores": {
+      "description": "Retail store branch locations",
+      "fields": {
+        "id": { "type": "string", "description": "Store identifier" },
+        "name": { "type": "string", "description": "Store name" },
+        "code": { "type": "string", "description": "Short code" },
+        "city": { "type": "string", "description": "City" },
+        "area": { "type": "string", "description": "Area" },
+        "isActive": { "type": "boolean", "description": "Active state" }
+      }
+    },
+    "inventory": {
+      "description": "Product catalog and multi-location inventory",
+      "fields": {
+        "id": { "type": "string", "description": "Product ID" },
+        "name": { "type": "string", "description": "Product name" },
+        "category": { "type": "string", "description": "Category" },
+        "barcode": { "type": "string", "description": "SKU barcode" },
+        "sellingPrice": { "type": "number", "description": "Retail price" },
+        "costPrice": { "type": "number", "description": "Wholesale cost price" },
+        "stock": { "type": "number", "description": "Total stock" },
+        "warehouseStock": { "type": "number", "description": "Central warehouse stock" },
+        "storeAllocations": { "type": "map", "description": "Stock per store ID" }
+      }
+    },
+    "orders": {
+      "description": "POS sales orders",
+      "fields": {
+        "id": { "type": "string", "description": "Order receipt ID" },
+        "orderNumber": { "type": "string", "description": "Readable order sequence" },
+        "storeId": { "type": "string", "description": "Originating store ID" },
+        "finalTotal": { "type": "number", "description": "Invoice total" },
+        "paymentMethod": { "type": "string", "description": "Payment mode" },
+        "createdAt": { "type": "string", "description": "Timestamp" }
+      }
+    },
+    "purchase_orders": {
+      "description": "Warehouse and direct-to-store supplier purchase orders",
+      "fields": {
+        "id": { "type": "string", "description": "PO ID" },
+        "poNumber": { "type": "string", "description": "PO sequence" },
+        "supplierId": { "type": "string", "description": "Supplier ID" },
+        "destinationWarehouseId": { "type": "string", "description": "Target warehouse or store" },
+        "status": { "type": "string", "description": "PO workflow status" }
+      }
+    },
+    "inward_bills": {
+      "description": "Vendor delivery bills and GRN",
+      "fields": {
+        "id": { "type": "string", "description": "Inward bill ID" },
+        "billNumber": { "type": "string", "description": "Vendor invoice number" },
+        "totalAmount": { "type": "number", "description": "Total amount" }
+      }
+    },
+    "stock_transfers": {
+      "description": "Inter-store and warehouse transfers",
+      "fields": {
+        "id": { "type": "string", "description": "Transfer ID" },
+        "sourceId": { "type": "string", "description": "Source location" },
+        "destinationId": { "type": "string", "description": "Destination location" },
+        "status": { "type": "string", "description": "Status" }
+      }
+    }
+  }
+}

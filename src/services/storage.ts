@@ -21,6 +21,7 @@ import { soundEffects } from './audio';
 import { validateAndSanitizeBackupPayload } from './backupIntegrityService';
 import { safeStorage } from '../utils/safeStorage';
 import { getLocalDateString, isToday, isSameDay } from '../utils/dateUtils';
+import { cloudSync } from './cloudSync';
 
 const STORAGE_KEYS = {
   INVENTORY: 'rr_panhouse_inventory',
@@ -1484,6 +1485,7 @@ export class StorageService {
     this.setCached(STORAGE_KEYS.STORES, stores);
     safeStorage.setItem(STORAGE_KEYS.STORES, JSON.stringify(stores));
     this.notify();
+    cloudSync.debouncedSyncCollection('stores', stores);
   }
 
   getStoreById(storeId: string): StoreLocation | undefined {
@@ -1829,6 +1831,7 @@ export class StorageService {
     this.setCached(STORAGE_KEYS.INVENTORY, sanitized);
     safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(sanitized));
     this.notify();
+    cloudSync.debouncedSyncCollection('inventory', sanitized);
 
     // Defer low stock alert evaluation so UI operations remain immediate
     setTimeout(() => {
@@ -2183,6 +2186,7 @@ export class StorageService {
     this.setCached(STORAGE_KEYS.CUSTOMERS, customers);
     safeStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
     this.notify();
+    cloudSync.debouncedSyncCollection('customers', customers);
   }
 
   findCustomerByPhone(phone: string): Customer | undefined {
@@ -2250,6 +2254,7 @@ export class StorageService {
     this.setCached(STORAGE_KEYS.ORDERS, orders);
     safeStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     this.notify();
+    cloudSync.debouncedSyncCollection('orders', orders);
   }
 
   processOrder(orderData: Omit<Order, 'id' | 'orderNumber' | 'createdAt'>): Order {
@@ -2349,6 +2354,8 @@ export class StorageService {
 
     // Single unified notification broadcast for state synchronization
     this.notify();
+    cloudSync.syncDocument('orders', newOrder.id, newOrder);
+    cloudSync.debouncedSyncCollection('inventory', inventory, 50);
 
     // 4. Trigger audio & background notifications asynchronously (zero UI lag)
     setTimeout(() => {
