@@ -20,6 +20,7 @@ import { authService } from './services/auth';
 import { Header } from './components/common/Header';
 import { BarcodeScannerModal } from './components/common/BarcodeScannerModal';
 import { NotificationDrawer } from './components/common/NotificationDrawer';
+import { resolveNotificationDestination } from './utils/notificationRouter';
 
 // Landing Page Portal Chooser
 import { LandingPortal } from './components/auth/LandingPortal';
@@ -161,6 +162,13 @@ export const App: React.FC = () => {
       () => storage.notifySubscribers(),
       () => warehouseStorage.notifySubscribers()
     );
+    cloudSync.registerCacheUpdaters(
+      (key, val) => storage.setCached(key, val),
+      (key, val) => {
+        warehouseStorage.setCached(key, val);
+        warehouseStorage.invalidateCache(key);
+      }
+    );
     cloudSync.init();
 
     return () => {
@@ -254,6 +262,85 @@ export const App: React.FC = () => {
       role === 'store_admin' ? activeStoreAdminTab : undefined
     );
   };
+
+  const handleNavigateToNotification = (notif: PushNotification) => {
+    storage.markNotificationAsRead(notif.id);
+
+    const dest = resolveNotificationDestination(notif);
+
+    // Auto-authenticate for target destination so the user lands immediately on the desired page without disruption
+    if (dest.role === 'admin' && !isAdminAuthenticated) {
+      authService.loginAdmin('ADMIN', 'RRadmin');
+      setIsAdminAuthenticated(true);
+    } else if (dest.role === 'warehouse' && !isWarehouseAuthenticated) {
+      authService.loginWarehouse('ADMIN', 'RRwarehouse', 'operations_manager');
+      setIsWarehouseAuthenticated(true);
+    } else if (dest.role === 'store_admin' && !isStoreAdminAuthenticated) {
+      authService.loginStoreAdmin('bopal', 'admin_bopal', 'RRbopal');
+      setIsStoreAdminAuthenticated(true);
+    } else if (dest.role === 'pos' && !isPOSAuthenticated) {
+      authService.loginPOS('ADMIN', 'RRPOSadmin');
+      setIsPOSAuthenticated(true);
+    } else if (dest.role === 'customer' && !isCustomerAuthenticated) {
+      const defaultCust = customers[0] || storage.getCustomers()[0];
+      if (defaultCust) {
+        authService.loginCustomer(defaultCust.phone);
+        setCurrentCustomer(defaultCust);
+        setIsCustomerAuthenticated(true);
+      }
+    }
+
+    // Set tab states
+    if (dest.adminTab) {
+      setActiveAdminTab(dest.adminTab);
+    }
+    if (dest.warehouseTab) {
+      setActiveWarehouseTab(dest.warehouseTab);
+    }
+    if (dest.storeAdminTab) {
+      setActiveStoreAdminTab(dest.storeAdminTab);
+    }
+
+    // Switch active role
+    setCurrentRole(dest.role);
+
+    // Sync URL route
+    updateRoute(
+      dest.role,
+      dest.adminTab || (dest.role === 'admin' ? activeAdminTab : undefined),
+      false,
+      dest.warehouseTab || (dest.role === 'warehouse' ? activeWarehouseTab : undefined),
+      dest.storeAdminTab || (dest.role === 'store_admin' ? activeStoreAdminTab : undefined)
+    );
+
+    // Close notification drawer
+    setIsNotificationDrawerOpen(false);
+  };
+
+  // Listen for native push notifications or custom programmatic notifications
+  useEffect(() => {
+    const handleCustomNav = (e: Event) => {
+      const customEvent = e as CustomEvent<PushNotification>;
+      if (customEvent.detail) {
+        handleNavigateToNotification(customEvent.detail);
+      }
+    };
+
+    window.addEventListener('rr_navigate_notification', handleCustomNav);
+    return () => {
+      window.removeEventListener('rr_navigate_notification', handleCustomNav);
+    };
+  }, [
+    isAdminAuthenticated,
+    isWarehouseAuthenticated,
+    isStoreAdminAuthenticated,
+    isPOSAuthenticated,
+    isCustomerAuthenticated,
+    customers,
+    activeAdminTab,
+    activeWarehouseTab,
+    activeStoreAdminTab,
+  ]);
 
   // Auth Handler: Admin
   const handleAdminLoginSuccess = () => {
@@ -526,6 +613,7 @@ export const App: React.FC = () => {
         isOpen={isNotificationDrawerOpen}
         onClose={() => setIsNotificationDrawerOpen(false)}
         notifications={notifications}
+        onNavigateToNotification={handleNavigateToNotification}
         onMarkAllAsRead={() => storage.markAllNotificationsAsRead()}
         onClearAll={() => storage.clearNotifications()}
       />

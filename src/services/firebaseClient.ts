@@ -1,5 +1,10 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  getFirestore,
+  Firestore,
+  memoryLocalCache,
+} from 'firebase/firestore';
 import rawConfig from '../../firebase-applet-config.json';
 
 export interface FirebaseConfigType {
@@ -33,18 +38,25 @@ let initError: Error | null = null;
 
 try {
   if (firebaseConfig?.apiKey && firebaseConfig?.projectId) {
-    firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-    
-    // Support custom named database ID from AI Studio provisioning or standard (default) database
-    if (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId.trim() !== '') {
-      try {
-        firestoreDb = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
-      } catch (dbErr) {
-        console.warn('Could not initialize named database, falling back to default:', dbErr);
-        firestoreDb = getFirestore(firebaseApp);
-      }
-    } else {
-      firestoreDb = getFirestore(firebaseApp);
+    const isNewApp = getApps().length === 0;
+    firebaseApp = isNewApp ? initializeApp(firebaseConfig) : getApp();
+
+    const targetDbId =
+      firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId.trim() !== ''
+        ? firebaseConfig.firestoreDatabaseId
+        : undefined;
+
+    // Initialize with high-performance in-memory caching to eliminate disk bottlenecks and speed up snapshot delivery
+    const firestoreSettings = {
+      ignoreUndefinedProperties: true,
+      localCache: memoryLocalCache(),
+    };
+
+    try {
+      firestoreDb = initializeFirestore(firebaseApp, firestoreSettings, targetDbId);
+    } catch {
+      // If already initialized in another module, obtain reference
+      firestoreDb = targetDbId ? getFirestore(firebaseApp, targetDbId) : getFirestore(firebaseApp);
     }
   }
 } catch (err) {

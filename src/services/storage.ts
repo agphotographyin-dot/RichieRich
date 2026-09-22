@@ -1143,6 +1143,7 @@ export const INITIAL_NOTIFICATIONS: PushNotification[] = [
     timestamp: '2026-08-22T06:00:00.000Z',
     targetRole: 'admin',
     read: false,
+    linkRole: 'warehouse',
     linkTab: 'inventory',
   },
   {
@@ -1153,6 +1154,7 @@ export const INITIAL_NOTIFICATIONS: PushNotification[] = [
     timestamp: '2026-08-22T06:10:00.000Z',
     targetRole: 'admin',
     read: false,
+    linkRole: 'warehouse',
     linkTab: 'inventory',
   },
   {
@@ -1163,7 +1165,8 @@ export const INITIAL_NOTIFICATIONS: PushNotification[] = [
     timestamp: '2026-08-22T06:15:00.000Z',
     targetRole: 'admin',
     read: false,
-    linkTab: 'loyalty',
+    linkRole: 'admin',
+    linkTab: 'loyalty_promos',
   },
   {
     id: 'notif-4',
@@ -1173,6 +1176,7 @@ export const INITIAL_NOTIFICATIONS: PushNotification[] = [
     timestamp: '2026-08-22T00:00:00.000Z',
     targetRole: 'admin',
     read: true,
+    linkRole: 'admin',
     linkTab: 'backups',
   },
 ];
@@ -1235,11 +1239,11 @@ export class StorageService {
     };
   }
 
-  notifySubscribers() {
-    this.notify();
+  notifySubscribers(broadcast = true) {
+    this.notify(broadcast);
   }
 
-  private notify() {
+  private notify(broadcast = true) {
     if (this.isNotifyPending) return;
     this.isNotifyPending = true;
     queueMicrotask(() => {
@@ -1251,7 +1255,7 @@ export class StorageService {
           console.error('Subscriber error in storage:', err);
         }
       });
-      if (syncChannel) {
+      if (broadcast && syncChannel) {
         try {
           syncChannel.postMessage({ type: 'STATE_CHANGED', timestamp: Date.now() });
         } catch {
@@ -1268,7 +1272,7 @@ export class StorageService {
       syncChannel.onmessage = (event) => {
         if (event.data && event.data.type === 'STATE_CHANGED') {
           this.memoryCache.clear();
-          this.notify();
+          this.notify(false); // Do not echo back to prevent tab ping-pong loops
         }
       };
     }
@@ -1277,7 +1281,7 @@ export class StorageService {
     window.addEventListener('storage', (e) => {
       if (e.key && (Object.values(STORAGE_KEYS).includes(e.key) || e.key.startsWith('rr_'))) {
         this.memoryCache.clear();
-        this.notify();
+        this.notify(false); // Do not echo back
       }
     });
   }
@@ -1872,6 +1876,7 @@ export class StorageService {
 
     items[index] = updated;
     this.saveInventory(items);
+    cloudSync.syncDocument('inventory', updated.id, updated);
     return updated;
   }
 
@@ -2054,6 +2059,7 @@ export class StorageService {
 
     item.stockQuantity = Math.max(0, item.stockQuantity + delta);
     this.saveInventory(items);
+    cloudSync.syncDocument('inventory', item.id, item);
 
     if (delta < 0 && item.stockQuantity <= item.lowStockThreshold) {
       setTimeout(() => soundEffects.playWarningChime(), 50);
@@ -2355,6 +2361,12 @@ export class StorageService {
     // Single unified notification broadcast for state synchronization
     this.notify();
     cloudSync.syncDocument('orders', newOrder.id, newOrder);
+    newOrder.items.forEach((item) => {
+      const invItem = inventory.find((i) => i.id === item.itemId);
+      if (invItem) {
+        cloudSync.syncDocument('inventory', invItem.id, invItem);
+      }
+    });
     cloudSync.debouncedSyncCollection('inventory', inventory, 50);
 
     // 4. Trigger audio & background notifications asynchronously (zero UI lag)
@@ -2488,10 +2500,18 @@ export class StorageService {
     // Browser Notification API trigger if permitted
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       try {
-        new Notification(newNotif.title, {
+        const nativeNotif = new Notification(newNotif.title, {
           body: newNotif.message,
           icon: '/favicon.ico',
         });
+        nativeNotif.onclick = () => {
+          try {
+            window.focus();
+            window.dispatchEvent(new CustomEvent('rr_navigate_notification', { detail: newNotif }));
+          } catch (err) {
+            console.warn('Native notification click handling failed', err);
+          }
+        };
       } catch (e) {
         console.warn('Native notification failed', e);
       }

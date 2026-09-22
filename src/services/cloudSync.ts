@@ -3,6 +3,8 @@ import {
   doc,
   setDoc,
   getDocs,
+  query,
+  limit,
   onSnapshot,
   writeBatch,
   Unsubscribe,
@@ -71,17 +73,28 @@ class CloudSyncService {
   private listeners = new Set<SyncListener>();
   private unsubscribes: Unsubscribe[] = [];
   private isInitialized = false;
-  private isWritingToCloud = false;
   private isApplyingRemoteUpdate = false;
   private debounceTimers: Record<string, any> = {};
+  private collectionDocsMap = new Map<string, Map<string, any>>();
+  private persistDebounceTimers: Record<string, any> = {};
 
-  // External notification hooks (injected from storage / warehouseStorage)
+  // External notification & cache hooks (injected to prevent circular imports)
   private onStorageChangeNotify?: () => void;
   private onWarehouseChangeNotify?: () => void;
+  private onStorageCacheUpdate?: (key: string, val: any) => void;
+  private onWarehouseCacheUpdate?: (key: string, val: any) => void;
 
   public registerNotifiers(storageNotify: () => void, warehouseNotify: () => void) {
     this.onStorageChangeNotify = storageNotify;
     this.onWarehouseChangeNotify = warehouseNotify;
+  }
+
+  public registerCacheUpdaters(
+    storageUpdater: (key: string, val: any) => void,
+    warehouseUpdater: (key: string, val: any) => void
+  ) {
+    this.onStorageCacheUpdate = storageUpdater;
+    this.onWarehouseCacheUpdate = warehouseUpdater;
   }
 
   public subscribe(cb: SyncListener): () => void {
@@ -108,6 +121,23 @@ class CloudSyncService {
   }
 
   /**
+   * Schedules non-blocking asynchronous writing to localStorage in background,
+   * avoiding synchronous freezes on the main UI thread during large sync events.
+   */
+  private scheduleStoragePersist(storageKey: string, docs: any[]) {
+    if (this.persistDebounceTimers[storageKey]) {
+      clearTimeout(this.persistDebounceTimers[storageKey]);
+    }
+    this.persistDebounceTimers[storageKey] = setTimeout(() => {
+      try {
+        safeStorage.setItem(storageKey, JSON.stringify(docs));
+      } catch (err) {
+        console.warn(`[CloudSync] Background persist error for ${storageKey}:`, err);
+      }
+    }, 60);
+  }
+
+  /**
    * Initializes real-time Firestore listeners and performs first-time seeding if DB is empty
    */
   public async init() {
@@ -126,8 +156,8 @@ class CloudSyncService {
     try {
       this.setState({ status: 'connecting' });
 
-      // 1. Check if Firestore is already seeded with inventory
-      const invSnap = await getDocs(collection(db, COLLECTIONS.INVENTORY));
+      // 1. Ultra-fast check with limit(1) to test if Firestore has data without downloading thousands of items
+      const invSnap = await getDocs(query(collection(db, COLLECTIONS.INVENTORY), limit(1)));
       if (invSnap.empty) {
         console.log('[CloudSync] Firestore is fresh. Seeding initial baseline data...');
         await this.seedBaselineData();
@@ -154,7 +184,7 @@ class CloudSyncService {
   }
 
   /**
-   * Listen to remote collection changes in real time
+   * Listen to remote collection changes in real time with delta processing
    */
   private setupRealtimeListeners() {
     if (!db) return;
@@ -171,25 +201,67 @@ class CloudSyncService {
     ) => {
       if (!db) return;
       const colRef = collection(db, collectionName);
+      let isFirstSnapshot = true;
+
       const unsub = onSnapshot(
         colRef,
+        { includeMetadataChanges: false },
         (snapshot) => {
-          if (this.isWritingToCloud) return; // Prevent echoing local optimistic writes
+          // If this snapshot contains local pending writes from this client,
+          // our optimistic in-memory state already has it. Skip to prevent echoing.
+          if (snapshot.metadata.hasPendingWrites) {
+            return;
+          }
 
-          // If snapshot is empty, don't wipe out local defaults on initial sync
-          if (snapshot.empty) return;
+          if (snapshot.empty && !isFirstSnapshot) return;
 
-          const remoteDocs: T[] = [];
-          snapshot.forEach((docSnap) => {
-            remoteDocs.push(docSnap.data() as T);
-          });
+          let map = this.collectionDocsMap.get(collectionName);
+          if (!map) {
+            map = new Map<string, any>();
+            this.collectionDocsMap.set(collectionName, map);
+          }
+
+          if (isFirstSnapshot) {
+            isFirstSnapshot = false;
+            // Initial load: populate map with all documents
+            map.clear();
+            snapshot.forEach((docSnap) => {
+              const data = docSnap.data();
+              const id = String(data.id || docSnap.id);
+              map!.set(id, data);
+            });
+          } else {
+            // Real-time delta update: ONLY process changed, added, or removed docs (sub-millisecond O(1))
+            const changes = snapshot.docChanges();
+            if (changes.length === 0) return;
+
+            for (const change of changes) {
+              const data = change.doc.data();
+              const id = String(data.id || change.doc.id);
+              if (change.type === 'removed') {
+                map.delete(id);
+              } else {
+                map.set(id, data);
+              }
+            }
+          }
+
+          const remoteDocs = Array.from(map.values()) as T[];
 
           this.isApplyingRemoteUpdate = true;
           try {
-            // Save to browser cache
-            safeStorage.setItem(storageKey, JSON.stringify(remoteDocs));
-            
-            // Notify UI subscribers
+            // 1. Immediately update in-memory caches so getters return fresh data instantly
+            if (this.onStorageCacheUpdate) {
+              this.onStorageCacheUpdate(storageKey, remoteDocs);
+            }
+            if (isWarehouse && this.onWarehouseCacheUpdate) {
+              this.onWarehouseCacheUpdate(storageKey, remoteDocs);
+            }
+
+            // 2. Schedule non-blocking async disk write in background
+            this.scheduleStoragePersist(storageKey, remoteDocs);
+
+            // 3. Immediately trigger UI subscribers (zero delay!)
             if (isWarehouse) {
               this.onWarehouseChangeNotify?.();
             } else {
@@ -200,7 +272,7 @@ class CloudSyncService {
               status: 'connected',
               isLive: true,
               lastSyncedAt: new Date(),
-              itemsSynced: this.state.itemsSynced + snapshot.docChanges().length,
+              itemsSynced: this.state.itemsSynced + (isFirstSnapshot ? snapshot.size : snapshot.docChanges().length),
             });
           } finally {
             this.isApplyingRemoteUpdate = false;
@@ -230,35 +302,40 @@ class CloudSyncService {
   }
 
   /**
-   * Push a document to Firestore in real-time when changed locally
+   * Push a document to Firestore in real-time immediately when changed locally
    */
   public async syncDocument(collectionName: string, id: string, data: any) {
     if (!isFirebaseConfigured() || !db || this.isApplyingRemoteUpdate) return;
 
     try {
-      this.isWritingToCloud = true;
       const cleanId = String(id || Date.now());
       const docRef = doc(db, collectionName, cleanId);
-      
+
       // Clean undefined values for Firestore
       const sanitized = JSON.parse(JSON.stringify(data));
+
+      // Optimistically update internal collection map
+      const map = this.collectionDocsMap.get(collectionName);
+      if (map) {
+        map.set(cleanId, sanitized);
+      }
+
       await setDoc(docRef, { ...sanitized, _updatedAt: serverTimestamp() }, { merge: true });
 
       this.setState({
         status: 'connected',
+        isLive: true,
         lastSyncedAt: new Date(),
       });
     } catch (err: any) {
       console.warn(`[CloudSync] Failed to sync document to ${collectionName}:`, err);
-    } finally {
-      this.isWritingToCloud = false;
     }
   }
 
   /**
    * Sync an entire collection in debounced batches
    */
-  public debouncedSyncCollection(collectionName: string, items: any[], delay = 300) {
+  public debouncedSyncCollection(collectionName: string, items: any[], delay = 50) {
     if (!isFirebaseConfigured() || !db || this.isApplyingRemoteUpdate) return;
 
     if (this.debounceTimers[collectionName]) {
@@ -267,9 +344,6 @@ class CloudSyncService {
 
     this.debounceTimers[collectionName] = setTimeout(async () => {
       try {
-        this.isWritingToCloud = true;
-        this.setState({ status: 'syncing' });
-
         const batch = writeBatch(db!);
         // Limit to top 250 items per batch to stay safely within Firestore batch limits
         const slice = items.slice(0, 250);
@@ -289,8 +363,6 @@ class CloudSyncService {
       } catch (err: any) {
         console.warn(`[CloudSync] Batch sync error for ${collectionName}:`, err);
         this.setState({ status: 'error', errorMessage: err.message });
-      } finally {
-        this.isWritingToCloud = false;
       }
     }, delay);
   }

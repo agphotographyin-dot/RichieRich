@@ -355,6 +355,14 @@ storage.subscribe(() => {
 });
 
 export const warehouseStorage = {
+  invalidateCache(key?: string): void {
+    clearWhCache(key);
+  },
+
+  setCached<T>(key: string, val: T): void {
+    setWhCached(key, val);
+  },
+
   subscribe(callback: () => void): () => void {
     warehouseListeners.add(callback);
     return () => {
@@ -702,6 +710,7 @@ export const warehouseStorage = {
       poNumber,
     };
     this.savePurchaseOrders([newPO, ...orders]);
+    cloudSync.syncDocument('purchase_orders', newPO.id, newPO);
 
     storage.addNotification({
       title: `Purchase Order Created: ${poNumber}`,
@@ -1052,6 +1061,7 @@ export const warehouseStorage = {
     }
 
     this.saveStockTransfers([newTransfer, ...transfers]);
+    cloudSync.syncDocument('stock_transfers', newTransfer.id, newTransfer);
 
     storage.addNotification({
       title: `Stock Transfer Initiated: ${transferNumber}`,
@@ -1307,6 +1317,7 @@ export const warehouseStorage = {
       status: 'pending',
     };
     this.saveStoreIndents([newIndent, ...indents]);
+    cloudSync.syncDocument('store_indents', newIndent.id, newIndent);
 
     storage.addNotification({
       title: `New Store Indent Request: ${indentNumber}`,

@@ -276,6 +276,7 @@ export interface PushNotification {
   targetRole: 'all' | 'admin' | 'pos' | 'customer';
   read: boolean;
   linkTab?: string;
+  linkRole?: Role;
   metaData?: any;
 }
 
