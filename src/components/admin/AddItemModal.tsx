@@ -184,12 +184,12 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
     const generatedBarcode = barcode.trim() || `8901${Math.floor(10000 + Math.random() * 90000)}`;
 
     const initialStock = Number(stockQuantity) || 0;
-    // Distribute across stores
+    // Central Warehouse initial stock only. Store allocations start at 0 until transferred via Stock Transfer
     const storeAllocations = {
-      gota: Math.round(initialStock * 0.4),
-      bopal: Math.round(initialStock * 0.3),
-      sindhubhavan: Math.round(initialStock * 0.15),
-      sg_highway: Math.round(initialStock * 0.15),
+      gota: 0,
+      bopal: 0,
+      sindhubhavan: 0,
+      sg_highway: 0,
     };
 
     storage.addInventoryItem({

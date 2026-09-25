@@ -31,8 +31,8 @@ export const StoreAdminLogin: React.FC<StoreAdminLoginProps> = ({
 }) => {
   const stores = storage.getStores();
   const [selectedStoreId, setSelectedStoreId] = useState<string>(stores[0]?.id || 'bopal');
-  const [username, setUsername] = useState('admin_bopal');
-  const [password, setPassword] = useState('RRbopal');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -42,20 +42,6 @@ export const StoreAdminLogin: React.FC<StoreAdminLoginProps> = ({
   const handleStoreChange = (newStoreId: string) => {
     setSelectedStoreId(newStoreId);
     setError(null);
-    // Autofill default credential suggestions for smooth admin access
-    if (newStoreId === 'bopal') {
-      setUsername('admin_bopal');
-      setPassword('RRbopal');
-    } else if (newStoreId === 'gota') {
-      setUsername('admin_gota');
-      setPassword('RRgota');
-    } else if (newStoreId === 'sindhubhavan') {
-      setUsername('admin_sindhubhavan');
-      setPassword('RRsindhubhavan');
-    } else {
-      setUsername(`admin_${newStoreId}`);
-      setPassword(`RR${newStoreId}`);
-    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -201,40 +187,6 @@ export const StoreAdminLogin: React.FC<StoreAdminLoginProps> = ({
                 className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Demo Credentials helper */}
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-700 space-y-1">
-            <div className="flex items-center gap-1.5 font-bold text-slate-900">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Default Store Credentials:</span>
-            </div>
-            <div className="font-mono text-[10px] text-slate-600 grid grid-cols-1 sm:grid-cols-3 gap-1 pt-0.5">
-              <button
-                type="button"
-                onClick={() => handleStoreChange('bopal')}
-                className="text-left p-1 rounded-md bg-white border border-slate-200 hover:border-amber-400 cursor-pointer"
-              >
-                <div className="font-bold text-amber-700">Bopal</div>
-                <div>admin_bopal</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleStoreChange('gota')}
-                className="text-left p-1 rounded-md bg-white border border-slate-200 hover:border-amber-400 cursor-pointer"
-              >
-                <div className="font-bold text-amber-700">Gota</div>
-                <div>admin_gota</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleStoreChange('sindhubhavan')}
-                className="text-left p-1 rounded-md bg-white border border-slate-200 hover:border-amber-400 cursor-pointer"
-              >
-                <div className="font-bold text-amber-700">Sindhu Bh.</div>
-                <div>admin_sindhubhavan</div>
               </button>
             </div>
           </div>

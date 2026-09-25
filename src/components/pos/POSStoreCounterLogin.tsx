@@ -369,28 +369,9 @@ export const POSStoreCounterLogin: React.FC<POSStoreCounterLoginProps> = ({ onLo
                     {selectedStore.shortName} • Counter {selectedCounter.id}
                   </span>
                 </div>
-                <div className="flex justify-between items-center text-slate-500 mb-2">
+                <div className="flex justify-between items-center text-slate-500">
                   <span>Cashier in Charge:</span>
                   <span className="font-semibold text-emerald-700">{selectedCounter.cashierName}</span>
-                </div>
-                <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500 flex items-center gap-1">
-                    <KeyRound className="w-3 h-3 text-amber-600" />
-                    Default PIN: <strong className="font-mono text-slate-800 font-bold">{selectedCounter.defaultPin}</strong>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPin(selectedCounter.defaultPin);
-                      setErrorMsg(null);
-                      soundEffects.playScanBeep();
-                      verifyAndLogin(selectedCounter.defaultPin);
-                    }}
-                    className="px-2 py-0.5 rounded-md bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[10px] transition-colors cursor-pointer"
-                    title="Quick sign in using station default PIN"
-                  >
-                    Auto Fill PIN
-                  </button>
                 </div>
               </div>
 

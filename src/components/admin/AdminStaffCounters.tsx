@@ -845,7 +845,7 @@ export const AdminStaffCounters: React.FC<AdminStaffCountersProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. RRbopal"
+                    placeholder="Enter password"
                     value={newAdminPassword}
                     onChange={(e) => setNewAdminPassword(e.target.value)}
                     className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 font-mono focus:outline-hidden focus:bg-white focus:border-slate-400"

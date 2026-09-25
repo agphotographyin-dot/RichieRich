@@ -122,11 +122,11 @@ export const LandingPortal: React.FC<LandingPortalProps> = ({
 
               <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600">
                 <div className="flex items-center justify-between font-bold text-slate-800">
-                  <span>Warehouse Login:</span>
+                  <span>Warehouse Portal</span>
                   <span className="text-[10px] font-mono text-slate-500">/warehouse</span>
                 </div>
-                <div className="font-mono text-[10px] text-slate-700 mt-0.5">
-                  ID: <strong className="text-amber-600">ADMIN</strong> • Pass: <strong className="text-slate-900">RRwarehouse</strong>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  Central supply chain, POs, GRN & store transfers.
                 </div>
               </div>
             </div>
@@ -194,11 +194,11 @@ export const LandingPortal: React.FC<LandingPortalProps> = ({
 
               <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600">
                 <div className="flex items-center justify-between font-bold text-slate-800">
-                  <span>Admin Credentials:</span>
+                  <span>Executive Portal</span>
                   <span className="text-[10px] font-mono text-slate-500">/admin</span>
                 </div>
-                <div className="font-mono text-[10px] text-slate-700 mt-0.5">
-                  User: <strong className="text-amber-600">ADMIN</strong> • Pass: <strong className="text-slate-900">RRadmin</strong>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  Chain-wide security, staff PINs & revenue analytics.
                 </div>
               </div>
             </div>
@@ -266,11 +266,11 @@ export const LandingPortal: React.FC<LandingPortalProps> = ({
 
               <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600">
                 <div className="flex items-center justify-between font-bold text-slate-800">
-                  <span>Store Branch Login:</span>
+                  <span>Store Branch Portal</span>
                   <span className="text-[10px] font-mono text-slate-500">/store-admin</span>
                 </div>
-                <div className="font-mono text-[10px] text-slate-700 mt-0.5">
-                  ID: <strong className="text-amber-600">admin_bopal</strong> • Pass: <strong className="text-slate-900">RRbopal</strong>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  Store branch billing summaries & cash accounts.
                 </div>
               </div>
             </div>
@@ -338,11 +338,11 @@ export const LandingPortal: React.FC<LandingPortalProps> = ({
 
               <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600">
                 <div className="flex items-center justify-between font-bold text-slate-800">
-                  <span>POS Credentials:</span>
+                  <span>POS Terminal</span>
                   <span className="text-[10px] font-mono text-slate-500">/pos</span>
                 </div>
-                <div className="font-mono text-[10px] text-slate-700 mt-0.5">
-                  User: <strong className="text-amber-600">ADMIN</strong> • Pass: <strong className="text-slate-900">RRPOSadmin</strong>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  Point-of-sale checkout, cash drawer & receipts.
                 </div>
               </div>
             </div>

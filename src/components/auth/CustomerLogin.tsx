@@ -46,12 +46,6 @@ export const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLoginSuccess }) 
     }, 200);
   };
 
-  const handleQuickSelect = (phone: string, name: string) => {
-    setPhoneNumber(phone);
-    setCustomerName(name);
-    setError(null);
-  };
-
   return (
     <div className="min-h-[85vh] flex items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -160,32 +154,6 @@ export const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLoginSuccess }) 
               </>
             )}
           </button>
-
-          {/* Quick Demo Customer Profiles */}
-          <div className="pt-3 border-t border-slate-100 space-y-2">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">
-              Quick Test Accounts (Click to autofill)
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickSelect('9820199882', 'Rajesh Sharma')}
-                className="p-2 text-left rounded-lg bg-slate-50 hover:bg-amber-50 hover:border-amber-200 border border-slate-200 text-xs transition-colors cursor-pointer"
-              >
-                <div className="font-bold text-slate-800">Rajesh Sharma</div>
-                <div className="text-[10px] text-amber-700 font-mono">9820199882 (Platinum)</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickSelect('9876543210', 'Pooja Mehta')}
-                className="p-2 text-left rounded-lg bg-slate-50 hover:bg-amber-50 hover:border-amber-200 border border-slate-200 text-xs transition-colors cursor-pointer"
-              >
-                <div className="font-bold text-slate-800">Pooja Mehta</div>
-                <div className="text-[10px] text-amber-700 font-mono">9876543210 (Gold)</div>
-              </button>
-            </div>
-          </div>
         </form>
       </div>
     </div>

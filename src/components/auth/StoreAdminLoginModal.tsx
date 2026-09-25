@@ -154,24 +154,11 @@ export const StoreAdminLoginModal: React.FC<StoreAdminLoginModalProps> = ({
               <input
                 type="password"
                 required
-                placeholder="Enter password (e.g. RRbopal)"
+                placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-900 font-semibold focus:outline-hidden focus:bg-white focus:border-amber-500 shadow-2xs"
               />
-            </div>
-          </div>
-
-          {/* Quick Demo Help Badge */}
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-700 space-y-1">
-            <div className="flex items-center gap-1.5 font-bold text-slate-900">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Default Store Logins (Managed in Admin Dashboard):</span>
-            </div>
-            <div className="font-mono text-[10px] text-slate-600 space-y-0.5">
-              <div>• Bopal: <strong className="text-amber-600">admin_bopal</strong> / <strong className="text-slate-900">RRbopal</strong></div>
-              <div>• Gota: <strong className="text-amber-600">admin_gota</strong> / <strong className="text-slate-900">RRgota</strong></div>
-              <div>• Sindhu Bhavan: <strong className="text-amber-600">admin_sindhubhavan</strong> / <strong className="text-slate-900">RRsindhubhavan</strong></div>
             </div>
           </div>
 

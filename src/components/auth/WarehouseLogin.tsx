@@ -27,8 +27,8 @@ export const WarehouseLogin: React.FC<WarehouseLoginProps> = ({
   onLoginSuccess,
   onBackToLanding,
 }) => {
-  const [userId, setUserId] = useState('ADMIN');
-  const [password, setPassword] = useState('RRwarehouse');
+  const [userId, setUserId] = useState('');
+  const [password, setPassword] = useState('');
   const [subRole, setSubRole] = useState<WarehouseSubRole>(warehouseStorage.getActiveSubRole());
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -148,7 +148,7 @@ export const WarehouseLogin: React.FC<WarehouseLoginProps> = ({
                     required
                     value={userId}
                     onChange={(e) => setUserId(e.target.value)}
-                    placeholder="Enter ADMIN or WAREHOUSE"
+                    placeholder="Enter User ID"
                     className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                   />
                 </div>
@@ -178,38 +178,6 @@ export const WarehouseLogin: React.FC<WarehouseLoginProps> = ({
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
-              </div>
-            </div>
-
-            {/* Quick Demo Credentials Box */}
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-                <span>Default Warehouse Access Credentials:</span>
-                <span className="text-[10px] text-indigo-600 font-semibold uppercase">Click to fill</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleFillCredentials('ADMIN', 'RRwarehouse', 'admin')}
-                  className="p-2 rounded-lg bg-white border border-slate-200/80 hover:border-indigo-400 text-left text-xs transition-colors flex items-center justify-between group"
-                >
-                  <div>
-                    <div className="font-semibold text-slate-800">Master Admin</div>
-                    <div className="text-[11px] font-mono text-slate-500">ID: ADMIN • Pass: RRwarehouse</div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFillCredentials('WAREHOUSE', 'RRwarehouse', 'warehouse_manager')}
-                  className="p-2 rounded-lg bg-white border border-slate-200/80 hover:border-indigo-400 text-left text-xs transition-colors flex items-center justify-between group"
-                >
-                  <div>
-                    <div className="font-semibold text-slate-800">Warehouse Manager</div>
-                    <div className="text-[11px] font-mono text-slate-500">ID: WAREHOUSE • Pass: RRwarehouse</div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600" />
-                </button>
               </div>
             </div>
 

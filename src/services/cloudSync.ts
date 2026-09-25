@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   setDoc,
+  deleteDoc,
   getDocs,
   query,
   limit,
@@ -246,7 +247,55 @@ class CloudSyncService {
             }
           }
 
-          const remoteDocs = Array.from(map.values()) as T[];
+          let remoteDocs = Array.from(map.values()) as T[];
+
+          // Deduplicate inventory documents arriving from Firestore to stop ghost duplicates & SKU fluctuations
+          if (collectionName === COLLECTIONS.INVENTORY && remoteDocs.length > 0) {
+            const seenSkus = new Map<string, InventoryItem>();
+            const duplicateDocIdsToDelete: string[] = [];
+            const sanitizedList: InventoryItem[] = [];
+
+            for (const docItem of (remoteDocs as unknown as InventoryItem[])) {
+              if (!docItem) continue;
+              const rawSku = docItem.sku ? String(docItem.sku).trim().toUpperCase() : '';
+              if (!rawSku) {
+                sanitizedList.push(docItem);
+                continue;
+              }
+
+              // Check if SKU has an artificial suffix like -1, -2 caused by older disambiguation bugs
+              const baseSkuMatch = rawSku.match(/^([A-Z0-9_-]+)-(\d+)$/i);
+              const baseSku = baseSkuMatch ? baseSkuMatch[1].toUpperCase() : rawSku;
+
+              const existing = seenSkus.get(baseSku);
+              if (existing) {
+                // If this is a duplicate or artificial suffix variant, mark for deletion from Firestore
+                const dupId = String(docItem.id);
+                duplicateDocIdsToDelete.push(dupId);
+                map.delete(dupId);
+              } else {
+                seenSkus.set(baseSku, docItem);
+                sanitizedList.push(docItem);
+              }
+            }
+
+            remoteDocs = sanitizedList as unknown as T[];
+
+            // Asynchronously purge obsolete duplicate documents from Firestore in background
+            if (duplicateDocIdsToDelete.length > 0 && isFirebaseConfigured() && db) {
+              setTimeout(async () => {
+                try {
+                  const b = writeBatch(db!);
+                  for (const dupId of duplicateDocIdsToDelete.slice(0, 100)) {
+                    b.delete(doc(db!, COLLECTIONS.INVENTORY, dupId));
+                  }
+                  await b.commit();
+                } catch (e) {
+                  console.warn('[CloudSync] Error purging duplicate docs:', e);
+                }
+              }, 150);
+            }
+          }
 
           this.isApplyingRemoteUpdate = true;
           try {
@@ -329,6 +378,29 @@ class CloudSyncService {
       });
     } catch (err: any) {
       console.warn(`[CloudSync] Failed to sync document to ${collectionName}:`, err);
+    }
+  }
+
+  /**
+   * Delete a single document from Firestore in real-time
+   */
+  public async deleteDocument(collectionName: string, id: string): Promise<boolean> {
+    if (!isFirebaseConfigured() || !db || this.isApplyingRemoteUpdate) return false;
+
+    try {
+      const cleanId = String(id || '').trim();
+      if (!cleanId) return false;
+      const docRef = doc(db, collectionName, cleanId);
+      await deleteDoc(docRef);
+
+      const map = this.collectionDocsMap.get(collectionName);
+      if (map) {
+        map.delete(cleanId);
+      }
+      return true;
+    } catch (err: any) {
+      console.warn(`[CloudSync] Failed to delete document from ${collectionName}:`, err);
+      return false;
     }
   }
 

@@ -310,7 +310,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Crisp Maghai betel leaf stuffed with premium gulkand, sweetened coconut, tutti frutti, dry dates and fragrant royal spices.',
     costPrice: 20,
     sellingPrice: 50,
-    stockQuantity: 74,
+    stockQuantity: 0,
     lowStockThreshold: 15,
     unit: 'pieces',
     imageUrl: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&auto=format&fit=crop&q=80',
@@ -321,7 +321,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 60,
     profitPerUnit: 30,
     tags: ['Best Seller', 'Traditional', 'Royal'],
-    storeAllocations: { bopal: 18, gota: 30, sindhubhavan: 14, sg_highway: 12 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-102',
@@ -332,7 +332,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Spectacular flaming clove and dark chocolate blend placed directly into the mouth for an icy-hot sensory thrill.',
     costPrice: 45,
     sellingPrice: 110,
-    stockQuantity: 28,
+    stockQuantity: 0,
     lowStockThreshold: 12,
     unit: 'pieces',
     imageUrl: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=600&auto=format&fit=crop&q=80',
@@ -343,7 +343,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 59.09,
     profitPerUnit: 65,
     tags: ['Trending', 'Must Try', 'Live Experience'],
-    storeAllocations: { bopal: 6, gota: 12, sindhubhavan: 6, sg_highway: 4 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-103',
@@ -354,7 +354,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Chilled liquid-nitrogen infused betel leaf with crushed cooling syrups and mint crystals creating misty aromatic breaths.',
     costPrice: 35,
     sellingPrice: 90,
-    stockQuantity: 34,
+    stockQuantity: 0,
     lowStockThreshold: 10,
     unit: 'pieces',
     imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600&auto=format&fit=crop&q=80',
@@ -365,7 +365,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 61.11,
     profitPerUnit: 55,
     tags: ['Cooling', 'Summer Special'],
-    storeAllocations: { bopal: 8, gota: 14, sindhubhavan: 6, sg_highway: 6 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-104',
@@ -376,7 +376,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Exotic saffron strands, natural musk syrup, crushed almonds and 24K edible gold vark wrapping for royal palates.',
     costPrice: 80,
     sellingPrice: 220,
-    stockQuantity: 18,
+    stockQuantity: 0,
     lowStockThreshold: 8,
     unit: 'pieces',
     imageUrl: 'https://images.unsplash.com/photo-1541832676-9b763b0239ab?w=600&auto=format&fit=crop&q=80',
@@ -387,7 +387,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 63.64,
     profitPerUnit: 140,
     tags: ['Luxury', 'VIP Specialty'],
-    storeAllocations: { bopal: 3, gota: 8, sindhubhavan: 4, sg_highway: 3 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-105',
@@ -398,7 +398,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Classic rich bitter-sweet Calcutta betel leaf prepared with fragrant kathaa, chuna, cardamom, and gentle supari.',
     costPrice: 12,
     sellingPrice: 35,
-    stockQuantity: 90,
+    stockQuantity: 0,
     lowStockThreshold: 15,
     unit: 'pieces',
     imageUrl: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80',
@@ -409,7 +409,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 65.71,
     profitPerUnit: 23,
     tags: ['Classic', 'Digestive'],
-    storeAllocations: { bopal: 25, gota: 35, sindhubhavan: 15, sg_highway: 15 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
 
   // 2. 24x7 FRESH COFFEE & CAFE BREWS (Cafe Category)
@@ -422,7 +422,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Rich, aromatic double shot of 100% Arabica artisanal beans brewed fresh 24x7 with thick golden crema.',
     costPrice: 20,
     sellingPrice: 60,
-    stockQuantity: 65,
+    stockQuantity: 0,
     lowStockThreshold: 15,
     unit: 'cups',
     imageUrl: 'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?w=600&auto=format&fit=crop&q=80',
@@ -433,7 +433,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 66.67,
     profitPerUnit: 40,
     tags: ['24x7 Fresh', 'Espresso Bar', 'Hot Brew'],
-    storeAllocations: { bopal: 15, gota: 25, sindhubhavan: 15, sg_highway: 10 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-cof-2',
@@ -444,7 +444,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Signature thick cold coffee blended with roasted hazelnut syrup, full cream milk, and topped with chocolate curls.',
     costPrice: 45,
     sellingPrice: 120,
-    stockQuantity: 48,
+    stockQuantity: 0,
     lowStockThreshold: 12,
     unit: 'bottles',
     imageUrl: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=600&auto=format&fit=crop&q=80',
@@ -455,7 +455,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 62.5,
     profitPerUnit: 75,
     tags: ['Best Seller', 'Chilled', '24x7 Night Shift Hit'],
-    storeAllocations: { bopal: 10, gota: 20, sindhubhavan: 10, sg_highway: 8 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-cof-3',
@@ -466,7 +466,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Authentic frothy brass-dabara filter coffee made with chicory blend and bubbling boiled hot milk.',
     costPrice: 15,
     sellingPrice: 50,
-    stockQuantity: 80,
+    stockQuantity: 0,
     lowStockThreshold: 20,
     unit: 'cups',
     imageUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80',
@@ -477,7 +477,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 70,
     profitPerUnit: 35,
     tags: ['Authentic', 'Frothy', 'Morning/Night Special'],
-    storeAllocations: { bopal: 20, gota: 30, sindhubhavan: 15, sg_highway: 15 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-cof-4',
@@ -488,7 +488,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Slow-simmered Assam tea leaves with crushed cardamom, fresh ginger, cloves and infused with Kashmiri saffron strands in terracotta kulhad.',
     costPrice: 12,
     sellingPrice: 40,
-    stockQuantity: 110,
+    stockQuantity: 0,
     lowStockThreshold: 25,
     unit: 'kulhads',
     imageUrl: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80',
@@ -499,7 +499,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 70,
     profitPerUnit: 28,
     tags: ['Kulhad Chai', 'All Night Special', 'Hot'],
-    storeAllocations: { bopal: 25, gota: 45, sindhubhavan: 20, sg_highway: 20 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-301',
@@ -510,7 +510,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Rich full cream milk slow-boiled with real saffron strands, crushed almonds, pistachios and cardamom syrup.',
     costPrice: 55,
     sellingPrice: 130,
-    stockQuantity: 36,
+    stockQuantity: 0,
     lowStockThreshold: 10,
     unit: 'bottles',
     imageUrl: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=600&auto=format&fit=crop&q=80',
@@ -521,7 +521,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 57.69,
     profitPerUnit: 75,
     tags: ['Chilled', 'Rich Dryfruit'],
-    storeAllocations: { bopal: 8, gota: 16, sindhubhavan: 6, sg_highway: 6 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-302',
@@ -532,7 +532,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Layered delicacy with basil sabja seeds, silky falooda vermicelli, organic rose gulkand, rabdi and vanilla ice cream scoop.',
     costPrice: 60,
     sellingPrice: 150,
-    stockQuantity: 28,
+    stockQuantity: 0,
     lowStockThreshold: 8,
     unit: 'glasses',
     imageUrl: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=600&auto=format&fit=crop&q=80',
@@ -543,7 +543,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 60,
     profitPerUnit: 90,
     tags: ['Signature Drink', 'Dessert'],
-    storeAllocations: { bopal: 6, gota: 12, sindhubhavan: 5, sg_highway: 5 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
 
   // 3. 24x7 ESSENTIALS, MUKHWAS & REFRESHMENTS (Essentials Category)
@@ -556,7 +556,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Pocket-sized instant breath refresher spray with cooling spearmint and long-lasting freshness for round-the-clock confidence.',
     costPrice: 40,
     sellingPrice: 90,
-    stockQuantity: 38,
+    stockQuantity: 0,
     lowStockThreshold: 10,
     unit: 'bottles',
     imageUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80',
@@ -567,7 +567,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 55.56,
     profitPerUnit: 50,
     tags: ['24x7 Essential', 'Pocket Size'],
-    storeAllocations: { bopal: 8, gota: 16, sindhubhavan: 8, sg_highway: 6 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-ess-2',
@@ -578,7 +578,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: '100% natural alkaline mineral water sourced directly from Himalayan springs, served crisp and ice-cold 24x7.',
     costPrice: 15,
     sellingPrice: 30,
-    stockQuantity: 120,
+    stockQuantity: 0,
     lowStockThreshold: 30,
     unit: 'bottles',
     imageUrl: 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=600&auto=format&fit=crop&q=80',
@@ -589,7 +589,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 50,
     profitPerUnit: 15,
     tags: ['24x7 Hydration', 'Chilled', 'Tax Exempt'],
-    storeAllocations: { bopal: 30, gota: 50, sindhubhavan: 20, sg_highway: 20 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-ess-3',
@@ -600,7 +600,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Vitalizes body and mind for late-night drives and midnight study shifts.',
     costPrice: 90,
     sellingPrice: 125,
-    stockQuantity: 52,
+    stockQuantity: 0,
     lowStockThreshold: 15,
     unit: 'cans',
     imageUrl: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=600&auto=format&fit=crop&q=80',
@@ -611,7 +611,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 28,
     profitPerUnit: 35,
     tags: ['24x7 Night Owl', 'Energy Booster'],
-    storeAllocations: { bopal: 12, gota: 22, sindhubhavan: 10, sg_highway: 8 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-ess-4',
@@ -622,7 +622,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Heavy metallic windproof jet lighter designed for outdoor use and high altitude performance.',
     costPrice: 65,
     sellingPrice: 150,
-    stockQuantity: 26,
+    stockQuantity: 0,
     lowStockThreshold: 6,
     unit: 'pieces',
     imageUrl: 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=600&auto=format&fit=crop&q=80',
@@ -633,7 +633,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 56.67,
     profitPerUnit: 85,
     tags: ['Accessories', 'Windproof'],
-    storeAllocations: { bopal: 5, gota: 11, sindhubhavan: 5, sg_highway: 5 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-201',
@@ -644,7 +644,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Artisanal blend of roasted fennel, candied melon seeds, silver coated cardamom pods, dried rose petals and amber glaze.',
     costPrice: 90,
     sellingPrice: 180,
-    stockQuantity: 44,
+    stockQuantity: 0,
     lowStockThreshold: 8,
     unit: 'jars',
     imageUrl: 'https://images.unsplash.com/photo-1599785209707-a456fc1337bb?w=600&auto=format&fit=crop&q=80',
@@ -655,7 +655,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 50,
     profitPerUnit: 90,
     tags: ['Packaging Jar', 'Digestive'],
-    storeAllocations: { bopal: 10, gota: 18, sindhubhavan: 8, sg_highway: 8 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-202',
@@ -666,7 +666,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Finely sliced premium betel nuts treated in saffron water, rose essence and light menthol seasoning.',
     costPrice: 65,
     sellingPrice: 140,
-    stockQuantity: 32,
+    stockQuantity: 0,
     lowStockThreshold: 10,
     unit: 'pouches',
     imageUrl: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=600&auto=format&fit=crop&q=80',
@@ -677,7 +677,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 53.57,
     profitPerUnit: 75,
     tags: ['Saffron', 'Premium Supari'],
-    storeAllocations: { bopal: 7, gota: 14, sindhubhavan: 6, sg_highway: 5 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-203',
@@ -688,7 +688,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Crisp green Lucknowi fennel seed coated with light sugar syrup and cooling peppermint.',
     costPrice: 40,
     sellingPrice: 95,
-    stockQuantity: 55,
+    stockQuantity: 0,
     lowStockThreshold: 12,
     unit: 'pouches',
     imageUrl: 'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=600&auto=format&fit=crop&q=80',
@@ -699,7 +699,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 57.89,
     profitPerUnit: 55,
     tags: ['Family Pack', 'Sweet'],
-    storeAllocations: { bopal: 12, gota: 23, sindhubhavan: 10, sg_highway: 10 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-401',
@@ -710,7 +710,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: '55% Belgian dark chocolate truffles oozing with creamy gulkand paan cream and sprinkled with silver dust.',
     costPrice: 110,
     sellingPrice: 260,
-    stockQuantity: 22,
+    stockQuantity: 0,
     lowStockThreshold: 6,
     unit: 'boxes',
     imageUrl: 'https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=600&auto=format&fit=crop&q=80',
@@ -721,7 +721,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 57.69,
     profitPerUnit: 150,
     tags: ['Gift Box', 'Luxury Confection'],
-    storeAllocations: { bopal: 5, gota: 10, sindhubhavan: 4, sg_highway: 3 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
   {
     id: 'item-501',
@@ -732,7 +732,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     description: 'Natural fruit molasses and sugar cane base infused with cooling icy mint and fresh paan essence.',
     costPrice: 85,
     sellingPrice: 195,
-    stockQuantity: 25,
+    stockQuantity: 0,
     lowStockThreshold: 5,
     unit: 'packs',
     imageUrl: 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=600&auto=format&fit=crop&q=80',
@@ -743,7 +743,7 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     marginPercentage: 56.41,
     profitPerUnit: 110,
     tags: ['Herbal', '0% Tobacco'],
-    storeAllocations: { bopal: 5, gota: 11, sindhubhavan: 5, sg_highway: 4 },
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
 ];
 
@@ -1292,6 +1292,7 @@ export class StorageService {
     // Check and seed/merge inventory
     const existingInventory = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
     const cleanedFlag = safeStorage.getItem('rr_wh_cleaned_dummy_v1');
+    const hygieneFlag = safeStorage.getItem('rr_wh_stock_hygiene_v2');
 
     if (!existingInventory) {
       const zeroStockInit = INITIAL_INVENTORY.map((item) => ({
@@ -1301,6 +1302,7 @@ export class StorageService {
         storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
       }));
       safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(zeroStockInit));
+      safeStorage.setItem('rr_wh_stock_hygiene_v2', 'true');
     } else {
       try {
         const parsed: InventoryItem[] = JSON.parse(existingInventory);
@@ -1322,9 +1324,21 @@ export class StorageService {
         const uniqueParsed: InventoryItem[] = [];
 
         parsed.forEach((item, idx) => {
-          if (!item) return;
+          if (!item || typeof item !== 'object') return;
           let id = item.id ? String(item.id).trim() : '';
-          const sku = item.sku ? String(item.sku).trim().toLowerCase() : '';
+          const rawSku = item.sku ? String(item.sku).trim().toUpperCase() : '';
+          if (!rawSku) return;
+
+          // If SKU has duplicate suffix like -1, -2, check against base SKU
+          const baseMatch = rawSku.match(/^([A-Z0-9_-]+)-(\d+)$/i);
+          const baseSku = baseMatch ? baseMatch[1].toUpperCase() : rawSku;
+          const skuKey = rawSku.toLowerCase();
+          const baseSkuKey = baseSku.toLowerCase();
+
+          if (seenSkus.has(skuKey) || (baseMatch && seenSkus.has(baseSkuKey))) {
+            hasChanges = true;
+            return; // Drop duplicate item instead of renaming with suffixes!
+          }
 
           if (!id || seenIds.has(id)) {
             id = `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${idx}`;
@@ -1332,18 +1346,40 @@ export class StorageService {
             hasChanges = true;
           }
           seenIds.add(id);
-
-          if (sku) {
-            if (seenSkus.has(sku)) {
-              // Disambiguate duplicate SKU
-              item.sku = `${item.sku}-${idx + 1}`;
-              hasChanges = true;
-            }
-            seenSkus.add(item.sku.trim().toLowerCase());
-          }
+          seenSkus.add(skuKey);
+          if (baseMatch) seenSkus.add(baseSkuKey);
 
           uniqueParsed.push(item);
         });
+
+        // Reset any phantom seed store allocations if still present from early mock data
+        if (!hygieneFlag) {
+          uniqueParsed.forEach((item) => {
+            const alloc = item.storeAllocations || {};
+            if (
+              (alloc.bopal === 18 && alloc.gota === 30 && alloc.sindhubhavan === 14 && alloc.sg_highway === 12) ||
+              (alloc.bopal === 6 && alloc.gota === 12 && alloc.sindhubhavan === 6 && alloc.sg_highway === 4) ||
+              (alloc.bopal === 8 && alloc.gota === 14 && alloc.sindhubhavan === 6 && alloc.sg_highway === 6) ||
+              (alloc.bopal === 25 && alloc.gota === 35 && alloc.sindhubhavan === 15 && alloc.sg_highway === 15) ||
+              (alloc.bopal === 30 && alloc.gota === 50 && alloc.sindhubhavan === 20 && alloc.sg_highway === 20) ||
+              (alloc.bopal === 15 && alloc.gota === 25 && alloc.sindhubhavan === 15 && alloc.sg_highway === 10) ||
+              (alloc.bopal === 10 && alloc.gota === 20 && alloc.sindhubhavan === 10 && alloc.sg_highway === 8) ||
+              (alloc.bopal === 20 && alloc.gota === 30 && alloc.sindhubhavan === 15 && alloc.sg_highway === 15) ||
+              (alloc.bopal === 25 && alloc.gota === 45 && alloc.sindhubhavan === 20 && alloc.sg_highway === 20) ||
+              (alloc.bopal === 12 && alloc.gota === 22 && alloc.sindhubhavan === 10 && alloc.sg_highway === 8) ||
+              (alloc.bopal === 5 && alloc.gota === 11 && alloc.sindhubhavan === 5 && alloc.sg_highway === 5) ||
+              (alloc.bopal === 10 && alloc.gota === 18 && alloc.sindhubhavan === 8 && alloc.sg_highway === 8) ||
+              (alloc.bopal === 7 && alloc.gota === 14 && alloc.sindhubhavan === 6 && alloc.sg_highway === 5) ||
+              (alloc.bopal === 12 && alloc.gota === 23 && alloc.sindhubhavan === 10 && alloc.sg_highway === 10) ||
+              (alloc.bopal === 5 && alloc.gota === 10 && alloc.sindhubhavan === 4 && alloc.sg_highway === 3) ||
+              (alloc.bopal === 5 && alloc.gota === 11 && alloc.sindhubhavan === 5 && alloc.sg_highway === 4)
+            ) {
+              item.storeAllocations = { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 };
+              hasChanges = true;
+            }
+          });
+          safeStorage.setItem('rr_wh_stock_hygiene_v2', 'true');
+        }
 
         // Upgrade existing inventory items with 3 canonical categories (Paan, Cafe, or Essentials), GST tax rates, vendors, brand, and price type
         uniqueParsed.forEach((item) => {
@@ -1740,18 +1776,20 @@ export class StorageService {
             item.sku = itemSku;
           }
 
-          // If duplicate ID or empty ID
+          // If duplicate ID, drop duplicate item
           if (!itemId || seenIds.has(itemId)) {
-            itemId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${i}`;
-            item.id = itemId;
             hadDuplicatesOrUnnormalized = true;
+            continue;
           }
 
-          // If duplicate SKU, disambiguate
+          // If duplicate SKU (case-insensitive) or artificial suffix variant from old bug (e.g., -1, -2):
           const skuKey = itemSku.toLowerCase();
-          if (seenSkus.has(skuKey)) {
-            item.sku = `${itemSku}-${i + 1}`;
+          const baseMatch = itemSku.match(/^([A-Z0-9_-]+)-(\d+)$/i);
+          const baseSkuKey = baseMatch ? baseMatch[1].toLowerCase() : skuKey;
+
+          if (seenSkus.has(skuKey) || (baseMatch && seenSkus.has(baseSkuKey))) {
             hadDuplicatesOrUnnormalized = true;
+            continue; // Drop duplicate instead of appending suffixes!
           }
 
           // Normalize Category: Any category other than Paan or Cafe is automatically kept in Essentials
@@ -1762,12 +1800,13 @@ export class StorageService {
           }
 
           seenIds.add(itemId);
-          if (item.sku) seenSkus.add(item.sku.trim().toLowerCase());
+          seenSkus.add(skuKey);
+          if (baseMatch) seenSkus.add(baseSkuKey);
 
           sanitized.push(item);
         }
 
-        // Guarantee that all catalog items and SKUs from INITIAL_INVENTORY are always present
+        // Guarantee that all catalog items and SKUs from INITIAL_INVENTORY are always present with 0 initial stock
         INITIAL_INVENTORY.forEach((initItem) => {
           const initSku = initItem.sku ? initItem.sku.trim().toLowerCase() : '';
           const alreadyPresent = sanitized.some(
@@ -1778,8 +1817,8 @@ export class StorageService {
               ...initItem,
               sku: (initItem.sku || `SKU-${initItem.id}`).toUpperCase(),
               category: normalizeProductCategory(initItem.category),
-              stockQuantity: initItem.stockQuantity ?? 50,
-              storeAllocations: initItem.storeAllocations || { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
+              stockQuantity: 0,
+              storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
             });
             hadDuplicatesOrUnnormalized = true;
           }
@@ -1807,17 +1846,19 @@ export class StorageService {
     const sanitized: InventoryItem[] = [];
 
     items.forEach((item, idx) => {
+      if (!item) return;
       let itemId = item.id ? String(item.id).trim() : '';
-      if (!itemId || seenIds.has(itemId)) {
+      if (!itemId) {
         itemId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${idx}`;
       }
-      seenIds.add(itemId);
+      if (seenIds.has(itemId)) return;
 
-      let itemSku = item.sku ? String(item.sku).trim() : `SKU-${idx + 1}`;
-      if (seenSkus.has(itemSku.toLowerCase())) {
-        itemSku = `${itemSku}-${idx + 1}`;
-      }
-      seenSkus.add(itemSku.toLowerCase());
+      let itemSku = item.sku ? String(item.sku).trim().toUpperCase() : `SKU-${idx + 1}`;
+      const skuKey = itemSku.toLowerCase();
+      if (seenSkus.has(skuKey)) return; // Drop duplicate SKU
+
+      seenIds.add(itemId);
+      seenSkus.add(skuKey);
 
       const category = normalizeProductCategory(item.category);
       const profitPerUnit = item.sellingPrice - item.costPrice;
@@ -1885,6 +1926,9 @@ export class StorageService {
     const filtered = items.filter((i) => i.id !== id);
     if (filtered.length !== items.length) {
       this.saveInventory(filtered);
+      if (id) {
+        cloudSync.deleteDocument('inventory', id);
+      }
       return true;
     }
     return false;
@@ -1974,11 +2018,12 @@ export class StorageService {
         const margin = row.sellingPrice > 0 ? Math.round((profit / row.sellingPrice) * 1000) / 10 : 0;
         const initialStock = row.stockQuantity || 0;
 
+        // Central Warehouse receives imported stock. Retail stores start at 0 until transferred via Stock Transfer.
         const storeAllocations = {
-          gota: Math.round(initialStock * 0.4),
-          bopal: Math.round(initialStock * 0.3),
-          sindhubhavan: Math.round(initialStock * 0.15),
-          sg_highway: Math.round(initialStock * 0.15),
+          gota: 0,
+          bopal: 0,
+          sindhubhavan: 0,
+          sg_highway: 0,
         };
 
         const newItemId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${rowIdx}`;
@@ -2054,7 +2099,8 @@ export class StorageService {
 
   adjustStock(id: string, delta: number, reason: string = 'Manual Adjustment'): boolean {
     const items = this.getInventory();
-    const item = items.find((i) => i.id === id);
+    const cleanId = String(id || '').trim().toLowerCase();
+    const item = items.find((i) => i.id === id || (i.sku && i.sku.trim().toLowerCase() === cleanId));
     if (!item) return false;
 
     item.stockQuantity = Math.max(0, item.stockQuantity + delta);
@@ -2074,7 +2120,8 @@ export class StorageService {
     let anyLowStockWarning = false;
 
     adjustments.forEach(({ id, delta }) => {
-      const item = items.find((i) => i.id === id);
+      const cleanId = String(id || '').trim().toLowerCase();
+      const item = items.find((i) => i.id === id || (i.sku && i.sku.trim().toLowerCase() === cleanId));
       if (item) {
         item.stockQuantity = Math.max(0, item.stockQuantity + delta);
         modified = true;
@@ -2307,9 +2354,8 @@ export class StorageService {
         }
       }
     });
-    // Deduct stock in memory and persist
-    this.setCached(STORAGE_KEYS.INVENTORY, inventory);
-    safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory));
+    // Deduct stock in memory and persist via saveInventory so subscribers and Firestore are updated
+    this.saveInventory(inventory);
 
     if (triggeredStoreLowStock) {
       setTimeout(() => soundEffects.playWarningChime(), 60);
@@ -2362,7 +2408,7 @@ export class StorageService {
     this.notify();
     cloudSync.syncDocument('orders', newOrder.id, newOrder);
     newOrder.items.forEach((item) => {
-      const invItem = inventory.find((i) => i.id === item.itemId);
+      const invItem = inventory.find((i) => i.id === item.itemId || (item.sku && i.sku === item.sku));
       if (invItem) {
         cloudSync.syncDocument('inventory', invItem.id, invItem);
       }

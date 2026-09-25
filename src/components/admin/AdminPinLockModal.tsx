@@ -62,12 +62,6 @@ export const AdminPinLockModal: React.FC<AdminPinLockModalProps> = ({
     setErrorMsg(null);
   };
 
-  const handleFillDemo = () => {
-    if (isLockedOut) return;
-    setPin('8899');
-    setErrorMsg(null);
-  };
-
   const handleVerify = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (isLockedOut) return;
@@ -133,19 +127,6 @@ export const AdminPinLockModal: React.FC<AdminPinLockModalProps> = ({
               : 'Enter Owner / Master PIN to manage chain stores, inventory & security.'}
           </p>
         </div>
-
-        {/* Demo button */}
-        {!isLockedOut && (
-          <div className="flex justify-center mb-4">
-            <button
-              type="button"
-              onClick={handleFillDemo}
-              className="text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-3 py-1 rounded-full border border-amber-200 transition-colors cursor-pointer"
-            >
-              Use Master Demo PIN: 8899
-            </button>
-          </div>
-        )}
 
         {/* PIN Display */}
         <div className="mb-4">
