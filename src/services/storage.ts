@@ -1899,6 +1899,7 @@ export class StorageService {
     };
     items.unshift(newItem);
     this.saveInventory(items);
+    cloudSync.syncDocument('inventory', newItem.id, newItem);
     return newItem;
   }
 
@@ -2300,6 +2301,7 @@ export class StorageService {
       };
       customers.push(newCust);
       this.saveCustomers(customers);
+      cloudSync.syncDocument('customers', newCust.id, newCust);
 
       this.addNotification({
         title: `🎉 New Customer Joined Loyalty Club!`,
@@ -2463,6 +2465,7 @@ export class StorageService {
 
     order.status = newStatus;
     this.saveOrders(orders);
+    cloudSync.syncDocument('orders', order.id, order);
 
     this.addNotification({
       title: `Order #${order.orderNumber} Status: ${newStatus.toUpperCase()}`,
@@ -2974,6 +2977,7 @@ export class StorageService {
       this.setCached(STORAGE_KEYS.STORE_EXPENSES, expenses);
       safeStorage.setItem(STORAGE_KEYS.STORE_EXPENSES, JSON.stringify(expenses));
       this.notifySubscribers();
+      cloudSync.debouncedSyncCollection('store_expenses', expenses);
     } catch (e) {
       console.error('Failed to save store expenses:', e);
     }
@@ -2996,6 +3000,7 @@ export class StorageService {
     };
     expenses.unshift(newExpense);
     this.saveStoreExpenses(expenses);
+    cloudSync.syncDocument('store_expenses', newExpense.id, newExpense);
 
     this.addNotification({
       title: `Store Expense Added: ${CURRENCY}${newExpense.amount}`,
@@ -3014,6 +3019,7 @@ export class StorageService {
     if (idx === -1) return false;
     expenses[idx] = { ...expenses[idx], ...updates };
     this.saveStoreExpenses(expenses);
+    cloudSync.syncDocument('store_expenses', expenses[idx].id, expenses[idx]);
     return true;
   }
 
@@ -3022,6 +3028,7 @@ export class StorageService {
     const filtered = expenses.filter((e) => e.id !== id);
     if (filtered.length === expenses.length) return false;
     this.saveStoreExpenses(filtered);
+    cloudSync.deleteDocument('store_expenses', id);
     return true;
   }
 

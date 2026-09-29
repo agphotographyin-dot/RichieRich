@@ -23,7 +23,13 @@ export const CloudSyncBadge: React.FC = () => {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <span className="hidden sm:inline">VPS DB Live</span>
+            <span className="hidden sm:inline">
+              {syncState.engine === 'firebase'
+                ? 'Cloud Real-Time'
+                : syncState.engine === 'hybrid'
+                ? 'Dual Cloud Live'
+                : 'VPS DB Live'}
+            </span>
           </div>
         );
       case 'syncing':

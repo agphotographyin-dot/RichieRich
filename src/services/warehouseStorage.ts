@@ -584,6 +584,7 @@ export const warehouseStorage = {
       currentOutstanding: 0,
     };
     this.saveSuppliers([newSup, ...suppliers]);
+    cloudSync.syncDocument('suppliers', newSup.id, newSup);
     return newSup;
   },
 
@@ -788,6 +789,7 @@ export const warehouseStorage = {
       warehouseName: 'Central Warehouse',
     };
     this.savePurchaseBills([newBill, ...bills]);
+    cloudSync.syncDocument('inward_bills', newBill.id, newBill);
 
     // 1. Update Supplier Outstanding & Purchases
     const suppliers = this.getSuppliers();
