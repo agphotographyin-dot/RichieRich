@@ -229,7 +229,61 @@ class CloudSyncService {
   }
 
   /**
-   * Triggers an on-demand VPS PocketBase backup in the backend
+   * Tests VPS PocketBase connectivity from backend server
+   */
+  public async testVpsConnection(candidateUrl?: string): Promise<{
+    reachable: boolean;
+    code?: number;
+    latencyMs?: number;
+    error?: string;
+    url: string;
+  }> {
+    try {
+      const q = candidateUrl ? `?url=${encodeURIComponent(candidateUrl)}` : '';
+      const res = await fetch(`/api/backup/test${q}`);
+      if (res.ok) {
+        return await res.json();
+      }
+      return {
+        reachable: false,
+        error: `Server responded with status ${res.status}`,
+        url: candidateUrl || '',
+      };
+    } catch (err: any) {
+      return {
+        reachable: false,
+        error: err?.message || 'Failed to contact backup backend API',
+        url: candidateUrl || '',
+      };
+    }
+  }
+
+  /**
+   * Updates target VPS URL and interval
+   */
+  public async updateVpsConfig(targetUrl: string, intervalMinutes?: number): Promise<boolean> {
+    try {
+      const res = await fetch('/api/backup/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUrl, intervalMinutes }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status) {
+          this.setState({ vpsBackup: data.status });
+        }
+        return true;
+      }
+    } catch (err) {
+      console.warn('Error updating VPS config:', err);
+    }
+    return false;
+  }
+
+  /**
+   * Triggers an on-demand VPS PocketBase backup in the backend.
+   * Auto-falls back to packaging local storage if Firestore daily read quota is exhausted!
    */
   public async triggerVpsBackup(): Promise<{ success: boolean; status?: VpsBackupInfo; error?: string }> {
     try {
@@ -239,20 +293,83 @@ class CloudSyncService {
           : undefined,
       });
 
+      // 1. Try server-side backup cycle from Firestore
       const res = await fetch('/api/backup/trigger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
+
+      let serverSuccess = false;
+      let serverStatus: VpsBackupInfo | undefined;
+      let serverError: string | undefined;
+
       if (res.ok) {
         const data = await res.json();
-        if (data.status) {
-          this.setState({ vpsBackup: data.status });
-        }
-        return { success: true, status: data.status };
+        serverSuccess = data.success;
+        serverStatus = data.status;
+        serverError = data.error;
       } else {
         const errData = await res.json().catch(() => ({ error: 'Backup trigger failed' }));
-        return { success: false, error: errData.error };
+        serverError = errData.error;
       }
+
+      // If server succeeded and backed up records, return success!
+      if (serverSuccess && serverStatus && (serverStatus.totalItemsBackedUp ?? 0) > 0) {
+        this.setState({ vpsBackup: serverStatus });
+        return { success: true, status: serverStatus };
+      }
+
+      // 2. If server Firestore returned 0 items (e.g. quota limit), package local storage snapshot
+      console.log('[CloudSync] Server returned 0 items from Firestore. Packaging rich client storage snapshot to VPS...');
+      const getLocalOrEmpty = (key: string) => {
+        try {
+          const raw = safeStorage.getItem(key);
+          return raw ? JSON.parse(raw) : [];
+        } catch {
+          return [];
+        }
+      };
+
+      const payload = {
+        inventory: getLocalOrEmpty(STORAGE_KEYS.INVENTORY),
+        orders: getLocalOrEmpty(STORAGE_KEYS.ORDERS),
+        stores: getLocalOrEmpty(STORAGE_KEYS.STORES),
+        customers: getLocalOrEmpty(STORAGE_KEYS.CUSTOMERS),
+        store_expenses: getLocalOrEmpty(STORAGE_KEYS.EXPENSES),
+        purchase_orders: getLocalOrEmpty(STORAGE_KEYS.PURCHASE_ORDERS),
+        inward_bills: getLocalOrEmpty(STORAGE_KEYS.INWARD_BILLS),
+        stock_transfers: getLocalOrEmpty(STORAGE_KEYS.TRANSFERS),
+        store_indents: getLocalOrEmpty(STORAGE_KEYS.INDENTS),
+        suppliers: getLocalOrEmpty(STORAGE_KEYS.SUPPLIERS),
+      };
+
+      const pushRes = await fetch('/api/backup/push-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload }),
+      });
+
+      if (pushRes.ok) {
+        const pushData = await pushRes.json();
+        if (pushData.success) {
+          const updatedStatus: VpsBackupInfo = {
+            status: 'success',
+            lastRunAt: new Date().toISOString(),
+            lastDurationMs: pushData.durationMs || 1000,
+            totalItemsBackedUp: pushData.totalSynced,
+            collections: pushData.collections,
+            nextRunAt: this.state.vpsBackup?.nextRunAt || null,
+            intervalMinutes: this.state.vpsBackup?.intervalMinutes || 5,
+            targetUrl: this.state.vpsBackup?.targetUrl || 'http://187.126.115.40:8090',
+          };
+          this.setState({ vpsBackup: updatedStatus });
+          return { success: true, status: updatedStatus };
+        } else {
+          return { success: false, error: pushData.error || 'VPS Push failed' };
+        }
+      }
+
+      return { success: false, error: serverError || 'Backup failed' };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Network error' };
     }

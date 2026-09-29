@@ -90,6 +90,105 @@ export class VPSBackupService {
     return { ...this.status };
   }
 
+  public setTargetUrl(newUrl: string) {
+    if (!newUrl || !newUrl.trim()) return;
+    const cleanUrl = newUrl.trim().replace(/\/+$/, '');
+    this.targetUrl = cleanUrl;
+    this.status.targetUrl = cleanUrl;
+    this.pb = new PocketBase(cleanUrl);
+    this.pb.autoCancellation(false);
+    console.log(`[VPSBackup] Target VPS URL updated to: ${cleanUrl}`);
+  }
+
+  public async testConnection(candidateUrl?: string): Promise<{
+    reachable: boolean;
+    code?: number;
+    latencyMs?: number;
+    error?: string;
+    url: string;
+  }> {
+    const urlToTest = (candidateUrl || this.targetUrl).trim().replace(/\/+$/, '');
+    const startTime = Date.now();
+    try {
+      const testPb = new PocketBase(urlToTest);
+      testPb.autoCancellation(false);
+      const health = await testPb.health.check().catch((e: any) => {
+        throw new Error(e?.message || 'Health check rejected');
+      });
+      const latencyMs = Date.now() - startTime;
+      if (health && health.code === 200) {
+        return { reachable: true, code: 200, latencyMs, url: urlToTest };
+      }
+      return { reachable: false, code: health?.code, latencyMs, error: 'Unexpected response code', url: urlToTest };
+    } catch (err: any) {
+      const latencyMs = Date.now() - startTime;
+      return {
+        reachable: false,
+        latencyMs,
+        error: err?.message || 'Connection refused or timed out',
+        url: urlToTest,
+      };
+    }
+  }
+
+  /**
+   * Backs up a complete payload sent from client (ideal when Firestore daily quota is rate-limited)
+   */
+  public async pushAllLocalPayload(payload: Record<string, any[]>): Promise<{
+    success: boolean;
+    totalSynced: number;
+    collections: Record<string, number>;
+    durationMs: number;
+    error?: string;
+  }> {
+    const startTime = Date.now();
+    let totalSynced = 0;
+    const collectionsSummary: Record<string, number> = {};
+
+    try {
+      // 1. Verify VPS is online
+      const test = await this.testConnection();
+      if (!test.reachable) {
+        throw new Error(`VPS PocketBase is unreachable at ${this.targetUrl} (${test.error})`);
+      }
+
+      for (const [colName, items] of Object.entries(payload)) {
+        if (Array.isArray(items) && items.length > 0) {
+          const res = await this.pushBatch(colName, items);
+          collectionsSummary[colName] = res.synced;
+          totalSynced += res.synced;
+        } else {
+          collectionsSummary[colName] = 0;
+        }
+      }
+
+      const durationMs = Date.now() - startTime;
+      await this.saveBackupManifest(totalSynced, collectionsSummary);
+
+      this.status.status = 'success';
+      this.status.lastRunAt = new Date().toISOString();
+      this.status.lastDurationMs = durationMs;
+      this.status.totalItemsBackedUp = totalSynced;
+      this.status.collections = collectionsSummary;
+
+      return {
+        success: true,
+        totalSynced,
+        collections: collectionsSummary,
+        durationMs,
+      };
+    } catch (err: any) {
+      console.error('[VPSBackup] pushAllLocalPayload error:', err.message);
+      return {
+        success: false,
+        totalSynced,
+        collections: collectionsSummary,
+        durationMs: Date.now() - startTime,
+        error: err.message,
+      };
+    }
+  }
+
   public setIntervalMinutes(minutes: number) {
     const validMinutes = Math.max(1, Math.min(1440, minutes));
     this.intervalMinutes = validMinutes;

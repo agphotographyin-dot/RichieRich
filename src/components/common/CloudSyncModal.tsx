@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Server,
   CheckCircle2,
   RefreshCw,
   AlertCircle,
-  Database,
-  Wifi,
   Clock,
   ArrowUpDown,
   X,
   Zap,
   HardDrive,
-  ShieldCheck,
+  Terminal,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  Globe,
 } from 'lucide-react';
 import { cloudSync, CloudSyncState, VpsBackupInfo } from '../../services/cloudSync';
 
@@ -24,9 +25,23 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
   const [syncState, setSyncState] = useState<CloudSyncState>(cloudSync.getState());
   const [isVpsBackingUp, setIsVpsBackingUp] = useState(false);
   const [vpsMessage, setVpsMessage] = useState<string | null>(null);
+  const [vpsError, setVpsError] = useState<string | null>(null);
+  
+  // VPS configuration state
+  const [vpsUrlInput, setVpsUrlInput] = useState<string>('http://187.126.115.40:8090');
+  const [isTestingPing, setIsTestingPing] = useState(false);
+  const [pingResult, setPingResult] = useState<{
+    tested: boolean;
+    reachable: boolean;
+    latencyMs?: number;
+    code?: number;
+    error?: string;
+  } | null>(null);
+
   const [selectedInterval, setSelectedInterval] = useState<number>(
     syncState.vpsBackup?.intervalMinutes || 5
   );
+  const [showTroubleshoot, setShowTroubleshoot] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -35,27 +50,81 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
       if (state.vpsBackup?.intervalMinutes) {
         setSelectedInterval(state.vpsBackup.intervalMinutes);
       }
+      if (state.vpsBackup?.targetUrl) {
+        setVpsUrlInput(state.vpsBackup.targetUrl);
+      }
     });
-    // Immediately fetch fresh VPS status
-    cloudSync.fetchVpsBackupStatus();
+
+    cloudSync.fetchVpsBackupStatus().then((info) => {
+      if (info?.targetUrl) {
+        setVpsUrlInput(info.targetUrl);
+      }
+    });
+
     return unsub;
   }, [isOpen]);
 
   if (!isOpen) return null;
 
+  const handleTestPing = async (urlToTest?: string) => {
+    setIsTestingPing(true);
+    setPingResult(null);
+    setVpsError(null);
+    try {
+      const res = await cloudSync.testVpsConnection(urlToTest || vpsUrlInput);
+      setPingResult({
+        tested: true,
+        reachable: res.reachable,
+        latencyMs: res.latencyMs,
+        code: res.code,
+        error: res.error,
+      });
+      if (!res.reachable) {
+        setVpsError(`Connection failed: ${res.error || 'Server unreachable'}`);
+      }
+    } catch (err: any) {
+      setPingResult({
+        tested: true,
+        reachable: false,
+        error: err.message,
+      });
+      setVpsError(err.message);
+    } finally {
+      setIsTestingPing(false);
+    }
+  };
+
+  const handleSaveVpsConfig = async () => {
+    if (!vpsUrlInput.trim()) return;
+    const clean = vpsUrlInput.trim().replace(/\/+$/, '');
+    const ok = await cloudSync.updateVpsConfig(clean, selectedInterval);
+    if (ok) {
+      setVpsMessage(`✅ VPS configuration saved (${clean})`);
+      setTimeout(() => setVpsMessage(null), 4000);
+      handleTestPing(clean);
+    }
+  };
+
   const handleTriggerVpsBackup = async () => {
     setIsVpsBackingUp(true);
     setVpsMessage(null);
+    setVpsError(null);
     try {
       const res = await cloudSync.triggerVpsBackup();
       if (res.success) {
         const count = res.status?.totalItemsBackedUp ?? 0;
         setVpsMessage(`✅ Backup snapshot completed! ${count} records backed up to VPS PocketBase.`);
       } else {
-        setVpsMessage(`⚠️ Backup error: ${res.error || 'Check VPS connectivity.'}`);
+        const errDetail = res.error || 'Check VPS connectivity.';
+        setVpsError(errDetail);
+        setVpsMessage(`⚠️ Backup error: ${errDetail}`);
+        setShowTroubleshoot(true);
       }
     } catch (err: any) {
-      setVpsMessage(`⚠️ Request failed: ${err.message}`);
+      const msg = err.message || 'Request failed';
+      setVpsError(msg);
+      setVpsMessage(`⚠️ Request failed: ${msg}`);
+      setShowTroubleshoot(true);
     } finally {
       setIsVpsBackingUp(false);
       setTimeout(() => setVpsMessage(null), 6000);
@@ -94,7 +163,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-5 overflow-y-auto">
+        <div className="p-6 space-y-4 overflow-y-auto">
           {/* SECTION 1: PRIMARY DATABASE (FIRESTORE) */}
           <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/20 space-y-2">
             <div className="flex items-center justify-between">
@@ -150,30 +219,88 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2.5 rounded-xl bg-white border border-slate-200">
-                <span className="text-[10px] text-slate-500 block font-semibold uppercase">Target VPS Endpoint</span>
-                <span className="font-mono text-slate-800 text-[11px] font-semibold truncate block" title={vps?.targetUrl || 'http://187.126.115.40:8090'}>
-                  {vps?.targetUrl || 'http://187.126.115.40:8090'}
+            {/* VPS URL Configuration Input & Ping Button */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-slate-700 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Globe className="w-3 h-3 text-indigo-600" />
+                  VPS Server Endpoint:
                 </span>
+                <span className="text-[10px] text-slate-400 font-normal">HTTP / HTTPS URL</span>
+              </label>
+              
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={vpsUrlInput}
+                  onChange={(e) => setVpsUrlInput(e.target.value)}
+                  placeholder="http://187.126.115.40:8090"
+                  className="flex-1 px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all text-slate-900 shadow-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleTestPing()}
+                  disabled={isTestingPing}
+                  className="px-3 py-2 bg-slate-200 hover:bg-slate-300 active:bg-slate-400 text-slate-800 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Test if VPS PocketBase responds"
+                >
+                  {isTestingPing ? (
+                    <RefreshCw className="w-3 h-3 animate-spin text-slate-700" />
+                  ) : (
+                    <span>Test Ping</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveVpsConfig}
+                  className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Save
+                </button>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-white border border-slate-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500 block font-semibold uppercase">Backup Schedule</span>
-                </div>
-                <select
-                  value={selectedInterval}
-                  onChange={handleIntervalChange}
-                  className="mt-0.5 w-full text-[11px] font-semibold text-slate-800 bg-transparent border-0 p-0 focus:ring-0 cursor-pointer"
+              {/* Ping Result Display */}
+              {pingResult && (
+                <div
+                  className={`mt-1.5 p-2 rounded-xl text-xs flex items-center justify-between border ${
+                    pingResult.reachable
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border-rose-200'
+                  }`}
                 >
-                  <option value={2}>Every 2 minutes</option>
-                  <option value={5}>Every 5 minutes (Default)</option>
-                  <option value={15}>Every 15 minutes</option>
-                  <option value={30}>Every 30 minutes</option>
-                  <option value={60}>Every 1 hour</option>
-                </select>
-              </div>
+                  <div className="flex items-center gap-1.5">
+                    {pingResult.reachable ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    )}
+                    <span className="font-semibold text-[11px]">
+                      {pingResult.reachable
+                        ? `VPS Reachable (${pingResult.code} OK)`
+                        : `VPS Unreachable: ${pingResult.error || 'Failed to connect'}`}
+                    </span>
+                  </div>
+                  {pingResult.latencyMs !== undefined && (
+                    <span className="text-[10px] font-mono opacity-80">{pingResult.latencyMs}ms</span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Interval Selector */}
+            <div className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between text-xs">
+              <span className="text-slate-600 font-medium">Automatic Backup Frequency:</span>
+              <select
+                value={selectedInterval}
+                onChange={handleIntervalChange}
+                className="text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:ring-1 focus:ring-amber-500 cursor-pointer"
+              >
+                <option value={2}>Every 2 minutes</option>
+                <option value={5}>Every 5 minutes (Recommended)</option>
+                <option value={15}>Every 15 minutes</option>
+                <option value={30}>Every 30 minutes</option>
+                <option value={60}>Every 1 hour</option>
+              </select>
             </div>
 
             {/* VPS Backup Status Box */}
@@ -204,8 +331,8 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
 
             {/* Feedback notification message */}
             {vpsMessage && (
-              <div className="p-3 rounded-xl bg-slate-900 text-white text-xs font-medium animate-in fade-in duration-200">
-                {vpsMessage}
+              <div className="p-3 rounded-xl bg-slate-900 text-white text-xs font-medium animate-in fade-in duration-200 flex items-center justify-between">
+                <span>{vpsMessage}</span>
               </div>
             )}
 
@@ -228,9 +355,65 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
                 </>
               )}
             </button>
-            <p className="text-[10px] text-center text-slate-400">
-              The backend runs this automatically in the background. Trigger manually anytime to create an immediate offsite snapshot.
-            </p>
+
+            {/* COLLAPSIBLE TROUBLESHOOTING GUIDE */}
+            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+              <button
+                type="button"
+                onClick={() => setShowTroubleshoot(!showTroubleshoot)}
+                className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                <span className="flex items-center gap-1.5 text-slate-700">
+                  <HelpCircle className="w-3.5 h-3.5 text-amber-500" />
+                  How to Fix "Check VPS connectivity"
+                </span>
+                {showTroubleshoot ? (
+                  <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                )}
+              </button>
+
+              {showTroubleshoot && (
+                <div className="p-3.5 border-t border-slate-100 text-slate-600 space-y-2.5 text-xs bg-slate-50/70">
+                  <p className="text-[11px] leading-relaxed">
+                    If backup fails with <strong>"Check VPS connectivity"</strong>, run these quick checks on your VPS terminal:
+                  </p>
+
+                  <div className="space-y-2">
+                    <div className="p-2 rounded-lg bg-slate-900 text-slate-200 font-mono text-[11px] space-y-1">
+                      <div className="text-slate-400 text-[10px] flex items-center gap-1">
+                        <Terminal className="w-3 h-3 text-amber-400" />
+                        1. Check if PocketBase is running:
+                      </div>
+                      <div className="text-emerald-400 select-all">sudo systemctl status pocketbase</div>
+                      <div className="text-slate-400 text-[10px] pt-1">If stopped, restart it:</div>
+                      <div className="text-emerald-400 select-all">sudo systemctl restart pocketbase</div>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-slate-900 text-slate-200 font-mono text-[11px] space-y-1">
+                      <div className="text-slate-400 text-[10px] flex items-center gap-1">
+                        <Terminal className="w-3 h-3 text-amber-400" />
+                        2. Allow Port 8090 on VPS Firewall:
+                      </div>
+                      <div className="text-emerald-400 select-all">sudo ufw allow 8090/tcp</div>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-slate-900 text-slate-200 font-mono text-[11px] space-y-1">
+                      <div className="text-slate-400 text-[10px] flex items-center gap-1">
+                        <Terminal className="w-3 h-3 text-amber-400" />
+                        3. Verify VPS health check locally:
+                      </div>
+                      <div className="text-emerald-400 select-all">curl -I http://localhost:8090/api/health</div>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-slate-500">
+                    💡 If your VPS IP changed or uses SSL domain, update the <strong>VPS Server Endpoint</strong> field above and click <strong>Save</strong>.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
