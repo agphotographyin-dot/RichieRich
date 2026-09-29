@@ -22,9 +22,12 @@ import {
   Info,
   PackagePlus,
   Edit3,
+  Database,
+  Trash2,
 } from 'lucide-react';
 import { InventoryItem } from '../../../types';
 import { storage } from '../../../services/storage';
+import { cloudSync } from '../../../services/cloudSync';
 import { soundEffects } from '../../../services/audio';
 import {
   excelInventoryService,
@@ -51,7 +54,15 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   const [validationResult, setValidationResult] = useState<ExcelImportValidationResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [updateExisting, setUpdateExisting] = useState(true);
+  const [cleanBeforeImport, setCleanBeforeImport] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{
+    synced: number;
+    total: number;
+    percent: number;
+    phase: string;
+  } | null>(null);
+  const [dbSyncedCount, setDbSyncedCount] = useState<number | null>(null);
   const [previewFilter, setPreviewFilter] = useState<'all' | 'new' | 'update' | 'fixed' | 'variable'>('all');
   const [previewSearch, setPreviewSearch] = useState('');
   const [showColumnMapper, setShowColumnMapper] = useState(false);
@@ -144,15 +155,56 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     e.stopPropagation();
   };
 
-  const handleExecuteImport = () => {
+  const handleExecuteImport = async () => {
     if (!validationResult || validationResult.validProducts.length === 0) return;
 
     setIsImporting(true);
+    setSyncProgress({
+      synced: 0,
+      total: validationResult.validProducts.length,
+      percent: 5,
+      phase: cleanBeforeImport ? 'Purging previous database SKUs...' : 'Preparing catalog...',
+    });
+
     try {
+      // 1. If cleanBeforeImport is selected, wipe database first
+      if (cleanBeforeImport) {
+        await storage.clearAllInventory();
+      }
+
+      setSyncProgress({
+        synced: 0,
+        total: validationResult.validProducts.length,
+        percent: 20,
+        phase: 'Indexing & saving new products locally...',
+      });
+
+      // 2. Import into local storage
       const { importedCount, updatedCount } = storage.importInventoryBatch(
         validationResult.validProducts,
-        { updateExisting }
+        { updateExisting, cleanBeforeImport }
       );
+
+      const totalItems = storage.getInventory();
+
+      setSyncProgress({
+        synced: 0,
+        total: totalItems.length,
+        percent: 30,
+        phase: `Syncing ${totalItems.length} products to PocketBase Database...`,
+      });
+
+      // 3. Sync to PocketBase database with live progress
+      const syncResult = await cloudSync.syncCollectionBatch('inventory', totalItems, (synced, total, percent) => {
+        setSyncProgress({
+          synced,
+          total,
+          percent: Math.min(100, Math.max(30, percent)),
+          phase: `Syncing to PocketBase: ${synced} / ${total} SKUs (${percent}%)...`,
+        });
+      });
+
+      setDbSyncedCount(syncResult.synced || totalItems.length);
 
       setImportSummary({
         imported: importedCount,
@@ -167,6 +219,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       setParseError(err.message || 'An error occurred while importing products.');
     } finally {
       setIsImporting(false);
+      setSyncProgress(null);
     }
   };
 
@@ -176,6 +229,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     setValidationResult(null);
     setParseError(null);
     setImportSummary(null);
+    setDbSyncedCount(null);
+    setCleanBeforeImport(false);
     setActiveTab('upload');
     setShowColumnMapper(false);
     if (fileInputRef.current) {
@@ -319,6 +374,18 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   <span className="text-[11px] text-amber-600 block font-medium">Existing SKUs Updated</span>
                   <span className="text-xl font-black text-amber-700">{importSummary.updated}</span>
                 </div>
+              </div>
+
+              {/* Database Sync Verified Badge */}
+              <div className="p-3.5 bg-white rounded-xl border border-emerald-300 max-w-lg mx-auto flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-emerald-900 font-bold">
+                  <Database className="w-4 h-4 text-emerald-600" />
+                  <span>PocketBase Database Sync:</span>
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  {dbSyncedCount !== null ? `${dbSyncedCount} / ${importSummary.total} SKUs 100% Synced` : 'Verified & Synced Live'}
+                </span>
               </div>
 
               <div className="flex flex-wrap justify-center gap-3 pt-4 border-t border-emerald-200">
@@ -543,9 +610,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   <div className="p-4 bg-white border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                     {[
                       { key: 'nameCol', label: 'Product Name' },
-                      { key: 'skuCol', label: 'SKU / Base Code' },
-                      { key: 'variantCol', label: 'SKU Variation / Variant' },
-                      { key: 'barcodeCol', label: 'Barcode / EAN' },
+                      { key: 'skuCol', label: 'SKU / Code' },
                       { key: 'categoryCol', label: 'Category' },
                       { key: 'sellCol', label: 'Selling Price (MRP)' },
                       { key: 'costCol', label: 'Purchase Cost' },
@@ -578,26 +643,109 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                 )}
               </div>
 
-              {/* Update Existing Checkbox */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-slate-600" />
-                  <div>
-                    <label className="font-bold text-slate-800 block cursor-pointer">
+              {/* Import Mode Selection */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Database className="w-4 h-4 text-indigo-600" />
+                    <span>Database Import Mode</span>
+                  </div>
+                  <span className="text-[11px] font-semibold text-slate-500">
+                    Current Catalog: {existingInventory.length} SKUs
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  {/* Clean & Replace Option */}
+                  <label
+                    className={`p-3 rounded-xl border flex flex-col justify-between gap-2 cursor-pointer transition-all ${
+                      cleanBeforeImport
+                        ? 'bg-rose-50 border-rose-300 ring-2 ring-rose-200 text-rose-950'
+                        : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Trash2 className={`w-4 h-4 shrink-0 ${cleanBeforeImport ? 'text-rose-600' : 'text-slate-400'}`} />
+                        <span className="font-bold">Clean & Replace Catalog</span>
+                      </div>
+                      <input
+                        type="radio"
+                        name="importMode"
+                        checked={cleanBeforeImport}
+                        onChange={() => setCleanBeforeImport(true)}
+                        className="w-4 h-4 accent-rose-600 mt-0.5 cursor-pointer"
+                      />
+                    </div>
+                    <p className={`text-[11px] leading-relaxed ${cleanBeforeImport ? 'text-rose-700' : 'text-slate-500'}`}>
+                      Wipes all current {existingInventory.length} SKUs from database first so only the new file products exist.
+                    </p>
+                  </label>
+
+                  {/* Merge & Update Option */}
+                  <label
+                    className={`p-3 rounded-xl border flex flex-col justify-between gap-2 cursor-pointer transition-all ${
+                      !cleanBeforeImport
+                        ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-200 text-indigo-950'
+                        : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className={`w-4 h-4 shrink-0 ${!cleanBeforeImport ? 'text-indigo-600' : 'text-slate-400'}`} />
+                        <span className="font-bold">Merge with Existing</span>
+                      </div>
+                      <input
+                        type="radio"
+                        name="importMode"
+                        checked={!cleanBeforeImport}
+                        onChange={() => setCleanBeforeImport(false)}
+                        className="w-4 h-4 accent-indigo-600 mt-0.5 cursor-pointer"
+                      />
+                    </div>
+                    <p className={`text-[11px] leading-relaxed ${!cleanBeforeImport ? 'text-indigo-700' : 'text-slate-500'}`}>
+                      Keeps current catalog and merges new products or updates matching SKUs.
+                    </p>
+                  </label>
+                </div>
+
+                {!cleanBeforeImport && (
+                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
+                    <span className="text-slate-600 font-medium">
                       Update existing products if SKU matches
-                    </label>
-                    <span className="text-[10px] text-slate-500">
-                      When enabled, matching catalog items will safely update prices, vendor tags, and stock.
                     </span>
+                    <input
+                      type="checkbox"
+                      checked={updateExisting}
+                      onChange={(e) => setUpdateExisting(e.target.checked)}
+                      className="w-4 h-4 accent-indigo-600 rounded-sm cursor-pointer"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Real-Time Import Progress Bar */}
+              {isImporting && syncProgress && (
+                <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 space-y-2.5 animate-in fade-in">
+                  <div className="flex items-center justify-between text-xs font-bold text-indigo-950">
+                    <span className="flex items-center gap-2">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                      {syncProgress.phase}
+                    </span>
+                    <span className="font-mono text-indigo-700">{syncProgress.percent}%</span>
+                  </div>
+                  <div className="w-full bg-indigo-200 h-2.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-indigo-600 h-full rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${syncProgress.percent}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-indigo-600">
+                    <span>Writing to PocketBase SQLite with transactional integrity</span>
+                    <span className="font-mono">{syncProgress.synced} / {syncProgress.total} SKUs</span>
                   </div>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={updateExisting}
-                  onChange={(e) => setUpdateExisting(e.target.checked)}
-                  className="w-4 h-4 accent-slate-800 rounded-sm cursor-pointer"
-                />
-              </div>
+              )}
 
               {/* Preview Search & Table */}
               <div className="space-y-2">

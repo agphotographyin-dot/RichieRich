@@ -802,7 +802,9 @@ export const excelInventoryService = {
 
             // 4. SKU & VARIATION SKU
             let rawSku = colMap.skuCol >= 0 ? String(row[colMap.skuCol] || '').trim() : '';
-            if (!rawSku && rawVariant && /^[A-Z0-9_-]{3,25}$/i.test(rawVariant)) {
+            const varClean = rawVariant ? rawVariant.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toUpperCase() : '';
+
+            if (!rawSku && varClean && /^[A-Z0-9_-]{3,25}$/i.test(rawVariant)) {
               rawSku = rawVariant.toUpperCase();
               wasAutoCorrected = true;
             }
@@ -810,9 +812,8 @@ export const excelInventoryService = {
             if (!rawSku) {
               const prefix = rawCat.slice(0, 3).toUpperCase();
               const nameClean = rawName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase();
-              const varClean = rawVariant ? rawVariant.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() : '';
               rawSku = varClean
-                ? `${prefix}-${nameClean || 'ITM'}-${varClean}-${Math.floor(100 + Math.random() * 900)}`
+                ? `${prefix}-${nameClean || 'ITM'}-${varClean}`
                 : `${prefix}-${nameClean || 'ITM'}-${Math.floor(100 + Math.random() * 900)}`;
               wasAutoCorrected = true;
               correctionNotes.push(`SKU auto-generated as "${rawSku}"`);
@@ -822,20 +823,18 @@ export const excelInventoryService = {
                 message: `Auto-generated SKU "${rawSku}"`,
                 autoFixed: true,
               });
+            } else if (varClean && !rawSku.toUpperCase().endsWith(varClean)) {
+              // If SKU was given and row specifies a variation not yet in the SKU, attach it
+              rawSku = `${rawSku}-${varClean}`;
             }
 
-            // Handle intra-file duplicate SKUs gracefully (auto-suffix with variation code or counter)
+            // Handle intra-file duplicate SKUs gracefully (auto-suffix with counter)
             let skuLower = rawSku.toLowerCase();
             if (seenSkusInFile.has(skuLower)) {
               const occCount = (seenSkusInFile.get(skuLower) || 1) + 1;
               seenSkusInFile.set(skuLower, occCount);
               const originalSku = rawSku;
-              const varClean = rawVariant ? rawVariant.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase() : '';
-              if (varClean && !rawSku.toUpperCase().endsWith(varClean)) {
-                rawSku = `${rawSku}-${varClean}`;
-              } else {
-                rawSku = `${rawSku}-${occCount}`;
-              }
+              rawSku = `${rawSku}-${occCount}`;
               skuLower = rawSku.toLowerCase();
               wasAutoCorrected = true;
               correctionNotes.push(`Variation SKU in file adjusted from "${originalSku}" to "${rawSku}"`);

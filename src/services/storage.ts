@@ -1937,6 +1937,33 @@ export class StorageService {
     return false;
   }
 
+  /**
+   * Purge and clean all Master Catalog SKUs completely from local cache and PocketBase database
+   */
+  async clearAllInventory(): Promise<{ count: number }> {
+    const previous = this.getInventory();
+    const count = previous.length;
+
+    // 1. Wipe local cache and safeStorage
+    this.setCached(STORAGE_KEYS.INVENTORY, []);
+    safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify([]));
+    this.notify();
+
+    // 2. Wipe from PocketBase cloud database
+    await cloudSync.clearCollection('inventory');
+
+    this.addNotification({
+      title: '🧹 Master Inventory Catalog Purged',
+      message: `Successfully cleared all ${count} SKUs from Master Catalog and cloud database. Ready for fresh import.`,
+      type: 'order_update',
+      targetRole: 'admin',
+      read: false,
+      linkTab: 'inventory',
+    });
+
+    return { count };
+  }
+
   importInventoryBatch(
     parsedItems: Array<{
       isUpdate: boolean;
@@ -1960,46 +1987,32 @@ export class StorageService {
       description: string;
       imageUrl?: string;
     }>,
-    options: { updateExisting: boolean } = { updateExisting: true }
+    options: { updateExisting: boolean; cleanBeforeImport?: boolean } = { updateExisting: true, cleanBeforeImport: false }
   ): { importedCount: number; updatedCount: number } {
-    const currentInventory = this.getInventory();
+    const currentInventory = options.cleanBeforeImport ? [] : this.getInventory();
     let importedCount = 0;
     let updatedCount = 0;
 
-    // Track pre-existing catalog items only (items present before this batch import)
-    const preExistingIdMap = new Map<string, number>();
-    const preExistingSkuMap = new Map<string, number>();
+    // Track newly added/updated items during batch to avoid intra-batch duplicate creations
+    const skuIndexMap = new Map<string, number>();
+    const idIndexMap = new Map<string, number>();
 
-    currentInventory.forEach((item, idx) => {
-      if (item.id) preExistingIdMap.set(item.id, idx);
-      if (item.sku) preExistingSkuMap.set(item.sku.trim().toLowerCase(), idx);
-    });
-
-    // Track SKUs seen in the CURRENT batch to prevent intra-batch variation overwrites
-    const batchSeenSkus = new Set<string>();
+    if (!options.cleanBeforeImport) {
+      currentInventory.forEach((item, idx) => {
+        if (item.id) idIndexMap.set(item.id, idx);
+        if (item.sku) skuIndexMap.set(item.sku.trim().toLowerCase(), idx);
+      });
+    }
 
     parsedItems.forEach((row, rowIdx) => {
-      let cleanSku = row.sku ? row.sku.trim() : '';
+      const cleanSku = row.sku ? row.sku.trim().toLowerCase() : '';
       const normalizedCat = normalizeProductCategory(row.category);
       let existingIndex = -1;
 
-      const skuKey = cleanSku.toLowerCase();
-      const isIntraBatchDuplicate = skuKey ? batchSeenSkus.has(skuKey) : false;
-
-      // Only match against pre-existing items if not an intra-batch duplicate
-      if (row.existingId && preExistingIdMap.has(row.existingId)) {
-        existingIndex = preExistingIdMap.get(row.existingId)!;
-      } else if (!isIntraBatchDuplicate && skuKey && preExistingSkuMap.has(skuKey)) {
-        existingIndex = preExistingSkuMap.get(skuKey)!;
-      }
-
-      // If intra-batch variation with identical SKU, assign unique variant SKU so all variations persist
-      if (isIntraBatchDuplicate) {
-        cleanSku = `${cleanSku}-V${rowIdx + 1}`;
-        row.sku = cleanSku;
-      }
-      if (cleanSku) {
-        batchSeenSkus.add(cleanSku.toLowerCase());
+      if (row.existingId && idIndexMap.has(row.existingId)) {
+        existingIndex = idIndexMap.get(row.existingId)!;
+      } else if (cleanSku && skuIndexMap.has(cleanSku)) {
+        existingIndex = skuIndexMap.get(cleanSku)!;
       }
 
       if (existingIndex >= 0 && existingIndex < currentInventory.length) {
@@ -2076,6 +2089,9 @@ export class StorageService {
         };
 
         currentInventory.push(newItem);
+        idIndexMap.set(newItemId, currentInventory.length - 1);
+        if (cleanSku) skuIndexMap.set(cleanSku, currentInventory.length - 1);
+
         importedCount++;
       }
     });

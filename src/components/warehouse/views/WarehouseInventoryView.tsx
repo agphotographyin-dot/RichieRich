@@ -46,6 +46,7 @@ import { warehouseStorage } from '../../../services/warehouseStorage';
 import { pdfReportService } from '../../../services/pdfReportService';
 import { excelInventoryService } from '../../../services/excelInventoryService';
 import { ExcelImportModal } from '../modals/ExcelImportModal';
+import { CleanInventoryModal } from '../modals/CleanInventoryModal';
 import { BarcodeVisualizer } from '../../common/BarcodeVisualizer';
 import { soundEffects } from '../../../services/audio';
 
@@ -94,6 +95,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
   const [valuationType, setValuationType] = useState<'fifo' | 'avg'>('fifo');
   const [localSearch, setLocalSearch] = useState('');
   const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
+  const [isCleanInventoryOpen, setIsCleanInventoryOpen] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
   // High-performance loading screen & pagination states
@@ -423,6 +425,16 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
           >
             <FileSpreadsheet className="w-4 h-4 text-white" />
             <span>Import Excel / CSV</span>
+          </button>
+
+          {/* Clean / Purge All SKUs Button */}
+          <button
+            onClick={() => setIsCleanInventoryOpen(true)}
+            className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer border border-rose-200 shadow-xs"
+            title="Clean and purge all current SKUs from catalog and PocketBase database"
+          >
+            <Trash2 className="w-4 h-4 text-rose-600" />
+            <span>Clean Current SKUs ({inventory.length})</span>
           </button>
 
           {/* Export Dropdown Menu */}
@@ -1666,6 +1678,19 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
         existingInventory={inventory}
         onImportComplete={() => {
           setIsExcelImportOpen(false);
+        }}
+      />
+
+      {/* ========================================================================= */}
+      {/* MODAL 5: CLEAN / PURGE INVENTORY MODAL                                    */}
+      {/* ========================================================================= */}
+      <CleanInventoryModal
+        isOpen={isCleanInventoryOpen}
+        onClose={() => setIsCleanInventoryOpen(false)}
+        inventory={inventory}
+        onCleanSuccess={() => {
+          setIsCleanInventoryOpen(false);
+          handleManualRefresh();
         }}
       />
     </div>

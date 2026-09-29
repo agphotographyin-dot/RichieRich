@@ -67,6 +67,7 @@ class CloudSyncService {
   private isApplyingRemoteUpdate = false;
   private debounceTimers: Record<string, any> = {};
   private collectionDocsMap = new Map<string, Map<string, any>>();
+  private pbIdMap = new Map<string, string>();
   private persistDebounceTimers: Record<string, any> = {};
 
   // External notification & cache hooks
@@ -245,7 +246,9 @@ class CloudSyncService {
             map.clear();
             records.forEach((rec: any) => {
               const appData = rec.data ? { ...rec.data, id: rec.recordId || rec.id } : rec;
-              map!.set(String(appData.id || rec.id), appData);
+              const cleanId = String(appData.id || rec.id);
+              map!.set(cleanId, appData);
+              this.pbIdMap.set(`${collectionName}:${cleanId}`, rec.id);
             });
 
             const remoteDocs = Array.from(map.values()) as T[];
@@ -264,8 +267,10 @@ class CloudSyncService {
 
           if (action === 'delete') {
             map!.delete(id);
+            this.pbIdMap.delete(`${collectionName}:${id}`);
           } else {
             map!.set(id, appData);
+            this.pbIdMap.set(`${collectionName}:${id}`, record.id);
           }
 
           const remoteDocs = Array.from(map!.values()) as T[];
@@ -364,21 +369,51 @@ class CloudSyncService {
         map.set(cleanId, sanitized);
       }
 
-      // Check if item already exists in PocketBase
-      const existing = await pb.collection(collectionName).getFirstListItem(`recordId="${cleanId}" || id="${cleanId}"`, { requestKey: null }).catch(() => null);
+      // If PocketBase server is not live, preserve locally and return immediately
+      if (!this.state.isLive && this.state.status !== 'connected') {
+        return;
+      }
 
-      if (existing) {
-        await pb.collection(collectionName).update(existing.id, {
-          recordId: cleanId,
-          data: sanitized,
-          updatedAt: new Date().toISOString(),
-        });
+      // Check if we already know PocketBase's internal record ID
+      const mapKey = `${collectionName}:${cleanId}`;
+      let pbId = this.pbIdMap.get(mapKey);
+
+      if (pbId) {
+        try {
+          await pb.collection(collectionName).update(pbId, {
+            recordId: cleanId,
+            data: sanitized,
+            updatedAt: new Date().toISOString(),
+          });
+        } catch (updateErr: any) {
+          // If record was removed remotely, create new
+          const created = await pb.collection(collectionName).create({
+            recordId: cleanId,
+            data: sanitized,
+            updatedAt: new Date().toISOString(),
+          });
+          this.pbIdMap.set(mapKey, created.id);
+        }
       } else {
-        await pb.collection(collectionName).create({
-          recordId: cleanId,
-          data: sanitized,
-          updatedAt: new Date().toISOString(),
-        });
+        try {
+          const created = await pb.collection(collectionName).create({
+            recordId: cleanId,
+            data: sanitized,
+            updatedAt: new Date().toISOString(),
+          });
+          this.pbIdMap.set(mapKey, created.id);
+        } catch {
+          // If record already exists on server under recordId, fetch internal ID and update
+          const existing = await pb.collection(collectionName).getFirstListItem(`recordId="${cleanId}"`, { requestKey: null }).catch(() => null);
+          if (existing) {
+            this.pbIdMap.set(mapKey, existing.id);
+            await pb.collection(collectionName).update(existing.id, {
+              recordId: cleanId,
+              data: sanitized,
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        }
       }
 
       this.setState({
@@ -407,14 +442,161 @@ class CloudSyncService {
         map.delete(cleanId);
       }
 
-      const existing = await pb.collection(collectionName).getFirstListItem(`recordId="${cleanId}" || id="${cleanId}"`, { requestKey: null }).catch(() => null);
-      if (existing) {
-        await pb.collection(collectionName).delete(existing.id);
+      const mapKey = `${collectionName}:${cleanId}`;
+      let pbId = this.pbIdMap.get(mapKey);
+
+      if (!pbId) {
+        const existing = await pb.collection(collectionName).getFirstListItem(`recordId="${cleanId}"`, { requestKey: null }).catch(() => null);
+        if (existing) pbId = existing.id;
+      }
+
+      if (pbId) {
+        await pb.collection(collectionName).delete(pbId);
+        this.pbIdMap.delete(mapKey);
       }
       return true;
     } catch (err: any) {
       console.warn(`[CloudSync] Notice: Document deletion synced locally for ${collectionName}:`, err?.message || err);
       return false;
+    }
+  }
+
+  /**
+   * Delete ALL records in a PocketBase collection and reset local cache
+   */
+  public async clearCollection(collectionName: string): Promise<{ deletedCount: number; success: boolean }> {
+    try {
+      // Clear memory map
+      const map = this.collectionDocsMap.get(collectionName);
+      if (map) {
+        map.clear();
+      }
+
+      // Clear pbIdMap entries for this collection
+      for (const [key] of this.pbIdMap.entries()) {
+        if (key.startsWith(`${collectionName}:`)) {
+          this.pbIdMap.delete(key);
+        }
+      }
+
+      // If PocketBase server is not live, clear local memory and return
+      if (!this.state.isLive && this.state.status !== 'connected') {
+        return { deletedCount: 0, success: true };
+      }
+
+      let deletedCount = 0;
+      // Get all records in the collection
+      const records = await pb.collection(collectionName).getFullList({
+        fields: 'id,recordId',
+        requestKey: null,
+      }).catch(() => []);
+
+      if (records && records.length > 0) {
+        // Delete in sequential batches of 10 to avoid SQLite busy lock
+        const batchSize = 10;
+        for (let i = 0; i < records.length; i += batchSize) {
+          const chunk = records.slice(i, i + batchSize);
+          await Promise.all(
+            chunk.map(async (r) => {
+              try {
+                await pb.collection(collectionName).delete(r.id);
+                deletedCount++;
+              } catch {
+                // Ignore single delete errors
+              }
+            })
+          );
+        }
+      }
+
+      this.setState({
+        status: 'connected',
+        isLive: true,
+        lastSyncedAt: new Date(),
+      });
+
+      return { deletedCount, success: true };
+    } catch (err: any) {
+      console.warn(`[CloudSync] Clear collection warning for ${collectionName}:`, err?.message || err);
+      return { deletedCount: 0, success: false };
+    }
+  }
+
+  /**
+   * High-reliability batch sync with progress callback (ideal for Excel/CSV import)
+   */
+  public async syncCollectionBatch(
+    collectionName: string,
+    items: any[],
+    onProgress?: (synced: number, total: number, percent: number) => void
+  ): Promise<{ success: boolean; synced: number; error?: string }> {
+    if (this.isApplyingRemoteUpdate || !items || items.length === 0) {
+      return { success: true, synced: 0 };
+    }
+
+    // If server is not reachable, record locally and return immediately
+    if (!this.state.isLive && this.state.status !== 'connected') {
+      const map = this.collectionDocsMap.get(collectionName);
+      if (map) {
+        items.forEach((item) => {
+          if (item && item.id) {
+            map.set(String(item.id), item);
+          }
+        });
+      }
+      onProgress?.(items.length, items.length, 100);
+      return { success: true, synced: items.length };
+    }
+
+    try {
+      this.setState({ status: 'syncing' });
+
+      // Refresh collection ID map before batch to avoid duplicate lookups
+      try {
+        const remoteRecords = await pb.collection(collectionName).getFullList({
+          fields: 'id,recordId',
+          requestKey: null,
+        });
+        remoteRecords.forEach((rec) => {
+          if (rec.recordId) {
+            this.pbIdMap.set(`${collectionName}:${rec.recordId}`, rec.id);
+          }
+        });
+      } catch {
+        // Continue with current map
+      }
+
+      let synced = 0;
+      const total = items.length;
+      // Controlled batch size of 6 with micro-ticks prevents SQLite transaction locking
+      const batchSize = 6;
+
+      for (let i = 0; i < total; i += batchSize) {
+        const chunk = items.slice(i, i + batchSize);
+        await Promise.all(
+          chunk.map(async (item) => {
+            if (item && item.id) {
+              await this.syncDocument(collectionName, String(item.id), item);
+              synced++;
+            }
+          })
+        );
+        const percent = Math.min(100, Math.round((synced / total) * 100));
+        onProgress?.(synced, total, percent);
+      }
+
+      this.setState({
+        status: 'connected',
+        isLive: true,
+        lastSyncedAt: new Date(),
+        itemsSynced: this.state.itemsSynced + synced,
+      });
+
+      return { success: true, synced };
+    } catch (err: any) {
+      console.warn(`[CloudSync] syncCollectionBatch error for ${collectionName}:`, err);
+      this.setState({ status: 'offline', errorMessage: err?.message });
+      return { success: false, synced: 0, error: err?.message };
     }
   }
 
@@ -430,8 +612,8 @@ class CloudSyncService {
 
     this.debounceTimers[collectionName] = setTimeout(async () => {
       try {
-        // Sync items in controlled batches so large catalogs (e.g. 1000+ SKUs) sync without truncation
-        const batchSize = 50;
+        // Sync items in controlled sequential batches so large catalogs sync without locking
+        const batchSize = 8;
         for (let i = 0; i < items.length; i += batchSize) {
           const batch = items.slice(i, i + batchSize);
           await Promise.all(

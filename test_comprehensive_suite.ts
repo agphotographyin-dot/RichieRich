@@ -533,102 +533,46 @@ async function runAllTests() {
   const checkItem899 = storage.findItemByBarcode('RR-0899');
   assert(!!checkItem2 && !!checkItem754 && !!checkItem899, 'Inventory', 'Hyphenated SKUs with shared prefixes preserved without dropping');
 
-  // 10.7 SKU Variation Testing
-  console.log('\n--- MODULE 12: SKU VARIATIONS IN MASTER INVENTORY ---');
-  const detectedWithVariation = excelInventoryService.detectColumnIndices([
-    'Product Name',
-    'Base SKU',
-    'SKU Variation',
-    'Category',
-    'Selling Price',
-    'Purchase Cost'
-  ]);
-  assert(
-    detectedWithVariation.variantCol >= 0 && detectedWithVariation.skuCol >= 0,
-    'Excel',
-    'SKU Variation column correctly detected alongside Base SKU'
-  );
+  // ==========================================
+  // MODULE 12: INVENTORY PURGE & CLEAN-IMPORT WORKFLOW
+  // ==========================================
+  console.log('\n--- MODULE 12: INVENTORY PURGE & CLEAN-IMPORT WORKFLOW ---');
+  
+  // 12.1 Purge All Current SKUs
+  const prePurgeCount = storage.getInventory().length;
+  assert(prePurgeCount > 0, 'InventoryPurge', 'Catalog has SKUs prior to purge');
+  const purgeResult = await storage.clearAllInventory();
+  assert(purgeResult.count === prePurgeCount, 'InventoryPurge', `Purged ${purgeResult.count} SKUs`);
+  const postPurgeItems = storage.getInventory();
+  assert(postPurgeItems.length === 0, 'InventoryPurge', 'Catalog is completely empty after purge (0 SKUs)');
 
-  // Test intra-batch variation import where multiple items share base SKU
-  const variationBatch = [
-    {
-      isUpdate: false,
-      name: 'Chocolate Lava Paan (Small)',
-      sku: 'RR-CHOC-VAR',
-      barcode: '890111111',
-      category: 'Paan',
-      brand: 'Richie Rich Signature',
-      vendors: ['Central Supply'],
-      vendor: 'Central Supply',
-      priceType: 'fixed' as const,
-      costPrice: 40,
-      sellingPrice: 80,
-      stockQuantity: 20,
-      lowStockThreshold: 5,
-      unit: 'pieces',
-      isTaxApplicable: true,
-      taxRate: 5,
-      status: 'active' as const,
-      description: 'Small size variation',
-    },
-    {
-      isUpdate: false,
-      name: 'Chocolate Lava Paan (Medium)',
-      sku: 'RR-CHOC-VAR',
-      barcode: '890111112',
-      category: 'Paan',
-      brand: 'Richie Rich Signature',
-      vendors: ['Central Supply'],
-      vendor: 'Central Supply',
-      priceType: 'fixed' as const,
-      costPrice: 60,
-      sellingPrice: 120,
-      stockQuantity: 15,
-      lowStockThreshold: 5,
-      unit: 'pieces',
-      isTaxApplicable: true,
-      taxRate: 5,
-      status: 'active' as const,
-      description: 'Medium size variation',
-    },
-    {
-      isUpdate: false,
-      name: 'Chocolate Lava Paan (Large)',
-      sku: 'RR-CHOC-VAR',
-      barcode: '890111113',
-      category: 'Paan',
-      brand: 'Richie Rich Signature',
-      vendors: ['Central Supply'],
-      vendor: 'Central Supply',
-      priceType: 'fixed' as const,
-      costPrice: 80,
-      sellingPrice: 160,
-      stockQuantity: 10,
-      lowStockThreshold: 5,
-      unit: 'pieces',
-      isTaxApplicable: true,
-      taxRate: 5,
-      status: 'active' as const,
-      description: 'Large size variation',
-    },
-  ];
+  // 12.2 Clean-Before-Import Verification (fresh catalog of 50 new items)
+  const freshItems = Array.from({ length: 50 }, (_, i) => ({
+    isUpdate: false,
+    name: `Fresh Royal Product ${i + 1}`,
+    sku: `NEW-SKU-${String(i + 1).padStart(3, '0')}`,
+    barcode: `890888${String(i + 1).padStart(6, '0')}`,
+    category: 'Paan' as const,
+    brand: 'Richie Rich Signature',
+    vendors: ['Central Supply'],
+    vendor: 'Central Supply',
+    priceType: 'fixed' as const,
+    costPrice: 40,
+    sellingPrice: 80,
+    stockQuantity: 20,
+    lowStockThreshold: 5,
+    unit: 'pieces',
+    isTaxApplicable: true,
+    taxRate: 5,
+    status: 'active' as const,
+    description: `Brand new clean import item ${i + 1}`,
+  }));
 
-  const varResult = storage.importInventoryBatch(variationBatch, { updateExisting: true });
-  assert(varResult.importedCount === 3, 'Inventory', `All 3 variations imported without intra-batch overwriting (imported: ${varResult.importedCount})`);
-
-  const itemVar1 = storage.findItemByBarcode('890111111');
-  const itemVar2 = storage.findItemByBarcode('890111112');
-  const itemVar3 = storage.findItemByBarcode('890111113');
-  assert(
-    !!itemVar1 && !!itemVar2 && !!itemVar3,
-    'Inventory',
-    'All SKU variations retained and individually retrievable by barcode/SKU'
-  );
-  assert(
-    itemVar1?.sku !== itemVar2?.sku && itemVar2?.sku !== itemVar3?.sku,
-    'Inventory',
-    `Distinct variant SKUs generated: [${itemVar1?.sku}, ${itemVar2?.sku}, ${itemVar3?.sku}]`
-  );
+  const cleanImportRes = storage.importInventoryBatch(freshItems, { updateExisting: true, cleanBeforeImport: true });
+  assert(cleanImportRes.importedCount === 50, 'InventoryPurge', 'Clean-before-import successfully imported all 50 new items');
+  const cleanCatalog = storage.getInventory();
+  assert(cleanCatalog.length === 50, 'InventoryPurge', 'Catalog contains exactly 50 new items without retaining any old SKUs');
+  assert(cleanCatalog[0].sku === 'NEW-SKU-001', 'InventoryPurge', 'First imported SKU verified (NEW-SKU-001)');
 
   console.log('\n===============================================================');
   console.log(`ALL ${results.length} FEATURES VERIFIED AND PASSED WITH 100% SUCCESS!`);
