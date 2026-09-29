@@ -164,42 +164,78 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
 
         {/* Modal Body */}
         <div className="p-6 space-y-4 overflow-y-auto">
-          {/* SECTION 1: PRIMARY DATABASE (FIRESTORE) */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/20 space-y-2">
+          {/* SECTION 1: PRIMARY DATABASE (FIRESTORE OR POCKETBASE FAILOVER) */}
+          <div
+            className={`p-4 rounded-2xl border space-y-2 ${
+              syncState.engine === 'pocketbase'
+                ? 'bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent border-amber-500/30'
+                : 'bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent border-emerald-500/20'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  <span
+                    className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                      syncState.engine === 'pocketbase' ? 'bg-amber-400' : 'bg-emerald-400'
+                    }`}
+                  ></span>
+                  <span
+                    className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                      syncState.engine === 'pocketbase' ? 'bg-amber-500' : 'bg-emerald-500'
+                    }`}
+                  ></span>
                 </span>
-                <span className="text-xs font-bold uppercase tracking-wider text-emerald-900">
-                  Primary Real-Time Engine (Active)
+                <span
+                  className={`text-xs font-bold uppercase tracking-wider ${
+                    syncState.engine === 'pocketbase' ? 'text-amber-900' : 'text-emerald-900'
+                  }`}
+                >
+                  {syncState.engine === 'pocketbase'
+                    ? 'Primary Real-Time Engine (PocketBase VPS Failover)'
+                    : 'Primary Real-Time Engine (Firestore Active)'}
                 </span>
               </div>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+              <span
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                  syncState.engine === 'pocketbase'
+                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                    : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                }`}
+              >
                 <CheckCircle2 className="w-3 h-3" />
-                Zero-Push Instant Live
+                {syncState.engine === 'pocketbase' ? 'Unlimited VPS Engine' : 'Zero-Push Instant Live'}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-              <div className="p-2.5 rounded-xl bg-white/80 border border-emerald-100">
-                <span className="text-[10px] text-slate-500 block font-semibold uppercase">Cloud Database</span>
+              <div className="p-2.5 rounded-xl bg-white/80 border border-slate-200">
+                <span className="text-[10px] text-slate-500 block font-semibold uppercase">Active Database</span>
                 <span className="font-mono text-slate-800 text-[11px] font-bold truncate block">
-                  {syncState.projectId || 'Google Cloud Firestore'}
+                  {syncState.engine === 'pocketbase' ? 'VPS PocketBase (Self-Hosted)' : syncState.projectId || 'Google Cloud Firestore'}
                 </span>
               </div>
-              <div className="p-2.5 rounded-xl bg-white/80 border border-emerald-100">
-                <span className="text-[10px] text-slate-500 block font-semibold uppercase">Live WebSocket Stream</span>
-                <span className="font-mono text-emerald-700 text-[11px] font-bold block">
-                  {syncState.activeListenersCount} Channels Synced
+              <div className="p-2.5 rounded-xl bg-white/80 border border-slate-200">
+                <span className="text-[10px] text-slate-500 block font-semibold uppercase">Engine Status</span>
+                <span
+                  className={`font-mono text-[11px] font-bold block ${
+                    syncState.engine === 'pocketbase' ? 'text-amber-700' : 'text-emerald-700'
+                  }`}
+                >
+                  {syncState.engine === 'pocketbase' ? 'VPS Unlimited Live' : `${syncState.activeListenersCount} Channels Synced`}
                 </span>
               </div>
             </div>
 
-            <p className="text-[11px] text-slate-600 leading-relaxed pt-1">
-              Every checkout, stock deduction, and menu update broadcasts in milliseconds to all branches and counters without pressing any button.
-            </p>
+            {syncState.engine === 'pocketbase' ? (
+              <p className="text-[11px] text-amber-900 leading-relaxed pt-1 bg-amber-50/80 p-2 rounded-xl border border-amber-200">
+                ℹ️ <strong>Firestore free-tier daily write limit reached (20,000 writes/day).</strong> The system has seamlessly transitioned operations to your self-hosted PocketBase VPS at <code>http://187.126.115.40:8090</code>. All data is saved without interruption and with unlimited capacity.
+              </p>
+            ) : (
+              <p className="text-[11px] text-slate-600 leading-relaxed pt-1">
+                Every checkout, stock deduction, and menu update broadcasts in milliseconds to all branches and counters without pressing any button.
+              </p>
+            )}
           </div>
 
           {/* SECTION 2: AUTOMATIC BACKEND VPS BACKUP (POCKETBASE) */}

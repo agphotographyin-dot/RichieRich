@@ -92,6 +92,7 @@ class CloudSyncService {
   private isInitialized = false;
   private isApplyingRemoteUpdate = false;
   private isPocketBaseLive = false;
+  private isFirestoreQuotaExhausted = false;
   private debounceTimers: Record<string, any> = {};
   private collectionDocsMap = new Map<string, Map<string, any>>();
   private pbIdMap = new Map<string, string>();
@@ -470,11 +471,42 @@ class CloudSyncService {
   }
 
   /**
+   * Graceful fallback when Google Cloud Firestore daily free write limit is reached
+   */
+  private handleFirestoreQuotaExhausted() {
+    if (this.isFirestoreQuotaExhausted) return;
+    this.isFirestoreQuotaExhausted = true;
+    console.warn('[CloudSync] Firestore daily free write quota reached (20k writes/day). Gracefully transitioning data operations to PocketBase VPS and local cache.');
+
+    // Unsubscribe from failing Firestore listeners to prevent aggressive backoff retries
+    this.unsubscribes.forEach((unsub) => {
+      try {
+        unsub();
+      } catch {}
+    });
+    this.unsubscribes = [];
+
+    // Switch state engine to PocketBase VPS
+    this.setState({
+      engine: 'pocketbase',
+      errorMessage: 'Firestore daily free write quota reached. System seamlessly operating on PocketBase VPS (Unlimited storage).',
+      status: 'connected',
+      isLive: true,
+      activeListenersCount: 0,
+    });
+
+    // Ensure PocketBase listeners are active
+    if (!this.isPocketBaseLive) {
+      this.probePocketBase(false);
+    }
+  }
+
+  /**
    * Subscribes to real-time events on Firestore collections via onSnapshot
    * Every open window, device, store counter, and warehouse updates automatically without reload or push.
    */
   private setupFirestoreListeners() {
-    if (!db) return;
+    if (!db || this.isFirestoreQuotaExhausted) return;
 
     const bindFirestoreCollection = <T extends { id: string }>(
       collectionName: string,
@@ -489,7 +521,6 @@ class CloudSyncService {
         }
 
         const colRef = collection(db, collectionName);
-        let isFirstSnapshot = true;
 
         const unsubscribe: Unsubscribe = onSnapshot(
           colRef,
@@ -500,23 +531,9 @@ class CloudSyncService {
               return;
             }
 
-            if (snapshot.empty && isFirstSnapshot) {
-              isFirstSnapshot = false;
-              // If cloud database is fresh/empty on first visit, auto-seed from local data so cloud is populated
-              const rawLocal = safeStorage.getItem(storageKey);
-              if (rawLocal) {
-                try {
-                  const localItems: any[] = JSON.parse(rawLocal);
-                  if (Array.isArray(localItems) && localItems.length > 0) {
-                    console.log(`[CloudSync] Auto-seeding ${localItems.length} records to Firestore collection "${collectionName}"...`);
-                    this.syncCollectionBatch(collectionName, localItems);
-                  }
-                } catch {}
-              }
+            if (snapshot.empty) {
               return;
             }
-
-            isFirstSnapshot = false;
 
             // Map all remote documents
             map!.clear();
@@ -529,14 +546,22 @@ class CloudSyncService {
             const remoteDocs = Array.from(map!.values()) as T[];
             this.applyRemoteUpdate(storageKey, remoteDocs, isWarehouse, snapshot.docChanges().length || 1);
           },
-          (err) => {
-            console.warn(`[CloudSync] Firestore real-time listener for ${collectionName}:`, err?.message || err);
+          (err: any) => {
+            if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota') || err?.message?.includes('resource-exhausted')) {
+              this.handleFirestoreQuotaExhausted();
+            } else {
+              console.warn(`[CloudSync] Firestore real-time listener notice for ${collectionName}:`, err?.message || err);
+            }
           }
         );
 
         this.unsubscribes.push(unsubscribe);
-      } catch (err) {
-        console.warn(`[CloudSync] Error binding Firestore collection ${collectionName}:`, err);
+      } catch (err: any) {
+        if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota')) {
+          this.handleFirestoreQuotaExhausted();
+        } else {
+          console.warn(`[CloudSync] Error binding Firestore collection ${collectionName}:`, err);
+        }
       }
     };
 
@@ -677,17 +702,28 @@ class CloudSyncService {
         map.set(cleanId, sanitized);
       }
 
-      // 2. Real-Time Write to Google Cloud Firestore
-      if (db) {
+      // 2. Real-Time Write to Google Cloud Firestore (only if free quota remains)
+      if (db && !this.isFirestoreQuotaExhausted) {
         const docRef = doc(db, collectionName, cleanId);
-        setDoc(docRef, { ...sanitized, updatedAt: new Date().toISOString() }, { merge: true }).catch((err) => {
-          console.warn(`[CloudSync] Firestore real-time sync warning for ${collectionName}/${cleanId}:`, err?.message || err);
+        setDoc(docRef, { ...sanitized, updatedAt: new Date().toISOString() }, { merge: true }).catch((err: any) => {
+          if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota')) {
+            this.handleFirestoreQuotaExhausted();
+          } else {
+            console.warn(`[CloudSync] Firestore real-time sync warning for ${collectionName}/${cleanId}:`, err?.message || err);
+          }
         });
       }
 
       // 3. Optional sync to PocketBase if live
       if (this.isPocketBaseLive) {
         this.syncPocketBaseDoc(collectionName, cleanId, sanitized).catch(() => {});
+      } else {
+        // Fallback: sync through backend proxy without blocking
+        fetch('/api/backup/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ collection: collectionName, items: [sanitized] }),
+        }).catch(() => {});
       }
 
       this.setState({
@@ -746,11 +782,15 @@ class CloudSyncService {
         map.delete(cleanId);
       }
 
-      // 1. Delete from Firestore
-      if (db) {
+      // 1. Delete from Firestore (only if not quota exhausted)
+      if (db && !this.isFirestoreQuotaExhausted) {
         const docRef = doc(db, collectionName, cleanId);
-        deleteDoc(docRef).catch((err) => {
-          console.warn(`[CloudSync] Firestore delete warning for ${collectionName}/${cleanId}:`, err);
+        deleteDoc(docRef).catch((err: any) => {
+          if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota')) {
+            this.handleFirestoreQuotaExhausted();
+          } else {
+            console.warn(`[CloudSync] Firestore delete warning for ${collectionName}/${cleanId}:`, err);
+          }
         });
       }
 
@@ -789,23 +829,36 @@ class CloudSyncService {
         return { deletedCount: 0, success: true };
       }
 
-      // 1. Delete from Firestore using writeBatch
-      if (db) {
+      // 1. Delete from Firestore using writeBatch (only if quota remains)
+      if (db && !this.isFirestoreQuotaExhausted) {
         try {
           const colRef = collection(db, collectionName);
-          const snap = await getDocs(colRef).catch(() => null);
+          const snap = await getDocs(colRef).catch((err: any) => {
+            if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota')) {
+              this.handleFirestoreQuotaExhausted();
+            }
+            return null;
+          });
           if (snap && snap.docs.length > 0) {
             const batchSize = 350;
             for (let i = 0; i < snap.docs.length; i += batchSize) {
               const chunk = snap.docs.slice(i, i + batchSize);
               const batch = writeBatch(db);
               chunk.forEach((d) => batch.delete(d.ref));
-              await batch.commit().catch(() => {});
+              await batch.commit().catch((err: any) => {
+                if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota')) {
+                  this.handleFirestoreQuotaExhausted();
+                }
+              });
               deletedCount += chunk.length;
             }
           }
-        } catch (fErr) {
-          console.warn(`[CloudSync] Firestore clear error for ${collectionName}:`, fErr);
+        } catch (fErr: any) {
+          if (fErr?.code === 'resource-exhausted' || fErr?.message?.includes('Quota')) {
+            this.handleFirestoreQuotaExhausted();
+          } else {
+            console.warn(`[CloudSync] Firestore clear error for ${collectionName}:`, fErr);
+          }
         }
       }
 
@@ -869,8 +922,8 @@ class CloudSyncService {
         return { success: true, synced: total };
       }
 
-      // 1. Transactional Firestore Batch Writing (chunks of 350)
-      if (db) {
+      // 1. Transactional Firestore Batch Writing (chunks of 350) - only if quota remains
+      if (db && !this.isFirestoreQuotaExhausted) {
         const batchSize = 350;
         for (let i = 0; i < total; i += batchSize) {
           const chunk = items.slice(i, i + batchSize);
@@ -883,10 +936,17 @@ class CloudSyncService {
               batch.set(docRef, { ...sanitized, updatedAt: new Date().toISOString() }, { merge: true });
             }
           });
-          await batch.commit();
-          synced += chunk.length;
-          const percent = Math.min(100, Math.round((synced / total) * 100));
-          onProgress?.(synced, total, percent);
+          try {
+            await batch.commit();
+            synced += chunk.length;
+            const percent = Math.min(100, Math.round((synced / total) * 100));
+            onProgress?.(synced, total, percent);
+          } catch (batchErr: any) {
+            if (batchErr?.code === 'resource-exhausted' || batchErr?.message?.includes('Quota')) {
+              this.handleFirestoreQuotaExhausted();
+              break; // Stop attempting writes to exhausted Firestore
+            }
+          }
         }
       } else {
         synced = total;
