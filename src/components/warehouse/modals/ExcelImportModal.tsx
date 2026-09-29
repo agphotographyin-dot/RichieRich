@@ -543,7 +543,9 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   <div className="p-4 bg-white border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                     {[
                       { key: 'nameCol', label: 'Product Name' },
-                      { key: 'skuCol', label: 'SKU / Code' },
+                      { key: 'skuCol', label: 'SKU / Base Code' },
+                      { key: 'variantCol', label: 'SKU Variation / Variant' },
+                      { key: 'barcodeCol', label: 'Barcode / EAN' },
                       { key: 'categoryCol', label: 'Category' },
                       { key: 'sellCol', label: 'Selling Price (MRP)' },
                       { key: 'costCol', label: 'Purchase Cost' },

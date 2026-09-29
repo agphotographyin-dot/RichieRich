@@ -533,6 +533,103 @@ async function runAllTests() {
   const checkItem899 = storage.findItemByBarcode('RR-0899');
   assert(!!checkItem2 && !!checkItem754 && !!checkItem899, 'Inventory', 'Hyphenated SKUs with shared prefixes preserved without dropping');
 
+  // 10.7 SKU Variation Testing
+  console.log('\n--- MODULE 12: SKU VARIATIONS IN MASTER INVENTORY ---');
+  const detectedWithVariation = excelInventoryService.detectColumnIndices([
+    'Product Name',
+    'Base SKU',
+    'SKU Variation',
+    'Category',
+    'Selling Price',
+    'Purchase Cost'
+  ]);
+  assert(
+    detectedWithVariation.variantCol >= 0 && detectedWithVariation.skuCol >= 0,
+    'Excel',
+    'SKU Variation column correctly detected alongside Base SKU'
+  );
+
+  // Test intra-batch variation import where multiple items share base SKU
+  const variationBatch = [
+    {
+      isUpdate: false,
+      name: 'Chocolate Lava Paan (Small)',
+      sku: 'RR-CHOC-VAR',
+      barcode: '890111111',
+      category: 'Paan',
+      brand: 'Richie Rich Signature',
+      vendors: ['Central Supply'],
+      vendor: 'Central Supply',
+      priceType: 'fixed' as const,
+      costPrice: 40,
+      sellingPrice: 80,
+      stockQuantity: 20,
+      lowStockThreshold: 5,
+      unit: 'pieces',
+      isTaxApplicable: true,
+      taxRate: 5,
+      status: 'active' as const,
+      description: 'Small size variation',
+    },
+    {
+      isUpdate: false,
+      name: 'Chocolate Lava Paan (Medium)',
+      sku: 'RR-CHOC-VAR',
+      barcode: '890111112',
+      category: 'Paan',
+      brand: 'Richie Rich Signature',
+      vendors: ['Central Supply'],
+      vendor: 'Central Supply',
+      priceType: 'fixed' as const,
+      costPrice: 60,
+      sellingPrice: 120,
+      stockQuantity: 15,
+      lowStockThreshold: 5,
+      unit: 'pieces',
+      isTaxApplicable: true,
+      taxRate: 5,
+      status: 'active' as const,
+      description: 'Medium size variation',
+    },
+    {
+      isUpdate: false,
+      name: 'Chocolate Lava Paan (Large)',
+      sku: 'RR-CHOC-VAR',
+      barcode: '890111113',
+      category: 'Paan',
+      brand: 'Richie Rich Signature',
+      vendors: ['Central Supply'],
+      vendor: 'Central Supply',
+      priceType: 'fixed' as const,
+      costPrice: 80,
+      sellingPrice: 160,
+      stockQuantity: 10,
+      lowStockThreshold: 5,
+      unit: 'pieces',
+      isTaxApplicable: true,
+      taxRate: 5,
+      status: 'active' as const,
+      description: 'Large size variation',
+    },
+  ];
+
+  const varResult = storage.importInventoryBatch(variationBatch, { updateExisting: true });
+  assert(varResult.importedCount === 3, 'Inventory', `All 3 variations imported without intra-batch overwriting (imported: ${varResult.importedCount})`);
+
+  const itemVar1 = storage.findItemByBarcode('890111111');
+  const itemVar2 = storage.findItemByBarcode('890111112');
+  const itemVar3 = storage.findItemByBarcode('890111113');
+  assert(
+    !!itemVar1 && !!itemVar2 && !!itemVar3,
+    'Inventory',
+    'All SKU variations retained and individually retrievable by barcode/SKU'
+  );
+  assert(
+    itemVar1?.sku !== itemVar2?.sku && itemVar2?.sku !== itemVar3?.sku,
+    'Inventory',
+    `Distinct variant SKUs generated: [${itemVar1?.sku}, ${itemVar2?.sku}, ${itemVar3?.sku}]`
+  );
+
   console.log('\n===============================================================');
   console.log(`ALL ${results.length} FEATURES VERIFIED AND PASSED WITH 100% SUCCESS!`);
   console.log('===============================================================\n');

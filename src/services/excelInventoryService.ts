@@ -5,6 +5,7 @@ import { normalizeProductCategory } from './storage';
 export interface ColumnMapping {
   nameCol: number;
   skuCol: number;
+  variantCol: number;
   categoryCol: number;
   brandCol: number;
   vendorCol: number;
@@ -620,6 +621,7 @@ export const excelInventoryService = {
     return {
       nameCol: findCol('product name', 'item name', 'product', 'item', 'title', 'particulars', 'item description', 'dish', 'article name', 'name'),
       skuCol: findCol('sku / product code', 'sku', 'product code', 'item code', 'code', 'item id', 'product id', 'article no', 'part number', 'model no', 'item no'),
+      variantCol: findCol('sku variation', 'sku variations', 'variant sku', 'variation sku', 'variation', 'variant', 'sub sku', 'sub-sku', 'size', 'flavor', 'flavour', 'weight', 'pack', 'packing', 'option', 'option1 value', 'attribute', 'item variation'),
       categoryCol: findCol('category', 'dept', 'department', 'group', 'classification', 'type', 'cat', 'sub category'),
       brandCol: findCol('brand', 'make', 'manufacturer', 'company', 'mfg', 'brand name'),
       vendorCol: findCol('vendor / supplier', 'vendor', 'supplier', 'distributor', 'party name', 'party', 'source'),
@@ -771,7 +773,19 @@ export const excelInventoryService = {
               }
             }
 
-            // 2. CATEGORY (Strict standard: Paan, Cafe, or Essentials; any other category is auto-kept in Essentials)
+            // 2. VARIATION / VARIANT SPECIFICATION
+            const rawVariant =
+              colMap.variantCol >= 0 && colMap.variantCol !== colMap.skuCol
+                ? String(row[colMap.variantCol] || '').trim()
+                : '';
+
+            if (rawVariant && !rawName.toLowerCase().includes(rawVariant.toLowerCase())) {
+              rawName = `${rawName} (${rawVariant})`;
+              wasAutoCorrected = true;
+              correctionNotes.push(`Variation "${rawVariant}" incorporated into product title`);
+            }
+
+            // 3. CATEGORY (Strict standard: Paan, Cafe, or Essentials; any other category is auto-kept in Essentials)
             let rawCat = colMap.categoryCol >= 0 ? String(row[colMap.categoryCol] || '').trim() : '';
             if (!rawCat) {
               rawCat = inferCategoryFromName(rawName);
@@ -786,12 +800,20 @@ export const excelInventoryService = {
               }
             }
 
-            // 3. SKU
+            // 4. SKU & VARIATION SKU
             let rawSku = colMap.skuCol >= 0 ? String(row[colMap.skuCol] || '').trim() : '';
+            if (!rawSku && rawVariant && /^[A-Z0-9_-]{3,25}$/i.test(rawVariant)) {
+              rawSku = rawVariant.toUpperCase();
+              wasAutoCorrected = true;
+            }
+
             if (!rawSku) {
               const prefix = rawCat.slice(0, 3).toUpperCase();
               const nameClean = rawName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase();
-              rawSku = `${prefix}-${nameClean || 'ITM'}-${Math.floor(100 + Math.random() * 900)}`;
+              const varClean = rawVariant ? rawVariant.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() : '';
+              rawSku = varClean
+                ? `${prefix}-${nameClean || 'ITM'}-${varClean}-${Math.floor(100 + Math.random() * 900)}`
+                : `${prefix}-${nameClean || 'ITM'}-${Math.floor(100 + Math.random() * 900)}`;
               wasAutoCorrected = true;
               correctionNotes.push(`SKU auto-generated as "${rawSku}"`);
               warnings.push({
@@ -802,16 +824,21 @@ export const excelInventoryService = {
               });
             }
 
-            // Handle intra-file duplicate SKUs gracefully (auto-suffix instead of erroring out!)
+            // Handle intra-file duplicate SKUs gracefully (auto-suffix with variation code or counter)
             let skuLower = rawSku.toLowerCase();
             if (seenSkusInFile.has(skuLower)) {
               const occCount = (seenSkusInFile.get(skuLower) || 1) + 1;
               seenSkusInFile.set(skuLower, occCount);
               const originalSku = rawSku;
-              rawSku = `${rawSku}-${occCount}`;
+              const varClean = rawVariant ? rawVariant.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase() : '';
+              if (varClean && !rawSku.toUpperCase().endsWith(varClean)) {
+                rawSku = `${rawSku}-${varClean}`;
+              } else {
+                rawSku = `${rawSku}-${occCount}`;
+              }
               skuLower = rawSku.toLowerCase();
               wasAutoCorrected = true;
-              correctionNotes.push(`Duplicate SKU in file auto-adjusted from "${originalSku}" to "${rawSku}"`);
+              correctionNotes.push(`Variation SKU in file adjusted from "${originalSku}" to "${rawSku}"`);
               warnings.push({
                 rowNumber,
                 itemName: rawName,

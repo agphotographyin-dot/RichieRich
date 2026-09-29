@@ -1966,24 +1966,40 @@ export class StorageService {
     let importedCount = 0;
     let updatedCount = 0;
 
-    // Track newly added/updated items during batch to avoid intra-batch duplicate creations
-    const skuIndexMap = new Map<string, number>();
-    const idIndexMap = new Map<string, number>();
+    // Track pre-existing catalog items only (items present before this batch import)
+    const preExistingIdMap = new Map<string, number>();
+    const preExistingSkuMap = new Map<string, number>();
 
     currentInventory.forEach((item, idx) => {
-      if (item.id) idIndexMap.set(item.id, idx);
-      if (item.sku) skuIndexMap.set(item.sku.trim().toLowerCase(), idx);
+      if (item.id) preExistingIdMap.set(item.id, idx);
+      if (item.sku) preExistingSkuMap.set(item.sku.trim().toLowerCase(), idx);
     });
 
+    // Track SKUs seen in the CURRENT batch to prevent intra-batch variation overwrites
+    const batchSeenSkus = new Set<string>();
+
     parsedItems.forEach((row, rowIdx) => {
-      const cleanSku = row.sku ? row.sku.trim().toLowerCase() : '';
+      let cleanSku = row.sku ? row.sku.trim() : '';
       const normalizedCat = normalizeProductCategory(row.category);
       let existingIndex = -1;
 
-      if (row.existingId && idIndexMap.has(row.existingId)) {
-        existingIndex = idIndexMap.get(row.existingId)!;
-      } else if (cleanSku && skuIndexMap.has(cleanSku)) {
-        existingIndex = skuIndexMap.get(cleanSku)!;
+      const skuKey = cleanSku.toLowerCase();
+      const isIntraBatchDuplicate = skuKey ? batchSeenSkus.has(skuKey) : false;
+
+      // Only match against pre-existing items if not an intra-batch duplicate
+      if (row.existingId && preExistingIdMap.has(row.existingId)) {
+        existingIndex = preExistingIdMap.get(row.existingId)!;
+      } else if (!isIntraBatchDuplicate && skuKey && preExistingSkuMap.has(skuKey)) {
+        existingIndex = preExistingSkuMap.get(skuKey)!;
+      }
+
+      // If intra-batch variation with identical SKU, assign unique variant SKU so all variations persist
+      if (isIntraBatchDuplicate) {
+        cleanSku = `${cleanSku}-V${rowIdx + 1}`;
+        row.sku = cleanSku;
+      }
+      if (cleanSku) {
+        batchSeenSkus.add(cleanSku.toLowerCase());
       }
 
       if (existingIndex >= 0 && existingIndex < currentInventory.length) {
@@ -2060,9 +2076,6 @@ export class StorageService {
         };
 
         currentInventory.push(newItem);
-        idIndexMap.set(newItemId, currentInventory.length - 1);
-        if (cleanSku) skuIndexMap.set(cleanSku, currentInventory.length - 1);
-
         importedCount++;
       }
     });
