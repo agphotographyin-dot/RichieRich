@@ -1,133 +1,270 @@
-import express from 'express';
-import { createServer as createViteServer } from 'vite';
+import express, { Request, Response } from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import fs from 'fs';
-import { vpsBackupService } from './src/server/vpsBackupService';
+import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function startServer() {
-  const app = express();
-  // Dev server must run on port 3000 behind the system nginx proxy
-  const PORT = 3000;
-  const isProduction = process.env.NODE_ENV === 'production';
+const app = express();
+const PORT = parseInt(process.env.PORT || '3000', 10);
+const DATA_DIR = path.resolve(__dirname, 'data');
+const DATA_FILE = path.join(DATA_DIR, 'store_sync.json');
 
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Ensure data directory exists
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
 
-  // --- API ROUTES FOR VPS POCKETBASE BACKUP ---
-  
-  // 1. Get VPS Backup Status & Next Run
-  app.get('/api/backup/status', (_req, res) => {
-    res.json(vpsBackupService.getStatus());
-  });
+// In-memory data store for sub-millisecond retrieval
+const storeData: Record<string, Record<string, any>> = {
+  inventory: {},
+  orders: {},
+  stores: {},
+  customers: {},
+  store_expenses: {},
+  purchase_orders: {},
+  inward_bills: {},
+  stock_transfers: {},
+  store_indents: {},
+  suppliers: {},
+  system_metadata: {},
+};
 
-  // 2. Test VPS PocketBase Connectivity (Ping)
-  app.get('/api/backup/test', async (req, res) => {
+// Load saved data from disk if present
+try {
+  if (fs.existsSync(DATA_FILE)) {
+    const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    Object.assign(storeData, parsed);
+    console.log('[SyncServer] Loaded existing store data from disk successfully.');
+  }
+} catch (err) {
+  console.warn('[SyncServer] Notice: Initializing new empty store sync database.');
+}
+
+// Debounced disk persistence (batches disk writes to prevent I/O lag)
+let persistTimer: NodeJS.Timeout | null = null;
+const schedulePersist = () => {
+  if (persistTimer) return;
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
     try {
-      const url = req.query.url as string | undefined;
-      const result = await vpsBackupService.testConnection(url);
-      res.json(result);
-    } catch (err: any) {
-      res.status(500).json({ reachable: false, error: err?.message });
+      fs.writeFileSync(DATA_FILE, JSON.stringify(storeData, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('[SyncServer] Disk persist error:', err);
     }
-  });
+  }, 100);
+};
 
-  // 3. Trigger On-Demand VPS Backup
-  app.post('/api/backup/trigger', async (_req, res) => {
+// Parse JSON bodies up to 50MB (handles large inventory catalogs)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Universal Permissive CORS for seamless cross-counter POS communication
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+// Active Server-Sent Events (SSE) connections across POS counters and devices
+interface SSEClient {
+  id: string;
+  res: Response;
+  connectedAt: Date;
+}
+const sseClients = new Set<SSEClient>();
+
+// Broadcast helper: sends JSON payload to all active clients in <1 millisecond
+const broadcastChange = (payload: { collection: string; action: 'upsert' | 'delete' | 'batch'; data: any; senderId?: string }) => {
+  const message = `data: ${JSON.stringify(payload)}\n\n`;
+  for (const client of sseClients) {
     try {
-      const result = await vpsBackupService.runBackupCycle();
-      res.json({ success: result.status !== 'error', status: result });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err?.message || 'Backup failed' });
+      client.res.write(message);
+    } catch {
+      sseClients.delete(client);
     }
+  }
+};
+
+// -------------------------------------------------------------
+// Real-Time SSE Stream Endpoint
+// -------------------------------------------------------------
+app.get('/api/sync/events', (req: Request, res: Response) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
   });
 
-  // 4. Update VPS Configuration (Target URL & Interval)
-  app.post('/api/backup/config', (req, res) => {
-    const { targetUrl, intervalMinutes } = req.body;
-    if (typeof targetUrl === 'string' && targetUrl.trim()) {
-      vpsBackupService.setTargetUrl(targetUrl);
-    }
-    if (typeof intervalMinutes === 'number' && intervalMinutes >= 1) {
-      vpsBackupService.setIntervalMinutes(intervalMinutes);
-    }
-    res.json({ success: true, status: vpsBackupService.getStatus() });
-  });
+  const clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const client: SSEClient = { id: clientId, res, connectedAt: new Date() };
+  sseClients.add(client);
 
-  // 5. Update Interval only
-  app.post('/api/backup/interval', (req, res) => {
-    const { intervalMinutes } = req.body;
-    if (typeof intervalMinutes === 'number' && intervalMinutes >= 1) {
-      vpsBackupService.setIntervalMinutes(intervalMinutes);
-      res.json({ success: true, status: vpsBackupService.getStatus() });
-    } else {
-      res.status(400).json({ success: false, error: 'Invalid intervalMinutes parameter' });
-    }
-  });
+  // Send initial welcome & connection confirmation
+  res.write(`data: ${JSON.stringify({ type: 'CONNECTED', clientId, activePeers: sseClients.size, timestamp: Date.now() })}\n\n`);
 
-  // 6. Push Full Client Snapshot to VPS (Fallback when Firestore quota is exhausted)
-  app.post('/api/backup/push-all', async (req, res) => {
-    const { payload } = req.body;
-    if (!payload || typeof payload !== 'object') {
-      return res.status(400).json({ success: false, error: 'Missing payload object' });
-    }
+  // Heartbeat to keep connection alive through any firewall/proxy (every 20s)
+  const heartbeatTimer = setInterval(() => {
     try {
-      const result = await vpsBackupService.pushAllLocalPayload(payload);
-      res.json(result);
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err?.message });
+      res.write(`: heartbeat\n\n`);
+    } catch {
+      clearInterval(heartbeatTimer);
+      sseClients.delete(client);
     }
+  }, 20000);
+
+  req.on('close', () => {
+    clearInterval(heartbeatTimer);
+    sseClients.delete(client);
+  });
+});
+
+// -------------------------------------------------------------
+// Health Check Endpoint
+// -------------------------------------------------------------
+app.get('/api/health', (req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    code: 200,
+    message: 'Richie Rich High-Performance Real-Time Sync Engine is Healthy',
+    uptime: Math.round(process.uptime()),
+    activeLiveStreams: sseClients.size,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// -------------------------------------------------------------
+// Get All Data (Instant Initial Hydration in a single call)
+// -------------------------------------------------------------
+app.get('/api/sync/all', (req: Request, res: Response) => {
+  const result: Record<string, any[]> = {};
+  for (const [colName, docs] of Object.entries(storeData)) {
+    result[colName] = Object.values(docs);
+  }
+  res.json({ success: true, data: result });
+});
+
+// -------------------------------------------------------------
+// Get Specific Collection
+// -------------------------------------------------------------
+app.get('/api/sync/:collection', (req: Request, res: Response) => {
+  const colName = req.params.collection;
+  const docs = storeData[colName] ? Object.values(storeData[colName]) : [];
+  res.json({ success: true, collection: colName, count: docs.length, data: docs });
+});
+
+// -------------------------------------------------------------
+// Upsert Single Document in Real Time
+// -------------------------------------------------------------
+app.post('/api/sync/:collection', (req: Request, res: Response) => {
+  const colName = req.params.collection;
+  const item = req.body;
+  const docId = String(item.id || item.recordId || Date.now()).trim();
+
+  if (!storeData[colName]) {
+    storeData[colName] = {};
+  }
+
+  const cleanItem = { ...item, id: docId, updatedAt: new Date().toISOString() };
+  storeData[colName][docId] = cleanItem;
+  schedulePersist();
+
+  // Instant sub-millisecond broadcast to all other counters
+  const senderId = (req.headers['x-client-id'] as string) || undefined;
+  broadcastChange({
+    collection: colName,
+    action: 'upsert',
+    data: cleanItem,
+    senderId,
   });
 
-  // 7. Client Push Proxy (bypasses browser mixed-content blocks when syncing custom batches)
-  app.post('/api/backup/push', async (req, res) => {
-    const { collection, items } = req.body;
-    if (!collection || !Array.isArray(items)) {
-      return res.status(400).json({ success: false, error: 'Missing collection or items array' });
+  res.json({ success: true, id: docId, collection: colName });
+});
+
+// -------------------------------------------------------------
+// Batch Upsert Collection (e.g. bulk catalog or initial seed)
+// -------------------------------------------------------------
+app.post('/api/sync/batch/:collection', (req: Request, res: Response) => {
+  const colName = req.params.collection;
+  const { items } = req.body;
+
+  if (!Array.isArray(items)) {
+    return res.status(400).json({ success: false, error: 'Expected items array' });
+  }
+
+  if (!storeData[colName]) {
+    storeData[colName] = {};
+  }
+
+  const updated: any[] = [];
+  const now = new Date().toISOString();
+
+  for (const item of items) {
+    if (item && item.id) {
+      const docId = String(item.id).trim();
+      const sanitized = { ...item, id: docId, updatedAt: item.updatedAt || now };
+      storeData[colName][docId] = sanitized;
+      updated.push(sanitized);
     }
-    try {
-      const result = await vpsBackupService.pushBatch(collection, items);
-      res.json(result);
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err?.message });
-    }
+  }
+
+  schedulePersist();
+
+  const senderId = (req.headers['x-client-id'] as string) || undefined;
+  broadcastChange({
+    collection: colName,
+    action: 'batch',
+    data: updated,
+    senderId,
   });
 
-  // --- STATIC / SPA VITE MIDDLEWARE ---
-  if (!isProduction) {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.resolve(__dirname, 'dist');
-    app.use(express.static(distPath));
+  res.json({ success: true, collection: colName, syncedCount: updated.length });
+});
 
-    app.get('*', (_req, res) => {
-      const indexPath = path.resolve(distPath, 'index.html');
-      if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-      } else {
-        res.status(404).send('Application build not found.');
-      }
+// -------------------------------------------------------------
+// Delete Document
+// -------------------------------------------------------------
+app.delete('/api/sync/:collection/:id', (req: Request, res: Response) => {
+  const { collection: colName, id } = req.params;
+  const docId = String(id).trim();
+
+  if (storeData[colName] && storeData[colName][docId]) {
+    delete storeData[colName][docId];
+    schedulePersist();
+
+    const senderId = (req.headers['x-client-id'] as string) || undefined;
+    broadcastChange({
+      collection: colName,
+      action: 'delete',
+      data: { id: docId },
+      senderId,
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[Server] Richie Rich Pan House Full-Stack Server running at http://0.0.0.0:${PORT}`);
-    console.log(`[Server] Primary Real-Time Database: Google Cloud Firestore`);
-    console.log(`[Server] Background Backup Target: PocketBase VPS (http://187.126.115.40:8090)`);
+  res.json({ success: true, id: docId, collection: colName });
+});
 
-    // Start background interval backup scheduler (default every 5 minutes)
-    vpsBackupService.startScheduler(5);
+// -------------------------------------------------------------
+// Serve Production Static Frontend Build
+// -------------------------------------------------------------
+const distPath = path.join(__dirname, 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('*', (req: Request, res: Response) => {
+    res.sendFile(path.join(distPath, 'index.html'));
   });
 }
 
-startServer().catch((err) => {
-  console.error('[Server] Fatal startup error:', err);
-  process.exit(1);
+// Start Server
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[RichieRich POS Engine] Real-time sync hub running on http://0.0.0.0:${PORT}`);
+  console.log(`[RichieRich POS Engine] Health Check: http://0.0.0.0:${PORT}/api/health`);
+  console.log(`[RichieRich POS Engine] Real-Time Stream: http://0.0.0.0:${PORT}/api/sync/events`);
 });
