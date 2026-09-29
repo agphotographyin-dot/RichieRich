@@ -40,6 +40,15 @@ export const BACKUP_COLLECTIONS = [
   'system_metadata',
 ];
 
+export function sanitizePocketBaseUrl(url: string): string {
+  if (!url) return '';
+  let clean = url.trim().replace(/\/+$/, '');
+  clean = clean.replace(/\/api\/health\/?$/, '');
+  clean = clean.replace(/\/api\/?$/, '');
+  clean = clean.replace(/\/_\/?$/, '');
+  return clean;
+}
+
 export class VPSBackupService {
   private pb: PocketBase;
   private db: Firestore | null = null;
@@ -58,11 +67,11 @@ export class VPSBackupService {
     collections: {},
     nextRunAt: null,
     intervalMinutes: 5,
-    targetUrl: DEFAULT_POCKETBASE_URL,
+    targetUrl: sanitizePocketBaseUrl(DEFAULT_POCKETBASE_URL),
   };
 
   constructor(targetUrl = DEFAULT_POCKETBASE_URL) {
-    this.targetUrl = targetUrl;
+    this.targetUrl = sanitizePocketBaseUrl(targetUrl);
     this.pb = new PocketBase(this.targetUrl);
     this.pb.autoCancellation(false);
     this.initFirebase();
@@ -92,7 +101,7 @@ export class VPSBackupService {
 
   public setTargetUrl(newUrl: string) {
     if (!newUrl || !newUrl.trim()) return;
-    const cleanUrl = newUrl.trim().replace(/\/+$/, '');
+    const cleanUrl = sanitizePocketBaseUrl(newUrl);
     this.targetUrl = cleanUrl;
     this.status.targetUrl = cleanUrl;
     this.pb = new PocketBase(cleanUrl);
@@ -107,7 +116,7 @@ export class VPSBackupService {
     error?: string;
     url: string;
   }> {
-    const urlToTest = (candidateUrl || this.targetUrl).trim().replace(/\/+$/, '');
+    const urlToTest = candidateUrl ? sanitizePocketBaseUrl(candidateUrl) : this.targetUrl;
     const startTime = Date.now();
     try {
       const testPb = new PocketBase(urlToTest);

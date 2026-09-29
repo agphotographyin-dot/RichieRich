@@ -239,15 +239,31 @@ class CloudSyncService {
     url: string;
   }> {
     try {
-      const q = candidateUrl ? `?url=${encodeURIComponent(candidateUrl)}` : '';
-      const res = await fetch(`/api/backup/test${q}`);
-      if (res.ok) {
+      const cleanUrl = candidateUrl
+        ? candidateUrl
+            .trim()
+            .replace(/\/+$/, '')
+            .replace(/\/api\/health\/?$/, '')
+            .replace(/\/api\/?$/, '')
+            .replace(/\/_\/?$/, '')
+        : '';
+      const q = cleanUrl ? `?url=${encodeURIComponent(cleanUrl)}` : '';
+      
+      let res = await fetch(`/api/backup/test${q}`).catch(() => null);
+      if (!res || !res.ok) {
+        // Fallback try with window.location.origin
+        if (typeof window !== 'undefined' && window.location) {
+          res = await fetch(`${window.location.origin}/api/backup/test${q}`).catch(() => null);
+        }
+      }
+
+      if (res && res.ok) {
         return await res.json();
       }
       return {
         reachable: false,
-        error: `Server responded with status ${res.status}`,
-        url: candidateUrl || '',
+        error: res ? `Server responded with status ${res.status}` : 'Backend server unreachable',
+        url: cleanUrl || '',
       };
     } catch (err: any) {
       return {
