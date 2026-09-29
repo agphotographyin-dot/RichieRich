@@ -1,22 +1,41 @@
 services:
-  richierich-web:
+  # -------------------------------------------------------------
+  # 1. Richie Rich Frontend SPA (Vite + Nginx)
+  # -------------------------------------------------------------
+  richierich:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: richierich-web
-    restart: always
+      args:
+        - VITE_POCKETBASE_URL=http://187.126.115.40:8090
+    container_name: richierich
+    restart: unless-stopped
     ports:
-      # Map host port 80 to container port 80 (change to 3000:80 if you run an external reverse proxy)
       - "80:80"
     environment:
       - NODE_ENV=production
-    # Resource safety limits to keep your VPS responsive
-    deploy:
-      resources:
-        limits:
-          memory: 512M
+    depends_on:
+      - pocketbase
+
+  # -------------------------------------------------------------
+  # 2. PocketBase Real-Time Backend & SQLite Database Engine
+  # -------------------------------------------------------------
+  pocketbase:
+    image: ghcr.io/muchobien/pocketbase:latest
+    container_name: richierich-pocketbase
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - pb_data:/pb_data
+    environment:
+      - POCKETBASE_ENCRYPTION_KEY=
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
-      interval: 30s
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8090/api/health || exit 1"]
+      interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
+
+volumes:
+  pb_data:
+    driver: local
