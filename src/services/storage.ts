@@ -1326,18 +1326,21 @@ export class StorageService {
         parsed.forEach((item, idx) => {
           if (!item || typeof item !== 'object') return;
           let id = item.id ? String(item.id).trim() : '';
-          const rawSku = item.sku ? String(item.sku).trim().toUpperCase() : '';
-          if (!rawSku) return;
-
-          // If SKU has duplicate suffix like -1, -2, check against base SKU
-          const baseMatch = rawSku.match(/^([A-Z0-9_-]+)-(\d+)$/i);
-          const baseSku = baseMatch ? baseMatch[1].toUpperCase() : rawSku;
-          const skuKey = rawSku.toLowerCase();
-          const baseSkuKey = baseSku.toLowerCase();
-
-          if (seenSkus.has(skuKey) || (baseMatch && seenSkus.has(baseSkuKey))) {
+          let rawSku = item.sku ? String(item.sku).trim().toUpperCase() : '';
+          if (!rawSku) {
+            rawSku = `SKU-ITEM-${idx + 1}`;
+            item.sku = rawSku;
             hasChanges = true;
-            return; // Drop duplicate item instead of renaming with suffixes!
+          }
+
+          let skuKey = rawSku.toLowerCase();
+
+          // Only if EXACT duplicate SKU already encountered, ensure unique SKU instead of dropping
+          if (seenSkus.has(skuKey)) {
+            rawSku = `${rawSku}-${idx + 1}`;
+            item.sku = rawSku;
+            skuKey = rawSku.toLowerCase();
+            hasChanges = true;
           }
 
           if (!id || seenIds.has(id)) {
@@ -1347,7 +1350,6 @@ export class StorageService {
           }
           seenIds.add(id);
           seenSkus.add(skuKey);
-          if (baseMatch) seenSkus.add(baseSkuKey);
 
           uniqueParsed.push(item);
         });
@@ -1782,14 +1784,13 @@ export class StorageService {
             continue;
           }
 
-          // If duplicate SKU (case-insensitive) or artificial suffix variant from old bug (e.g., -1, -2):
-          const skuKey = itemSku.toLowerCase();
-          const baseMatch = itemSku.match(/^([A-Z0-9_-]+)-(\d+)$/i);
-          const baseSkuKey = baseMatch ? baseMatch[1].toLowerCase() : skuKey;
-
-          if (seenSkus.has(skuKey) || (baseMatch && seenSkus.has(baseSkuKey))) {
+          // Exact case-insensitive duplicate SKU check
+          let skuKey = itemSku.toLowerCase();
+          if (seenSkus.has(skuKey)) {
+            itemSku = `${itemSku}-${i + 1}`;
+            item.sku = itemSku;
+            skuKey = itemSku.toLowerCase();
             hadDuplicatesOrUnnormalized = true;
-            continue; // Drop duplicate instead of appending suffixes!
           }
 
           // Normalize Category: Any category other than Paan or Cafe is automatically kept in Essentials
@@ -1801,7 +1802,6 @@ export class StorageService {
 
           seenIds.add(itemId);
           seenSkus.add(skuKey);
-          if (baseMatch) seenSkus.add(baseSkuKey);
 
           sanitized.push(item);
         }
@@ -1854,8 +1854,11 @@ export class StorageService {
       if (seenIds.has(itemId)) return;
 
       let itemSku = item.sku ? String(item.sku).trim().toUpperCase() : `SKU-${idx + 1}`;
-      const skuKey = itemSku.toLowerCase();
-      if (seenSkus.has(skuKey)) return; // Drop duplicate SKU
+      let skuKey = itemSku.toLowerCase();
+      if (seenSkus.has(skuKey)) {
+        itemSku = `${itemSku}-${idx + 1}`;
+        skuKey = itemSku.toLowerCase();
+      }
 
       seenIds.add(itemId);
       seenSkus.add(skuKey);
@@ -2056,17 +2059,9 @@ export class StorageService {
           storeAllocations,
         };
 
-        currentInventory.unshift(newItem);
-        idIndexMap.set(newItemId, 0);
-        if (cleanSku) skuIndexMap.set(cleanSku, 0);
-
-        // Re-index map keys because of unshift
-        idIndexMap.clear();
-        skuIndexMap.clear();
-        currentInventory.forEach((it, idx) => {
-          if (it.id) idIndexMap.set(it.id, idx);
-          if (it.sku) skuIndexMap.set(it.sku.trim().toLowerCase(), idx);
-        });
+        currentInventory.push(newItem);
+        idIndexMap.set(newItemId, currentInventory.length - 1);
+        if (cleanSku) skuIndexMap.set(cleanSku, currentInventory.length - 1);
 
         importedCount++;
       }

@@ -273,14 +273,35 @@ class CloudSyncService {
   private applyRemoteUpdate(storageKey: string, remoteDocs: any[], isWarehouse: boolean, count: number) {
     this.isApplyingRemoteUpdate = true;
     try {
-      if (this.onStorageCacheUpdate) {
-        this.onStorageCacheUpdate(storageKey, remoteDocs);
-      }
-      if (isWarehouse && this.onWarehouseCacheUpdate) {
-        this.onWarehouseCacheUpdate(storageKey, remoteDocs);
+      let resolvedDocs = remoteDocs;
+      if (storageKey === STORAGE_KEYS.INVENTORY && Array.isArray(remoteDocs)) {
+        try {
+          const rawLocal = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
+          if (rawLocal) {
+            const localItems: any[] = JSON.parse(rawLocal);
+            if (Array.isArray(localItems) && localItems.length > remoteDocs.length) {
+              const remoteIdSet = new Set(remoteDocs.map((r: any) => String(r.id || r.sku)));
+              const unSyncedLocal = localItems.filter(
+                (loc) => loc && !remoteIdSet.has(String(loc.id)) && (!loc.sku || !remoteIdSet.has(String(loc.sku)))
+              );
+              if (unSyncedLocal.length > 0) {
+                resolvedDocs = [...remoteDocs, ...unSyncedLocal];
+              }
+            }
+          }
+        } catch {
+          // fallback to remoteDocs
+        }
       }
 
-      this.scheduleStoragePersist(storageKey, remoteDocs);
+      if (this.onStorageCacheUpdate) {
+        this.onStorageCacheUpdate(storageKey, resolvedDocs);
+      }
+      if (isWarehouse && this.onWarehouseCacheUpdate) {
+        this.onWarehouseCacheUpdate(storageKey, resolvedDocs);
+      }
+
+      this.scheduleStoragePersist(storageKey, resolvedDocs);
 
       if (isWarehouse) {
         this.onWarehouseChangeNotify?.();
@@ -381,10 +402,17 @@ class CloudSyncService {
 
     this.debounceTimers[collectionName] = setTimeout(async () => {
       try {
-        const slice = items.slice(0, 150);
-        for (const item of slice) {
-          if (!item || !item.id) continue;
-          await this.syncDocument(collectionName, String(item.id), item);
+        // Sync items in controlled batches so large catalogs (e.g. 1000+ SKUs) sync without truncation
+        const batchSize = 50;
+        for (let i = 0; i < items.length; i += batchSize) {
+          const batch = items.slice(i, i + batchSize);
+          await Promise.all(
+            batch.map(async (item) => {
+              if (item && item.id) {
+                await this.syncDocument(collectionName, String(item.id), item);
+              }
+            })
+          );
         }
 
         this.setState({

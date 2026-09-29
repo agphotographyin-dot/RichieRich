@@ -168,8 +168,12 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
     const unsubWh = warehouseStorage.subscribe(() => {
       loadData();
     });
+    const unsubStorage = storage.subscribe(() => {
+      loadData();
+    });
     return () => {
       unsubWh();
+      unsubStorage();
     };
   }, []);
 

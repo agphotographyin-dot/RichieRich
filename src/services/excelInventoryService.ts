@@ -918,8 +918,10 @@ export const excelInventoryService = {
             const rawDesc = colMap.descCol >= 0 ? String(row[colMap.descCol] || '').trim() : '';
             const description = rawDesc || `${rawName} (${brand}) - Catalog Item`;
 
-            // Check if existing product in catalog (by SKU or Name)
-            const existingMatch = existingSkuMap.get(skuLower) || existingNameMap.get(rawName.toLowerCase());
+            // Check if existing product in catalog (by SKU or Barcode first, or by Name only if no SKU column exists in file)
+            const existingMatch = existingSkuMap.get(skuLower) ||
+              (rawBarcode ? existingBarcodeMap.get(rawBarcode.toLowerCase()) : undefined) ||
+              (colMap.skuCol < 0 ? existingNameMap.get(rawName.toLowerCase()) : undefined);
             const isUpdate = !!existingMatch;
 
             if (isUpdate) {

@@ -493,6 +493,46 @@ async function runAllTests() {
   const matches = getSupplierProducts(supplier, storage.getInventory());
   assert(Array.isArray(matches), 'Procurement', 'AI/Smart Supplier Product Catalog Matching');
 
+  // 10.6 Large SKU Batch Import & Persistence (Regression test for disappearing SKUs / stuck at 754 bug)
+  console.log('\n--- MODULE 11: LARGE INVENTORY & SKU RETENTION REGRESSION ---');
+  const initialCount = storage.getInventory().length;
+  const largeBatch = Array.from({ length: 900 }, (_, i) => ({
+    isUpdate: false,
+    name: `Test Brand Product ${i + 1}`,
+    sku: `RR-${String(i + 1).padStart(4, '0')}`,
+    barcode: `890999${String(i + 1).padStart(6, '0')}`,
+    category: i % 2 === 0 ? 'Paan' : 'Essentials',
+    brand: 'Richie Rich Signature',
+    vendors: ['Central Supply'],
+    vendor: 'Central Supply',
+    priceType: 'fixed' as const,
+    costPrice: 50,
+    sellingPrice: 100,
+    stockQuantity: 10,
+    lowStockThreshold: 5,
+    unit: 'pieces',
+    isTaxApplicable: true,
+    taxRate: 5,
+    status: 'active' as const,
+    description: `Product description ${i + 1}`,
+  }));
+
+  const { importedCount } = storage.importInventoryBatch(largeBatch, { updateExisting: true });
+  assert(importedCount === 900, 'Inventory', `Batch import accepted all 900 records (imported: ${importedCount})`);
+
+  const fetchedInventory = storage.getInventory();
+  assert(
+    fetchedInventory.length >= initialCount + 900,
+    'Inventory',
+    `Master Inventory retained all SKUs without dropping or disappearing (Total SKUs: ${fetchedInventory.length}, well beyond 754)`
+  );
+
+  // Verify specific items like RR-0002, RR-0754, RR-0899 are all present
+  const checkItem2 = storage.findItemByBarcode('RR-0002');
+  const checkItem754 = storage.findItemByBarcode('RR-0754');
+  const checkItem899 = storage.findItemByBarcode('RR-0899');
+  assert(!!checkItem2 && !!checkItem754 && !!checkItem899, 'Inventory', 'Hyphenated SKUs with shared prefixes preserved without dropping');
+
   console.log('\n===============================================================');
   console.log(`ALL ${results.length} FEATURES VERIFIED AND PASSED WITH 100% SUCCESS!`);
   console.log('===============================================================\n');
