@@ -1,4 +1,4 @@
-import { pb, getPocketBaseUrl } from './pocketbaseClient';
+import { pb, getPocketBaseUrl, setCustomPocketBaseUrl, DEFAULT_VPS_IP } from './pocketbaseClient';
 import { db, isFirebaseConfigured, firebaseConfig } from './firebaseClient';
 import {
   collection,
@@ -186,15 +186,35 @@ class CloudSyncService {
   }
 
   /**
+   * Dynamically update PocketBase server URL and re-test connection
+   */
+  public async reconnectWithServerUrl(newUrl?: string): Promise<boolean> {
+    if (newUrl !== undefined) {
+      setCustomPocketBaseUrl(newUrl);
+    }
+    const targetUrl = getPocketBaseUrl();
+    pb.baseUrl = targetUrl;
+    this.isPocketBaseLive = false;
+
+    this.setState({
+      status: 'connecting',
+      serverUrl: targetUrl,
+    });
+
+    const firestoreLive = isFirebaseConfigured() && Boolean(db);
+    return await this.probePocketBase(firestoreLive);
+  }
+
+  /**
    * Background probe for PocketBase
    */
-  private async probePocketBase(firestoreAlreadyLive: boolean) {
+  private async probePocketBase(firestoreAlreadyLive: boolean): Promise<boolean> {
     try {
       const candidateUrls = [
         getPocketBaseUrl(),
+        DEFAULT_VPS_IP,
+        `${DEFAULT_VPS_IP}:8090`,
         typeof window !== 'undefined' ? window.location.origin : '',
-        'http://187.126.115.40:8090',
-        'http://187.126.115.40',
       ].filter((u): u is string => Boolean(u && u.trim()));
 
       const uniqueCandidates = Array.from(new Set(candidateUrls));
@@ -226,7 +246,9 @@ class CloudSyncService {
             : workingUrl,
           status: 'connected',
           isLive: true,
+          errorMessage: undefined,
         });
+        return true;
       } else if (!firestoreAlreadyLive) {
         // If neither Firestore nor PocketBase is reachable
         this.setState({
@@ -234,9 +256,11 @@ class CloudSyncService {
           isLive: false,
           errorMessage: 'Operating in local offline cache mode.',
         });
+        return false;
       }
+      return false;
     } catch {
-      // Background probe failure is non-fatal when Firestore is live
+      return false;
     }
   }
 

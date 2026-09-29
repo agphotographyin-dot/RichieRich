@@ -4,8 +4,14 @@ import {
   getFirestore,
   Firestore,
   memoryLocalCache,
+  setLogLevel,
 } from 'firebase/firestore';
 import rawConfig from '../../firebase-applet-config.json';
+
+// Silence internal gRPC WebChannel transport messages (idle stream closures, timeout notices)
+try {
+  setLogLevel('silent');
+} catch {}
 
 export interface FirebaseConfigType {
   projectId: string;
