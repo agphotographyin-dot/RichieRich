@@ -4,9 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "start": "tsx server.ts",
-    "build": "vite build && node scripts/postbuild.js",
+    "dev": "vite --port=3000 --host=0.0.0.0",
+    "build": "vite build && node scripts/postbuild.js && esbuild server.ts --bundle --platform=node --format=esm --outfile=server.js --external:express",
+    "start": "node server.js",
+    "server": "node server.js",
     "preview": "vite preview",
     "test": "tsx test_comprehensive_suite.ts",
     "clean": "rm -rf dist server.js",
