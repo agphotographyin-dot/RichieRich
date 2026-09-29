@@ -17,18 +17,6 @@ import { PurchaseOrder, PurchaseBill, StockTransfer, StoreStockIndent, Supplier 
 export type SyncEngine = 'pocketbase' | 'firebase' | 'hybrid';
 export type SyncStatus = 'connected' | 'connecting' | 'syncing' | 'offline' | 'error';
 
-export interface VpsBackupInfo {
-  status: 'idle' | 'running' | 'success' | 'error';
-  lastRunAt: string | null;
-  lastDurationMs: number;
-  totalItemsBackedUp: number;
-  collections: Record<string, number>;
-  nextRunAt: string | null;
-  intervalMinutes: number;
-  targetUrl: string;
-  error?: string;
-}
-
 export interface CloudSyncState {
   status: SyncStatus;
   isLive: boolean;
@@ -40,7 +28,6 @@ export interface CloudSyncState {
   itemsSynced: number;
   errorMessage?: string;
   activeListenersCount: number;
-  vpsBackup?: VpsBackupInfo;
 }
 
 type SyncListener = (state: CloudSyncState) => void;
@@ -92,7 +79,6 @@ class CloudSyncService {
   private isInitialized = false;
   private isApplyingRemoteUpdate = false;
   private isPocketBaseLive = false;
-  private isFirestoreQuotaExhausted = false;
   private debounceTimers: Record<string, any> = {};
   private collectionDocsMap = new Map<string, Map<string, any>>();
   private pbIdMap = new Map<string, string>();
@@ -197,222 +183,6 @@ class CloudSyncService {
 
     // 2. Background probe for PocketBase VPS (for secondary or dual synchronization)
     this.probePocketBase(firestoreConnected);
-
-    // 3. Start polling backend VPS backup status
-    this.startVpsBackupStatusPolling();
-  }
-
-  private vpsStatusPollTimer: any = null;
-
-  private startVpsBackupStatusPolling() {
-    this.fetchVpsBackupStatus();
-    if (this.vpsStatusPollTimer) clearInterval(this.vpsStatusPollTimer);
-    this.vpsStatusPollTimer = setInterval(() => {
-      this.fetchVpsBackupStatus();
-    }, 12000);
-  }
-
-  /**
-   * Fetches latest VPS PocketBase backup status from backend scheduler
-   */
-  public async fetchVpsBackupStatus(): Promise<VpsBackupInfo | null> {
-    try {
-      const res = await fetch('/api/backup/status').catch(() => null);
-      if (res && res.ok) {
-        const info: VpsBackupInfo = await res.json();
-        this.setState({ vpsBackup: info });
-        return info;
-      }
-    } catch {
-      // Backend may be offline or in non-server mode
-    }
-    return null;
-  }
-
-  /**
-   * Tests VPS PocketBase connectivity from backend server
-   */
-  public async testVpsConnection(candidateUrl?: string): Promise<{
-    reachable: boolean;
-    code?: number;
-    latencyMs?: number;
-    error?: string;
-    url: string;
-  }> {
-    try {
-      const cleanUrl = candidateUrl
-        ? candidateUrl
-            .trim()
-            .replace(/\/+$/, '')
-            .replace(/\/api\/health\/?$/, '')
-            .replace(/\/api\/?$/, '')
-            .replace(/\/_\/?$/, '')
-        : '';
-      const q = cleanUrl ? `?url=${encodeURIComponent(cleanUrl)}` : '';
-      
-      let res = await fetch(`/api/backup/test${q}`).catch(() => null);
-      if (!res || !res.ok) {
-        // Fallback try with window.location.origin
-        if (typeof window !== 'undefined' && window.location) {
-          res = await fetch(`${window.location.origin}/api/backup/test${q}`).catch(() => null);
-        }
-      }
-
-      if (res && res.ok) {
-        return await res.json();
-      }
-      return {
-        reachable: false,
-        error: res ? `Server responded with status ${res.status}` : 'Backend server unreachable',
-        url: cleanUrl || '',
-      };
-    } catch (err: any) {
-      return {
-        reachable: false,
-        error: err?.message || 'Failed to contact backup backend API',
-        url: candidateUrl || '',
-      };
-    }
-  }
-
-  /**
-   * Updates target VPS URL and interval
-   */
-  public async updateVpsConfig(targetUrl: string, intervalMinutes?: number): Promise<boolean> {
-    try {
-      const res = await fetch('/api/backup/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUrl, intervalMinutes }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.status) {
-          this.setState({ vpsBackup: data.status });
-        }
-        return true;
-      }
-    } catch (err) {
-      console.warn('Error updating VPS config:', err);
-    }
-    return false;
-  }
-
-  /**
-   * Triggers an on-demand VPS PocketBase backup in the backend.
-   * Auto-falls back to packaging local storage if Firestore daily read quota is exhausted!
-   */
-  public async triggerVpsBackup(): Promise<{ success: boolean; status?: VpsBackupInfo; error?: string }> {
-    try {
-      this.setState({
-        vpsBackup: this.state.vpsBackup
-          ? { ...this.state.vpsBackup, status: 'running' }
-          : undefined,
-      });
-
-      // 1. Try server-side backup cycle from Firestore
-      const res = await fetch('/api/backup/trigger', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      let serverSuccess = false;
-      let serverStatus: VpsBackupInfo | undefined;
-      let serverError: string | undefined;
-
-      if (res.ok) {
-        const data = await res.json();
-        serverSuccess = data.success;
-        serverStatus = data.status;
-        serverError = data.error;
-      } else {
-        const errData = await res.json().catch(() => ({ error: 'Backup trigger failed' }));
-        serverError = errData.error;
-      }
-
-      // If server succeeded and backed up records, return success!
-      if (serverSuccess && serverStatus && (serverStatus.totalItemsBackedUp ?? 0) > 0) {
-        this.setState({ vpsBackup: serverStatus });
-        return { success: true, status: serverStatus };
-      }
-
-      // 2. If server Firestore returned 0 items (e.g. quota limit), package local storage snapshot
-      console.log('[CloudSync] Server returned 0 items from Firestore. Packaging rich client storage snapshot to VPS...');
-      const getLocalOrEmpty = (key: string) => {
-        try {
-          const raw = safeStorage.getItem(key);
-          return raw ? JSON.parse(raw) : [];
-        } catch {
-          return [];
-        }
-      };
-
-      const payload = {
-        inventory: getLocalOrEmpty(STORAGE_KEYS.INVENTORY),
-        orders: getLocalOrEmpty(STORAGE_KEYS.ORDERS),
-        stores: getLocalOrEmpty(STORAGE_KEYS.STORES),
-        customers: getLocalOrEmpty(STORAGE_KEYS.CUSTOMERS),
-        store_expenses: getLocalOrEmpty(STORAGE_KEYS.EXPENSES),
-        purchase_orders: getLocalOrEmpty(STORAGE_KEYS.PURCHASE_ORDERS),
-        inward_bills: getLocalOrEmpty(STORAGE_KEYS.INWARD_BILLS),
-        stock_transfers: getLocalOrEmpty(STORAGE_KEYS.TRANSFERS),
-        store_indents: getLocalOrEmpty(STORAGE_KEYS.INDENTS),
-        suppliers: getLocalOrEmpty(STORAGE_KEYS.SUPPLIERS),
-      };
-
-      const pushRes = await fetch('/api/backup/push-all', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payload }),
-      });
-
-      if (pushRes.ok) {
-        const pushData = await pushRes.json();
-        if (pushData.success) {
-          const updatedStatus: VpsBackupInfo = {
-            status: 'success',
-            lastRunAt: new Date().toISOString(),
-            lastDurationMs: pushData.durationMs || 1000,
-            totalItemsBackedUp: pushData.totalSynced,
-            collections: pushData.collections,
-            nextRunAt: this.state.vpsBackup?.nextRunAt || null,
-            intervalMinutes: this.state.vpsBackup?.intervalMinutes || 5,
-            targetUrl: this.state.vpsBackup?.targetUrl || 'http://187.126.115.40:8090',
-          };
-          this.setState({ vpsBackup: updatedStatus });
-          return { success: true, status: updatedStatus };
-        } else {
-          return { success: false, error: pushData.error || 'VPS Push failed' };
-        }
-      }
-
-      return { success: false, error: serverError || 'Backup failed' };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Network error' };
-    }
-  }
-
-  /**
-   * Configures automatic VPS backup interval (in minutes)
-   */
-  public async setVpsBackupInterval(intervalMinutes: number): Promise<boolean> {
-    try {
-      const res = await fetch('/api/backup/interval', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ intervalMinutes }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.status) {
-          this.setState({ vpsBackup: data.status });
-        }
-        return true;
-      }
-    } catch (err) {
-      console.warn('Error setting backup interval:', err);
-    }
-    return false;
   }
 
   /**
@@ -471,42 +241,11 @@ class CloudSyncService {
   }
 
   /**
-   * Graceful fallback when Google Cloud Firestore daily free write limit is reached
-   */
-  private handleFirestoreQuotaExhausted() {
-    if (this.isFirestoreQuotaExhausted) return;
-    this.isFirestoreQuotaExhausted = true;
-    console.warn('[CloudSync] Firestore daily free write quota reached (20k writes/day). Gracefully transitioning data operations to PocketBase VPS and local cache.');
-
-    // Unsubscribe from failing Firestore listeners to prevent aggressive backoff retries
-    this.unsubscribes.forEach((unsub) => {
-      try {
-        unsub();
-      } catch {}
-    });
-    this.unsubscribes = [];
-
-    // Switch state engine to PocketBase VPS
-    this.setState({
-      engine: 'pocketbase',
-      errorMessage: 'Firestore daily free write quota reached. System seamlessly operating on PocketBase VPS (Unlimited storage).',
-      status: 'connected',
-      isLive: true,
-      activeListenersCount: 0,
-    });
-
-    // Ensure PocketBase listeners are active
-    if (!this.isPocketBaseLive) {
-      this.probePocketBase(false);
-    }
-  }
-
-  /**
    * Subscribes to real-time events on Firestore collections via onSnapshot
    * Every open window, device, store counter, and warehouse updates automatically without reload or push.
    */
   private setupFirestoreListeners() {
-    if (!db || this.isFirestoreQuotaExhausted) return;
+    if (!db) return;
 
     const bindFirestoreCollection = <T extends { id: string }>(
       collectionName: string,
@@ -521,6 +260,7 @@ class CloudSyncService {
         }
 
         const colRef = collection(db, collectionName);
+        let isFirstSnapshot = true;
 
         const unsubscribe: Unsubscribe = onSnapshot(
           colRef,
@@ -531,9 +271,23 @@ class CloudSyncService {
               return;
             }
 
-            if (snapshot.empty) {
+            if (snapshot.empty && isFirstSnapshot) {
+              isFirstSnapshot = false;
+              // If cloud database is fresh/empty on first visit, auto-seed from local data so cloud is populated
+              const rawLocal = safeStorage.getItem(storageKey);
+              if (rawLocal) {
+                try {
+                  const localItems: any[] = JSON.parse(rawLocal);
+                  if (Array.isArray(localItems) && localItems.length > 0) {
+                    console.log(`[CloudSync] Auto-seeding ${localItems.length} records to Firestore collection "${collectionName}"...`);
+                    this.syncCollectionBatch(collectionName, localItems);
+                  }
+                } catch {}
+              }
               return;
             }
+
+            isFirstSnapshot = false;
 
             // Map all remote documents
             map!.clear();
@@ -546,22 +300,14 @@ class CloudSyncService {
             const remoteDocs = Array.from(map!.values()) as T[];
             this.applyRemoteUpdate(storageKey, remoteDocs, isWarehouse, snapshot.docChanges().length || 1);
           },
-          (err: any) => {
-            if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota') || err?.message?.includes('resource-exhausted')) {
-              this.handleFirestoreQuotaExhausted();
-            } else {
-              console.warn(`[CloudSync] Firestore real-time listener notice for ${collectionName}:`, err?.message || err);
-            }
+          (err) => {
+            console.warn(`[CloudSync] Firestore real-time listener for ${collectionName}:`, err?.message || err);
           }
         );
 
         this.unsubscribes.push(unsubscribe);
-      } catch (err: any) {
-        if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota')) {
-          this.handleFirestoreQuotaExhausted();
-        } else {
-          console.warn(`[CloudSync] Error binding Firestore collection ${collectionName}:`, err);
-        }
+      } catch (err) {
+        console.warn(`[CloudSync] Error binding Firestore collection ${collectionName}:`, err);
       }
     };
 
@@ -702,28 +448,17 @@ class CloudSyncService {
         map.set(cleanId, sanitized);
       }
 
-      // 2. Real-Time Write to Google Cloud Firestore (only if free quota remains)
-      if (db && !this.isFirestoreQuotaExhausted) {
+      // 2. Real-Time Write to Google Cloud Firestore
+      if (db) {
         const docRef = doc(db, collectionName, cleanId);
-        setDoc(docRef, { ...sanitized, updatedAt: new Date().toISOString() }, { merge: true }).catch((err: any) => {
-          if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota')) {
-            this.handleFirestoreQuotaExhausted();
-          } else {
-            console.warn(`[CloudSync] Firestore real-time sync warning for ${collectionName}/${cleanId}:`, err?.message || err);
-          }
+        setDoc(docRef, { ...sanitized, updatedAt: new Date().toISOString() }, { merge: true }).catch((err) => {
+          console.warn(`[CloudSync] Firestore real-time sync warning for ${collectionName}/${cleanId}:`, err?.message || err);
         });
       }
 
       // 3. Optional sync to PocketBase if live
       if (this.isPocketBaseLive) {
         this.syncPocketBaseDoc(collectionName, cleanId, sanitized).catch(() => {});
-      } else {
-        // Fallback: sync through backend proxy without blocking
-        fetch('/api/backup/push', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ collection: collectionName, items: [sanitized] }),
-        }).catch(() => {});
       }
 
       this.setState({
@@ -782,15 +517,11 @@ class CloudSyncService {
         map.delete(cleanId);
       }
 
-      // 1. Delete from Firestore (only if not quota exhausted)
-      if (db && !this.isFirestoreQuotaExhausted) {
+      // 1. Delete from Firestore
+      if (db) {
         const docRef = doc(db, collectionName, cleanId);
-        deleteDoc(docRef).catch((err: any) => {
-          if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota')) {
-            this.handleFirestoreQuotaExhausted();
-          } else {
-            console.warn(`[CloudSync] Firestore delete warning for ${collectionName}/${cleanId}:`, err);
-          }
+        deleteDoc(docRef).catch((err) => {
+          console.warn(`[CloudSync] Firestore delete warning for ${collectionName}/${cleanId}:`, err);
         });
       }
 
@@ -824,41 +555,23 @@ class CloudSyncService {
         map.clear();
       }
 
-      // In Node.js test environment, avoid network writes/deletes to remote Firestore
-      if (typeof window === 'undefined') {
-        return { deletedCount: 0, success: true };
-      }
-
-      // 1. Delete from Firestore using writeBatch (only if quota remains)
-      if (db && !this.isFirestoreQuotaExhausted) {
+      // 1. Delete from Firestore using writeBatch
+      if (db) {
         try {
           const colRef = collection(db, collectionName);
-          const snap = await getDocs(colRef).catch((err: any) => {
-            if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota')) {
-              this.handleFirestoreQuotaExhausted();
-            }
-            return null;
-          });
+          const snap = await getDocs(colRef).catch(() => null);
           if (snap && snap.docs.length > 0) {
             const batchSize = 350;
             for (let i = 0; i < snap.docs.length; i += batchSize) {
               const chunk = snap.docs.slice(i, i + batchSize);
               const batch = writeBatch(db);
               chunk.forEach((d) => batch.delete(d.ref));
-              await batch.commit().catch((err: any) => {
-                if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota')) {
-                  this.handleFirestoreQuotaExhausted();
-                }
-              });
+              await batch.commit().catch(() => {});
               deletedCount += chunk.length;
             }
           }
-        } catch (fErr: any) {
-          if (fErr?.code === 'resource-exhausted' || fErr?.message?.includes('Quota')) {
-            this.handleFirestoreQuotaExhausted();
-          } else {
-            console.warn(`[CloudSync] Firestore clear error for ${collectionName}:`, fErr);
-          }
+        } catch (fErr) {
+          console.warn(`[CloudSync] Firestore clear error for ${collectionName}:`, fErr);
         }
       }
 
@@ -916,14 +629,8 @@ class CloudSyncService {
       let synced = 0;
       const total = items.length;
 
-      // In Node.js unit tests, bypass remote network writes
-      if (typeof window === 'undefined') {
-        onProgress?.(total, total, 100);
-        return { success: true, synced: total };
-      }
-
-      // 1. Transactional Firestore Batch Writing (chunks of 350) - only if quota remains
-      if (db && !this.isFirestoreQuotaExhausted) {
+      // 1. Transactional Firestore Batch Writing (chunks of 350)
+      if (db) {
         const batchSize = 350;
         for (let i = 0; i < total; i += batchSize) {
           const chunk = items.slice(i, i + batchSize);
@@ -936,17 +643,10 @@ class CloudSyncService {
               batch.set(docRef, { ...sanitized, updatedAt: new Date().toISOString() }, { merge: true });
             }
           });
-          try {
-            await batch.commit();
-            synced += chunk.length;
-            const percent = Math.min(100, Math.round((synced / total) * 100));
-            onProgress?.(synced, total, percent);
-          } catch (batchErr: any) {
-            if (batchErr?.code === 'resource-exhausted' || batchErr?.message?.includes('Quota')) {
-              this.handleFirestoreQuotaExhausted();
-              break; // Stop attempting writes to exhausted Firestore
-            }
-          }
+          await batch.commit();
+          synced += chunk.length;
+          const percent = Math.min(100, Math.round((synced / total) * 100));
+          onProgress?.(synced, total, percent);
         }
       } else {
         synced = total;
@@ -1051,10 +751,6 @@ class CloudSyncService {
    * Clean up on unmount
    */
   public destroy() {
-    if (this.vpsStatusPollTimer) {
-      clearInterval(this.vpsStatusPollTimer);
-      this.vpsStatusPollTimer = null;
-    }
     this.unsubscribes.forEach((unsub) => {
       try {
         unsub();
