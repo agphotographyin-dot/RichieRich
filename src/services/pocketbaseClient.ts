@@ -2,20 +2,28 @@ import PocketBase from 'pocketbase';
 
 const env = (import.meta as any).env || {};
 
-// Target PocketBase URL (Defaults to current VPS host IP or window location)
+// Target PocketBase URL (Defaults to same-origin reverse-proxied /api or port 8090)
 export const getPocketBaseUrl = (): string => {
   if (env.VITE_POCKETBASE_URL && env.VITE_POCKETBASE_URL.trim() !== '') {
     return env.VITE_POCKETBASE_URL.trim();
   }
   if (typeof window !== 'undefined' && window.location) {
-    const hostname = window.location.hostname;
-    // If accessing via IP or domain, default to port 8090 on the same host
-    if (hostname && hostname !== 'localhost' && !hostname.includes('run.app')) {
+    const { port, origin, hostname } = window.location;
+    // When served via production Nginx (port 80 / 443 or default HTTP), use same-origin proxy
+    if (port === '' || port === '80' || port === '443') {
+      return origin;
+    }
+    // If accessing explicitly on PocketBase port
+    if (port === '8090') {
+      return origin;
+    }
+    // Local dev server fallback (e.g. localhost:3000)
+    if (hostname && !hostname.includes('run.app')) {
       return `http://${hostname}:8090`;
     }
   }
   // Default VPS IP
-  return 'http://187.126.115.40:8090';
+  return 'http://187.126.115.40';
 };
 
 export const pb = new PocketBase(getPocketBaseUrl());

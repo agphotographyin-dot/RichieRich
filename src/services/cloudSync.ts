@@ -138,10 +138,32 @@ class CloudSyncService {
     });
 
     try {
-      // 1. Health check PocketBase instance
-      const health = await pb.health.check().catch(() => null);
+      // 1. Probe candidate PocketBase endpoints (same-origin Nginx proxy or direct port 8090)
+      const candidateUrls = [
+        getPocketBaseUrl(),
+        typeof window !== 'undefined' ? window.location.origin : '',
+        typeof window !== 'undefined' ? `http://${window.location.hostname}:8090` : '',
+        'http://187.126.115.40',
+        'http://187.126.115.40:8090',
+      ].filter((u): u is string => Boolean(u && u.trim()));
 
-      if (!health || health.code !== 200) {
+      const uniqueCandidates = Array.from(new Set(candidateUrls));
+      let workingUrl: string | null = null;
+
+      for (const testUrl of uniqueCandidates) {
+        try {
+          pb.baseUrl = testUrl;
+          const health = await pb.health.check().catch(() => null);
+          if (health && health.code === 200) {
+            workingUrl = testUrl;
+            break;
+          }
+        } catch {
+          // Probe next candidate
+        }
+      }
+
+      if (!workingUrl) {
         console.warn(`[CloudSync] PocketBase at ${this.state.serverUrl} is not yet reachable. Operating in local mode.`);
         this.setState({
           status: 'offline',
@@ -149,23 +171,29 @@ class CloudSyncService {
           errorMessage: `Connecting to PocketBase VPS at ${this.state.serverUrl}...`,
         });
 
-        // Set up periodic background retry every 12 seconds
+        // Set up periodic background retry every 10 seconds
         const retryTimer = setInterval(async () => {
           try {
-            const recheck = await pb.health.check();
-            if (recheck && recheck.code === 200) {
-              clearInterval(retryTimer);
-              this.isInitialized = false;
-              this.init();
+            for (const testUrl of uniqueCandidates) {
+              pb.baseUrl = testUrl;
+              const recheck = await pb.health.check().catch(() => null);
+              if (recheck && recheck.code === 200) {
+                clearInterval(retryTimer);
+                this.isInitialized = false;
+                this.init();
+                break;
+              }
             }
           } catch {
             // Still offline
           }
-        }, 12000);
+        }, 10000);
         return;
       }
 
-      console.log(`[CloudSync] Connected to PocketBase VPS at ${this.state.serverUrl}`);
+      pb.baseUrl = workingUrl;
+      this.setState({ serverUrl: workingUrl });
+      console.log(`[CloudSync] Connected to PocketBase VPS at ${workingUrl}`);
 
       // 2. Setup Realtime SSE Subscriptions on collections
       await this.setupPocketBaseListeners();

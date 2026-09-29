@@ -7,7 +7,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - VITE_POCKETBASE_URL=http://187.126.115.40:8090
+        - VITE_POCKETBASE_URL=
     container_name: richierich
     restart: unless-stopped
     ports:
@@ -28,6 +28,7 @@ services:
       - "8090:8090"
     volumes:
       - pb_data:/pb_data
+      - ./pb_migrations:/pb_migrations
     environment:
       - POCKETBASE_ENCRYPTION_KEY=
     healthcheck:

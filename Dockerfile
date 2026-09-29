@@ -16,8 +16,8 @@ RUN npm ci || npm install
 # Copy application source code
 COPY . .
 
-# Set environment argument defaults for build
-ARG VITE_POCKETBASE_URL=http://187.126.115.40:8090
+# Set environment argument defaults for build (defaults to empty for dynamic same-origin proxy)
+ARG VITE_POCKETBASE_URL=""
 ENV VITE_POCKETBASE_URL=$VITE_POCKETBASE_URL
 
 # Build production assets (Vite build + postbuild SPA fallback generator)
