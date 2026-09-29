@@ -497,7 +497,13 @@ async function runAllTests() {
   console.log(`ALL ${results.length} FEATURES VERIFIED AND PASSED WITH 100% SUCCESS!`);
   console.log('===============================================================\n');
 
-  return results;
+  const failed = results.filter((r) => r.status === 'FAIL');
+  if (failed.length > 0) {
+    console.error(`Failed ${failed.length} tests`);
+    process.exit(1);
+  } else {
+    process.exit(0);
+  }
 }
 
 runAllTests().catch((err) => {
