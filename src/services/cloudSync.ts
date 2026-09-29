@@ -1,4 +1,5 @@
 import { pb, getPocketBaseUrl, setCustomPocketBaseUrl, DEFAULT_VPS_IP } from './pocketbaseClient';
+import { mqttSync } from './mqttSyncService';
 import { db, isFirebaseConfigured, firebaseConfig } from './firebaseClient';
 import {
   collection,
@@ -14,7 +15,7 @@ import { safeStorage } from '../utils/safeStorage';
 import { InventoryItem, Order, StoreLocation, Customer, StoreExpense } from '../types';
 import { PurchaseOrder, PurchaseBill, StockTransfer, StoreStockIndent, Supplier } from '../types/warehouse';
 
-export type SyncEngine = 'vps_stream' | 'pocketbase' | 'firebase' | 'hybrid' | 'offline';
+export type SyncEngine = 'mqtt' | 'vps_stream' | 'pocketbase' | 'firebase' | 'hybrid' | 'offline';
 export type SyncStatus = 'connected' | 'connecting' | 'syncing' | 'offline' | 'error';
 
 export interface CloudSyncState {
@@ -28,6 +29,8 @@ export interface CloudSyncState {
   itemsSynced: number;
   errorMessage?: string;
   activeListenersCount: number;
+  mqttConnected?: boolean;
+  mqttBrokerUrl?: string;
 }
 
 type SyncListener = (state: CloudSyncState) => void;
@@ -214,11 +217,52 @@ class UniversalRealtimeSyncService {
       this.connectFirestore();
     }
 
-    // 4. Update combined engine status
+    // 4. Mosquitto MQTT Broker (Industrial POS Hardware & WebSockets)
+    this.connectMosquittoMQTT();
+
+    // 5. Update combined engine status
     this.updateEngineStatus();
 
-    // 5. Drain any queued offline writes
+    // 6. Drain any queued offline writes
     this.drainOfflineQueue();
+  }
+
+  /**
+   * Connect to Mosquitto MQTT Broker (Industrial & High-Speed POS Hardware Sync)
+   */
+  private connectMosquittoMQTT() {
+    try {
+      mqttSync.init();
+      mqttSync.onRemoteDocument((colName, action, data) => {
+        if (!colName || !COLLECTION_STORAGE_MAP[colName]) return;
+        const { storageKey, isWarehouse } = COLLECTION_STORAGE_MAP[colName];
+        let map = this.collectionDocsMap.get(colName);
+        if (!map) {
+          map = new Map<string, any>();
+          this.collectionDocsMap.set(colName, map);
+        }
+
+        if (action === 'delete') {
+          if (data && data.id) map.delete(String(data.id));
+        } else if (action === 'batch' && Array.isArray(data)) {
+          data.forEach((item) => {
+            if (item && item.id) map!.set(String(item.id), item);
+          });
+        } else if (data && (data.id || data.sku)) {
+          map.set(String(data.id || data.sku), data);
+        }
+
+        const remoteDocs = Array.from(map.values());
+        this.applyRemoteUpdate(storageKey, remoteDocs, isWarehouse, 1);
+      });
+
+      mqttSync.subscribeStatus((st) => {
+        this.setState({
+          mqttConnected: st.isConnected,
+          mqttBrokerUrl: st.brokerUrl,
+        });
+      });
+    } catch {}
   }
 
   /**
@@ -570,7 +614,10 @@ class UniversalRealtimeSyncService {
         this.queueOfflineDoc(collectionName, cleanId, sanitized, 'upsert');
       });
 
-      // 3. Parallel write to Google Cloud Firestore (if active and quota available)
+      // 3. Publish to Mosquitto MQTT Broker (Sub-millisecond Hardware & Terminal Sync)
+      mqttSync.publishSync(collectionName, 'upsert', { ...sanitized, id: cleanId });
+
+      // 4. Parallel write to Google Cloud Firestore (if active and quota available)
       if (db && !this.isFirestoreQuotaExceeded) {
         const docRef = doc(db, collectionName, cleanId);
         setDoc(docRef, { ...sanitized, updatedAt: new Date().toISOString() }, { merge: true }).catch((err) => {
@@ -617,7 +664,10 @@ class UniversalRealtimeSyncService {
         this.queueOfflineDoc(collectionName, cleanId, null, 'delete');
       });
 
-      // 3. Firestore delete
+      // 3. Mosquitto MQTT Broker delete broadcast
+      mqttSync.publishSync(collectionName, 'delete', { id: cleanId });
+
+      // 4. Firestore delete
       if (db) {
         const docRef = doc(db, collectionName, cleanId);
         deleteDoc(docRef).catch(() => {});

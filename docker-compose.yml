@@ -37,6 +37,25 @@ services:
       timeout: 5s
       retries: 5
 
+  # -------------------------------------------------------------
+  # 3. Mosquitto MQTT Broker (Industrial & POS Hardware Sync)
+  # -------------------------------------------------------------
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: richierich-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"   # Standard MQTT for Thermal Printers, Scanners, ESP32
+      - "9001:9001"   # WebSocket MQTT for Web POS & Browser Sync
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+
 volumes:
   pb_data:
+    driver: local
+  mosquitto_data:
+    driver: local
+  mosquitto_log:
     driver: local

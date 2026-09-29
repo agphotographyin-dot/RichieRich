@@ -15,6 +15,9 @@ import {
   Check,
   Radio,
   SlidersHorizontal,
+  Printer,
+  Cpu,
+  Layers,
 } from 'lucide-react';
 import { cloudSync, CloudSyncState } from '../../services/cloudSync';
 import {
@@ -24,6 +27,7 @@ import {
   PocketBaseHealthResult,
   DEFAULT_VPS_IP,
 } from '../../services/pocketbaseClient';
+import { mqttSync, MQTTConnectionState, DEFAULT_MQTT_WS_URL } from '../../services/mqttSyncService';
 
 interface CloudSyncModalProps {
   isOpen: boolean;
@@ -41,16 +45,30 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
   const [testResult, setTestResult] = useState<PocketBaseHealthResult | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Mosquitto MQTT State
+  const [mqttState, setMqttState] = useState<MQTTConnectionState>(mqttSync.getState());
+  const [mqttUrlInput, setMqttUrlInput] = useState<string>(mqttSync.getBrokerUrl());
+  const [mqttSaveSuccess, setMqttSaveSuccess] = useState(false);
+  const [hardwareTestFeedback, setHardwareTestFeedback] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isOpen) return;
     setServerUrlInput(getPocketBaseUrl() || DEFAULT_VPS_IP);
+    setMqttUrlInput(mqttSync.getBrokerUrl());
     setTestResult(null);
     setSaveSuccess(false);
 
     const unsub = cloudSync.subscribe((state) => {
       setSyncState(state);
     });
-    return unsub;
+    const unsubMqtt = mqttSync.subscribeStatus((st) => {
+      setMqttState(st);
+    });
+
+    return () => {
+      unsub();
+      unsubMqtt();
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -77,6 +95,23 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
     } finally {
       setIsTesting(false);
     }
+  };
+
+  const handleSaveMqtt = () => {
+    const cleaned = mqttUrlInput.trim();
+    mqttSync.setBrokerUrl(cleaned);
+    setMqttSaveSuccess(true);
+    setTimeout(() => setMqttSaveSuccess(false), 3000);
+  };
+
+  const handleTestMqttHardware = () => {
+    mqttSync.publishHardwareCommand('printer', {
+      action: 'TEST_PRINT',
+      message: 'Richie Rich POS - Mosquitto MQTT Hardware Link Active',
+      timestamp: new Date().toISOString(),
+    });
+    setHardwareTestFeedback('⚡ Test pulse dispatched to MQTT topic: richierich/hardware/printer');
+    setTimeout(() => setHardwareTestFeedback(null), 4000);
   };
 
   const handleForceUpload = async () => {
@@ -293,6 +328,90 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
                 <span>http://187.126.115.40/_/</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
+            </div>
+          </div>
+
+          {/* Option 4: Mosquitto MQTT Broker (Industrial & High-Speed POS Hardware Sync) */}
+          <div className="p-4 rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-50/60 via-white to-slate-50 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-cyan-600" />
+                <h3 className="font-bold text-xs text-slate-800">
+                  Option 4: Mosquitto MQTT Broker (Industrial POS Hardware Sync)
+                </h3>
+              </div>
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border ${
+                mqttState.isConnected
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                  : mqttState.status === 'connecting'
+                  ? 'bg-amber-100 text-amber-800 border-amber-200'
+                  : 'bg-slate-100 text-slate-600 border-slate-200'
+              }`}>
+                {mqttState.isConnected ? '● MQTT Active' : mqttState.status === 'connecting' ? '◌ Connecting...' : '○ Ready'}
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-600 leading-relaxed">
+              Eclipse Mosquitto provides <strong>sub-millisecond instant messaging</strong> between POS terminals, thermal receipt printers, electronic cash drawers, and barcode scanners with 0 load time.
+            </p>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-semibold text-slate-700">MQTT WebSocket Broker URL:</label>
+                <span className="text-[10px] text-slate-500 font-mono">Port 9001 (WS) / Port 1883 (TCP)</span>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={mqttUrlInput}
+                  onChange={(e) => setMqttUrlInput(e.target.value)}
+                  placeholder="ws://187.126.115.40:9001"
+                  className="flex-1 px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-slate-800"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveMqtt}
+                  className="px-3.5 py-2 bg-cyan-700 hover:bg-cyan-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
+                >
+                  {mqttSaveSuccess ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Save className="w-3.5 h-3.5" />}
+                  Connect
+                </button>
+              </div>
+            </div>
+
+            {/* MQTT Live Telemetry & Hardware Pulse Test */}
+            <div className="grid grid-cols-3 gap-2 text-[11px]">
+              <div className="p-2 rounded-xl bg-white border border-slate-200 text-center">
+                <div className="text-[10px] text-slate-400 font-medium">Packets Sent</div>
+                <div className="font-mono font-bold text-slate-800 text-xs">{mqttState.messagesSent}</div>
+              </div>
+              <div className="p-2 rounded-xl bg-white border border-slate-200 text-center">
+                <div className="text-[10px] text-slate-400 font-medium">Packets Rcvd</div>
+                <div className="font-mono font-bold text-slate-800 text-xs">{mqttState.messagesReceived}</div>
+              </div>
+              <button
+                type="button"
+                onClick={handleTestMqttHardware}
+                className="p-2 rounded-xl bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 text-cyan-800 text-center font-semibold cursor-pointer transition-colors flex flex-col items-center justify-center"
+              >
+                <div className="flex items-center gap-1 text-[10px]">
+                  <Printer className="w-3 h-3 text-cyan-600" />
+                  <span>Hardware Pulse</span>
+                </div>
+                <span className="text-[9px] text-cyan-600">Test Trigger</span>
+              </button>
+            </div>
+
+            {hardwareTestFeedback && (
+              <div className="p-2 rounded-lg bg-cyan-100/70 border border-cyan-300 text-cyan-900 text-[11px] font-medium animate-in fade-in duration-150">
+                {hardwareTestFeedback}
+              </div>
+            )}
+
+            {/* Hardware Ports Reference */}
+            <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5">
+              <span>Hardware (Printers/Scanners): <strong>tcp://187.126.115.40:1883</strong></span>
+              <span>Web POS: <strong>ws://187.126.115.40:9001</strong></span>
             </div>
           </div>
 
