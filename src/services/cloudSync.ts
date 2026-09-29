@@ -1,21 +1,7 @@
-import { pb, getPocketBaseUrl, setCustomPocketBaseUrl, DEFAULT_VPS_IP } from './pocketbaseClient';
-import { mqttSync } from './mqttSyncService';
-import { db, isFirebaseConfigured, firebaseConfig } from './firebaseClient';
-import {
-  collection,
-  doc,
-  setDoc,
-  deleteDoc,
-  onSnapshot,
-  getDocs,
-  writeBatch,
-  Unsubscribe,
-} from 'firebase/firestore';
+import { pb, getPocketBaseUrl, setCustomPocketBaseUrl, DEFAULT_POCKETBASE_URL } from './pocketbaseClient';
 import { safeStorage } from '../utils/safeStorage';
-import { InventoryItem, Order, StoreLocation, Customer, StoreExpense } from '../types';
-import { PurchaseOrder, PurchaseBill, StockTransfer, StoreStockIndent, Supplier } from '../types/warehouse';
 
-export type SyncEngine = 'mqtt' | 'vps_stream' | 'pocketbase' | 'firebase' | 'hybrid' | 'offline';
+export type SyncEngine = 'pocketbase' | 'offline';
 export type SyncStatus = 'connected' | 'connecting' | 'syncing' | 'offline' | 'error';
 
 export interface CloudSyncState {
@@ -23,19 +9,15 @@ export interface CloudSyncState {
   isLive: boolean;
   engine: SyncEngine;
   serverUrl: string;
-  projectId?: string;
-  databaseId?: string;
   lastSyncedAt: Date | null;
   itemsSynced: number;
   errorMessage?: string;
   activeListenersCount: number;
-  mqttConnected?: boolean;
-  mqttBrokerUrl?: string;
 }
 
 type SyncListener = (state: CloudSyncState) => void;
 
-// Local storage keys to mirror
+// Local storage keys mirrored by the sync engine
 export const STORAGE_KEYS = {
   INVENTORY: 'rr_panhouse_inventory',
   ORDERS: 'rr_panhouse_orders',
@@ -47,10 +29,10 @@ export const STORAGE_KEYS = {
   TRANSFERS: 'wh_stock_transfers',
   INDENTS: 'wh_store_indents',
   SUPPLIERS: 'wh_suppliers',
-  SYNC_QUEUE: 'rr_offline_sync_queue',
+  SYNC_QUEUE: 'rr_pocketbase_sync_queue',
 };
 
-// Collection Names
+// PocketBase Collection Names
 export const COLLECTIONS = {
   INVENTORY: 'inventory',
   ORDERS: 'orders',
@@ -65,7 +47,7 @@ export const COLLECTIONS = {
   META: 'system_metadata',
 };
 
-// Mapping collections to storage keys
+// Collection mapping to local storage keys
 const COLLECTION_STORAGE_MAP: Record<string, { storageKey: string; isWarehouse: boolean }> = {
   [COLLECTIONS.INVENTORY]: { storageKey: STORAGE_KEYS.INVENTORY, isWarehouse: false },
   [COLLECTIONS.ORDERS]: { storageKey: STORAGE_KEYS.ORDERS, isWarehouse: false },
@@ -79,14 +61,12 @@ const COLLECTION_STORAGE_MAP: Record<string, { storageKey: string; isWarehouse: 
   [COLLECTIONS.SUPPLIERS]: { storageKey: STORAGE_KEYS.SUPPLIERS, isWarehouse: true },
 };
 
-class UniversalRealtimeSyncService {
+class PocketBaseRealtimeSyncService {
   private state: CloudSyncState = {
     status: 'connecting',
     isLive: false,
-    engine: 'vps_stream',
-    serverUrl: getPocketBaseUrl() || DEFAULT_VPS_IP,
-    projectId: firebaseConfig?.projectId,
-    databaseId: firebaseConfig?.firestoreDatabaseId,
+    engine: 'pocketbase',
+    serverUrl: getPocketBaseUrl() || DEFAULT_POCKETBASE_URL,
     lastSyncedAt: null,
     itemsSynced: 0,
     activeListenersCount: 0,
@@ -96,21 +76,12 @@ class UniversalRealtimeSyncService {
   private unsubscribes: Array<() => void> = [];
   private isInitialized = false;
   private isApplyingRemoteUpdate = false;
-  private clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  private clientId = `pb_client_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-  // Connections
-  private sseEventSource: EventSource | null = null;
-  private isPocketBaseActive = false;
-  private isVPSActive = false;
-  private isFirestoreActive = false;
-  private isFirestoreQuotaExceeded = false;
-  private activeVpsBaseUrl = '';
-
-  // Internal memory caches & debounce timers
+  // Memory map of records for zero-millisecond access
   private collectionDocsMap = new Map<string, Map<string, any>>();
   private persistDebounceTimers: Record<string, any> = {};
   private collectionDebounceTimers: Record<string, any> = {};
-  private reconnectTimeout: any = null;
 
   // External notification & cache hooks
   private onStorageChangeNotify?: () => void;
@@ -149,34 +120,31 @@ class UniversalRealtimeSyncService {
       try {
         cb(this.state);
       } catch (err) {
-        console.error('Error in sync status listener:', err);
+        console.error('Error in PocketBase sync status listener:', err);
       }
     });
   }
 
   /**
-   * Initializes real-time synchronization.
-   * LOCAL-FIRST & ZERO LOAD TIME: Returns immediately in 0ms without blocking UI.
-   * Background asynchronous probe connects to VPS Real-Time Stream, PocketBase, and Firestore.
+   * Initializes real-time synchronization with PocketBase.
+   * Completely local-first: returns in 0ms without delaying UI.
+   * Connects to PocketBase subscriptions in background.
    */
   public init() {
     if (this.isInitialized) return;
     this.isInitialized = true;
 
-    // Pre-populate memory maps from local storage for instant 0ms access
+    // Seed memory maps from local storage for instant zero-latency access
     this.seedMemoryFromLocalStorage();
 
-    // Start background sync asynchronously without blocking
+    // Start PocketBase connection in background
     if (typeof window !== 'undefined') {
       setTimeout(() => {
-        this.connectAllEngines();
+        this.connectPocketBase();
       }, 50);
     }
   }
 
-  /**
-   * Seed in-memory map from fast local storage
-   */
   private seedMemoryFromLocalStorage() {
     for (const [colName, info] of Object.entries(COLLECTION_STORAGE_MAP)) {
       let map = this.collectionDocsMap.get(colName);
@@ -201,214 +169,76 @@ class UniversalRealtimeSyncService {
   }
 
   /**
-   * Non-blocking background connection to all real-time transports
+   * Connect and subscribe to PocketBase real-time SSE stream
    */
-  private async connectAllEngines() {
-    // 1. First priority: Direct VPS Real-Time Server (Unlimited Credits, <5ms latency)
-    const vpsConnected = await this.connectVPSStream();
-
-    // 2. Parallel check: PocketBase Real-Time SSE
-    if (!vpsConnected) {
-      await this.connectPocketBase();
-    }
-
-    // 3. Dual-Cloud fallback: Google Cloud Firestore (if configured)
-    if (isFirebaseConfigured() && db) {
-      this.connectFirestore();
-    }
-
-    // 4. Mosquitto MQTT Broker (Industrial POS Hardware & WebSockets)
-    this.connectMosquittoMQTT();
-
-    // 5. Update combined engine status
-    this.updateEngineStatus();
-
-    // 6. Drain any queued offline writes
-    this.drainOfflineQueue();
-  }
-
-  /**
-   * Connect to Mosquitto MQTT Broker (Industrial & High-Speed POS Hardware Sync)
-   */
-  private connectMosquittoMQTT() {
-    try {
-      mqttSync.init();
-      mqttSync.onRemoteDocument((colName, action, data) => {
-        if (!colName || !COLLECTION_STORAGE_MAP[colName]) return;
-        const { storageKey, isWarehouse } = COLLECTION_STORAGE_MAP[colName];
-        let map = this.collectionDocsMap.get(colName);
-        if (!map) {
-          map = new Map<string, any>();
-          this.collectionDocsMap.set(colName, map);
-        }
-
-        if (action === 'delete') {
-          if (data && data.id) map.delete(String(data.id));
-        } else if (action === 'batch' && Array.isArray(data)) {
-          data.forEach((item) => {
-            if (item && item.id) map!.set(String(item.id), item);
-          });
-        } else if (data && (data.id || data.sku)) {
-          map.set(String(data.id || data.sku), data);
-        }
-
-        const remoteDocs = Array.from(map.values());
-        this.applyRemoteUpdate(storageKey, remoteDocs, isWarehouse, 1);
-      });
-
-      mqttSync.subscribeStatus((st) => {
-        this.setState({
-          mqttConnected: st.isConnected,
-          mqttBrokerUrl: st.brokerUrl,
-        });
-      });
-    } catch {}
-  }
-
-  /**
-   * Connect to VPS Real-Time Stream (Server-Sent Events)
-   */
-  private async connectVPSStream(): Promise<boolean> {
-    if (typeof window === 'undefined' || typeof EventSource === 'undefined') return false;
-
-    const baseCandidates = [
-      getPocketBaseUrl(),
-      DEFAULT_VPS_IP,
-      window.location ? window.location.origin : '',
-      'http://187.126.115.40',
-      'http://187.126.115.40:8090',
-    ].filter((u): u is string => Boolean(u && u.trim()));
-
-    const uniqueCandidates = Array.from(new Set(baseCandidates)).map((u) => u.replace(/\/+$/, ''));
-
-    for (const testUrl of uniqueCandidates) {
-      try {
-        // Fast ping with 2.5s timeout (never hangs)
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2500);
-        const healthRes = await fetch(`${testUrl}/api/health`, {
-          signal: controller.signal,
-          headers: { 'Accept': 'application/json' },
-        }).catch(() => null);
-        clearTimeout(timeoutId);
-
-        if (healthRes && healthRes.ok) {
-          this.activeVpsBaseUrl = testUrl;
-          this.setupVpsEventSource(testUrl);
-          this.isVPSActive = true;
-          console.log(`[CloudSync] ✅ Connected to VPS Real-Time Hub at ${testUrl}`);
-          return true;
-        }
-      } catch {
-        // Try next candidate
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * Setup EventSource SSE listener for instant VPS updates
-   */
-  private setupVpsEventSource(baseUrl: string) {
-    if (this.sseEventSource) {
-      try {
-        this.sseEventSource.close();
-      } catch {}
-      this.sseEventSource = null;
-    }
+  public async connectPocketBase(): Promise<boolean> {
+    const targetUrl = getPocketBaseUrl() || DEFAULT_POCKETBASE_URL;
+    pb.baseUrl = targetUrl;
 
     try {
-      const streamUrl = `${baseUrl}/api/sync/events`;
-      this.sseEventSource = new EventSource(streamUrl);
+      this.setState({ status: 'connecting', serverUrl: targetUrl });
 
-      this.sseEventSource.onopen = () => {
-        this.isVPSActive = true;
-        this.updateEngineStatus();
-      };
-
-      this.sseEventSource.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (!payload) return;
-
-          // Ignore own broadcasts
-          if (payload.senderId && payload.senderId === this.clientId) return;
-
-          const { collection: colName, action, data } = payload;
-          if (!colName || !COLLECTION_STORAGE_MAP[colName]) return;
-
-          const { storageKey, isWarehouse } = COLLECTION_STORAGE_MAP[colName];
-          let map = this.collectionDocsMap.get(colName);
-          if (!map) {
-            map = new Map<string, any>();
-            this.collectionDocsMap.set(colName, map);
-          }
-
-          if (action === 'delete') {
-            if (data && data.id) {
-              map.delete(String(data.id));
-            }
-          } else if (action === 'batch' && Array.isArray(data)) {
-            data.forEach((item) => {
-              if (item && item.id) map!.set(String(item.id), item);
-            });
-          } else if (data && (data.id || data.sku)) {
-            const id = String(data.id || data.sku);
-            map.set(id, data);
-          }
-
-          const remoteDocs = Array.from(map.values());
-          this.applyRemoteUpdate(storageKey, remoteDocs, isWarehouse, 1);
-        } catch (err) {
-          console.warn('[CloudSync] Error parsing VPS event stream:', err);
-        }
-      };
-
-      this.sseEventSource.onerror = () => {
-        this.isVPSActive = false;
-        this.updateEngineStatus();
-        // EventSource automatically attempts auto-reconnect
-      };
-    } catch (err) {
-      console.warn('[CloudSync] VPS EventSource initialization:', err);
-    }
-  }
-
-  /**
-   * PocketBase Real-Time connection fallback
-   */
-  private async connectPocketBase(): Promise<boolean> {
-    try {
-      const targetUrl = getPocketBaseUrl() || DEFAULT_VPS_IP;
-      pb.baseUrl = targetUrl;
-
+      // Fast non-blocking health check
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
       const health = await pb.health.check({ signal: controller.signal }).catch(() => null);
       clearTimeout(timeoutId);
 
       if (health && health.code === 200) {
-        this.isPocketBaseActive = true;
-        this.activeVpsBaseUrl = targetUrl;
-        console.log(`[CloudSync] ✅ PocketBase connected at ${targetUrl}`);
-        this.bindPocketBaseSubscriptions();
+        console.log(`[PocketBase] ✅ Connected to PocketBase server at ${targetUrl}`);
+        await this.bindPocketBaseSubscriptions();
+        this.setState({
+          status: 'connected',
+          isLive: true,
+          engine: 'pocketbase',
+          serverUrl: targetUrl,
+          activeListenersCount: this.unsubscribes.length,
+        });
+
+        // Drain any offline writes that were queued
+        this.drainOfflineQueue();
         return true;
+      } else {
+        this.setState({
+          status: 'offline',
+          isLive: false,
+          serverUrl: targetUrl,
+          errorMessage: 'PocketBase server not reachable on port 8090',
+        });
+        return false;
       }
-    } catch {}
-    return false;
+    } catch (err: any) {
+      this.setState({
+        status: 'offline',
+        isLive: false,
+        serverUrl: targetUrl,
+        errorMessage: err?.message || 'Connection failed',
+      });
+      return false;
+    }
   }
 
   /**
-   * Subscribes to PocketBase collections
+   * Bind real-time subscriptions to all PocketBase collections
    */
   private async bindPocketBaseSubscriptions() {
-    const bindCollection = async (colName: string, storageKey: string, isWarehouse: boolean) => {
+    // Clean old subscriptions
+    this.unsubscribes.forEach((unsub) => {
+      try {
+        unsub();
+      } catch {}
+    });
+    this.unsubscribes = [];
+
+    const subscribeOne = async (colName: string, storageKey: string, isWarehouse: boolean) => {
       try {
         const unsub = await pb.collection(colName).subscribe('*', (e) => {
           const { action, record } = e;
-          const appData = record.data ? { ...record.data, id: record.recordId || record.id } : record;
-          const id = String(appData.id || record.id);
+          // Ignore own dispatched messages
+          if (record && record._senderId === this.clientId) return;
+
+          const docData = record.data ? { ...record.data, id: record.recordId || record.id } : record;
+          const id = String(docData.id || record.recordId || record.id);
 
           let map = this.collectionDocsMap.get(colName);
           if (!map) {
@@ -419,12 +249,15 @@ class UniversalRealtimeSyncService {
           if (action === 'delete') {
             map.delete(id);
           } else {
-            map.set(id, appData);
+            map.set(id, docData);
           }
 
           const remoteDocs = Array.from(map.values());
           this.applyRemoteUpdate(storageKey, remoteDocs, isWarehouse, 1);
-        }).catch(() => null);
+        }).catch((err) => {
+          // If collection does not exist in PocketBase yet, silently ignore until created
+          return null;
+        });
 
         if (unsub) {
           this.unsubscribes.push(unsub);
@@ -433,53 +266,7 @@ class UniversalRealtimeSyncService {
     };
 
     for (const [colName, info] of Object.entries(COLLECTION_STORAGE_MAP)) {
-      bindCollection(colName, info.storageKey, info.isWarehouse);
-    }
-  }
-
-  /**
-   * Firestore real-time onSnapshot listeners
-   */
-  private connectFirestore() {
-    if (!db || this.isFirestoreActive) return;
-    this.isFirestoreActive = true;
-
-    const bindCollection = (colName: string, storageKey: string, isWarehouse: boolean) => {
-      try {
-        const colRef = collection(db!, colName);
-        const unsub: Unsubscribe = onSnapshot(
-          colRef,
-          { includeMetadataChanges: false },
-          (snapshot) => {
-            if (snapshot.metadata.hasPendingWrites) return;
-
-            let map = this.collectionDocsMap.get(colName);
-            if (!map) {
-              map = new Map<string, any>();
-              this.collectionDocsMap.set(colName, map);
-            }
-
-            snapshot.docs.forEach((docSnap) => {
-              const data = docSnap.data();
-              const item = { ...data, id: data.id || docSnap.id };
-              map!.set(String(item.id), item);
-            });
-
-            const remoteDocs = Array.from(map!.values());
-            this.applyRemoteUpdate(storageKey, remoteDocs, isWarehouse, snapshot.docChanges().length || 1);
-          },
-          (err) => {
-            console.warn(`[CloudSync] Firestore listener notice for ${colName}:`, err?.message || err);
-          }
-        );
-        this.unsubscribes.push(unsub);
-      } catch (err) {
-        console.warn(`[CloudSync] Firestore bind error for ${colName}:`, err);
-      }
-    };
-
-    for (const [colName, info] of Object.entries(COLLECTION_STORAGE_MAP)) {
-      bindCollection(colName, info.storageKey, info.isWarehouse);
+      await subscribeOne(colName, info.storageKey, info.isWarehouse);
     }
   }
 
@@ -491,7 +278,7 @@ class UniversalRealtimeSyncService {
     try {
       let resolvedDocs = remoteDocs;
 
-      // Preserve local inventory changes if remote catalog is smaller
+      // Preserve local inventory items if remote catalog is temporarily smaller
       if (storageKey === STORAGE_KEYS.INVENTORY && Array.isArray(remoteDocs)) {
         try {
           const rawLocal = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
@@ -544,46 +331,14 @@ class UniversalRealtimeSyncService {
       try {
         safeStorage.setItem(storageKey, JSON.stringify(docs));
       } catch (err) {
-        console.warn(`[CloudSync] Local persist notice for ${storageKey}:`, err);
+        console.warn(`[PocketBase] Local persist notice for ${storageKey}:`, err);
       }
     }, 50);
   }
 
-  private updateEngineStatus() {
-    let engine: SyncEngine = 'offline';
-    let status: SyncStatus = 'offline';
-    let serverUrl = this.activeVpsBaseUrl || getPocketBaseUrl() || DEFAULT_VPS_IP;
-
-    if (this.isVPSActive && this.isFirestoreActive) {
-      engine = 'hybrid';
-      status = 'connected';
-      serverUrl = `VPS Hub (${this.activeVpsBaseUrl}) + Cloud Firestore`;
-    } else if (this.isVPSActive) {
-      engine = 'vps_stream';
-      status = 'connected';
-      serverUrl = `VPS Real-Time Hub (${this.activeVpsBaseUrl})`;
-    } else if (this.isPocketBaseActive) {
-      engine = 'pocketbase';
-      status = 'connected';
-      serverUrl = `PocketBase (${this.activeVpsBaseUrl})`;
-    } else if (this.isFirestoreActive) {
-      engine = 'firebase';
-      status = 'connected';
-      serverUrl = `Firestore (${firebaseConfig?.projectId || 'Google Cloud'})`;
-    }
-
-    this.setState({
-      engine,
-      status,
-      isLive: status === 'connected',
-      serverUrl,
-      activeListenersCount: this.unsubscribes.length + (this.sseEventSource ? 1 : 0),
-    });
-  }
-
   /**
-   * Sync a single document immediately across all devices in real time.
-   * COMPLETELY NON-BLOCKING & AUTOMATIC: 0ms load time!
+   * Sync a single document immediately across all POS devices via PocketBase.
+   * LOCAL-FIRST & ZERO LOAD TIME: Updates memory and UI immediately, then syncs asynchronously.
    */
   public async syncDocument(collectionName: string, id: string, data: any) {
     if (this.isApplyingRemoteUpdate) return;
@@ -592,7 +347,7 @@ class UniversalRealtimeSyncService {
       const cleanId = String(id || Date.now()).trim().replace(/\//g, '_');
       const sanitized = JSON.parse(JSON.stringify(data));
 
-      // 1. Update in-memory map instantly (0ms)
+      // 1. Instant local update (0ms)
       let map = this.collectionDocsMap.get(collectionName);
       if (!map) {
         map = new Map<string, any>();
@@ -600,33 +355,8 @@ class UniversalRealtimeSyncService {
       }
       map.set(cleanId, sanitized);
 
-      // 2. Dispatch to VPS Real-Time Server via fast non-blocking fetch
-      const vpsUrl = this.activeVpsBaseUrl || getPocketBaseUrl() || DEFAULT_VPS_IP;
-      fetch(`${vpsUrl.replace(/\/+$/, '')}/api/sync/${collectionName}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-client-id': this.clientId,
-        },
-        body: JSON.stringify({ ...sanitized, id: cleanId }),
-      }).catch(() => {
-        // If VPS fails, queue for retry
-        this.queueOfflineDoc(collectionName, cleanId, sanitized, 'upsert');
-      });
-
-      // 3. Publish to Mosquitto MQTT Broker (Sub-millisecond Hardware & Terminal Sync)
-      mqttSync.publishSync(collectionName, 'upsert', { ...sanitized, id: cleanId });
-
-      // 4. Parallel write to Google Cloud Firestore (if active and quota available)
-      if (db && !this.isFirestoreQuotaExceeded) {
-        const docRef = doc(db, collectionName, cleanId);
-        setDoc(docRef, { ...sanitized, updatedAt: new Date().toISOString() }, { merge: true }).catch((err) => {
-          if (err?.code === 'resource-exhausted' || err?.message?.includes('RESOURCE_EXHAUSTED')) {
-            this.isFirestoreQuotaExceeded = true;
-            console.warn('[CloudSync] Firestore free daily quota reached. Switched 100% to VPS Real-Time Engine (Unlimited Credits).');
-          }
-        });
-      }
+      // 2. Asynchronous push to PocketBase (non-blocking)
+      this.pushToPocketBase(collectionName, cleanId, sanitized);
 
       this.setState({
         status: 'connected',
@@ -635,7 +365,33 @@ class UniversalRealtimeSyncService {
         itemsSynced: this.state.itemsSynced + 1,
       });
     } catch (err: any) {
-      console.warn(`[CloudSync] Notice for ${collectionName}:`, err?.message || err);
+      console.warn(`[PocketBase] Document sync notice for ${collectionName}:`, err?.message || err);
+    }
+  }
+
+  private async pushToPocketBase(collectionName: string, docId: string, data: any) {
+    try {
+      const payload = {
+        recordId: docId,
+        data,
+        _senderId: this.clientId,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Try finding existing record in PocketBase
+      const existing = await pb
+        .collection(collectionName)
+        .getFirstListItem(`recordId="${docId}"`)
+        .catch(() => null);
+
+      if (existing) {
+        await pb.collection(collectionName).update(existing.id, payload).catch(() => null);
+      } else {
+        await pb.collection(collectionName).create(payload).catch(() => null);
+      }
+    } catch {
+      // Offline fallback: queue for retry
+      this.queueOfflineDoc(collectionName, docId, data, 'upsert');
     }
   }
 
@@ -649,39 +405,31 @@ class UniversalRealtimeSyncService {
       const cleanId = String(id || '').trim().replace(/\//g, '_');
       if (!cleanId) return false;
 
-      // 1. Memory update
+      // 1. Instant local memory update
       const map = this.collectionDocsMap.get(collectionName);
       if (map) {
         map.delete(cleanId);
       }
 
-      // 2. VPS Server delete
-      const vpsUrl = this.activeVpsBaseUrl || getPocketBaseUrl() || DEFAULT_VPS_IP;
-      fetch(`${vpsUrl.replace(/\/+$/, '')}/api/sync/${collectionName}/${cleanId}`, {
-        method: 'DELETE',
-        headers: { 'x-client-id': this.clientId },
-      }).catch(() => {
-        this.queueOfflineDoc(collectionName, cleanId, null, 'delete');
-      });
-
-      // 3. Mosquitto MQTT Broker delete broadcast
-      mqttSync.publishSync(collectionName, 'delete', { id: cleanId });
-
-      // 4. Firestore delete
-      if (db) {
-        const docRef = doc(db, collectionName, cleanId);
-        deleteDoc(docRef).catch(() => {});
-      }
+      // 2. Asynchronous PocketBase delete
+      pb.collection(collectionName)
+        .getFirstListItem(`recordId="${cleanId}"`)
+        .then((rec) => {
+          if (rec) pb.collection(collectionName).delete(rec.id).catch(() => null);
+        })
+        .catch(() => {
+          this.queueOfflineDoc(collectionName, cleanId, null, 'delete');
+        });
 
       return true;
     } catch (err: any) {
-      console.warn(`[CloudSync] Delete notice for ${collectionName}:`, err?.message || err);
+      console.warn(`[PocketBase] Delete notice for ${collectionName}:`, err?.message || err);
       return false;
     }
   }
 
   /**
-   * Batch upsert collection (for CSV/Excel imports)
+   * Batch upload collection (e.g. initial inventory import or CSV seed)
    */
   public async syncCollectionBatch(
     collectionName: string,
@@ -706,42 +454,18 @@ class UniversalRealtimeSyncService {
       });
 
       const total = items.length;
+      let synced = 0;
 
-      // 1. VPS batch push (single high-performance HTTP call)
-      const vpsUrl = this.activeVpsBaseUrl || getPocketBaseUrl() || DEFAULT_VPS_IP;
-      fetch(`${vpsUrl.replace(/\/+$/, '')}/api/sync/batch/${collectionName}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-client-id': this.clientId,
-        },
-        body: JSON.stringify({ items }),
-      }).catch(() => {});
-
-      // 2. Firestore batch chunking (350 records per chunk)
-      if (db && !this.isFirestoreQuotaExceeded) {
-        const batchSize = 350;
-        let synced = 0;
-        for (let i = 0; i < total; i += batchSize) {
-          const chunk = items.slice(i, i + batchSize);
-          const batch = writeBatch(db);
-          chunk.forEach((item) => {
-            if (item && (item.id || item.sku)) {
-              const cleanId = String(item.id || item.sku).replace(/\//g, '_');
-              const docRef = doc(db!, collectionName, cleanId);
-              batch.set(docRef, { ...item, updatedAt: new Date().toISOString() }, { merge: true });
-            }
-          });
-          await batch.commit().catch((err) => {
-            if (err?.code === 'resource-exhausted' || err?.message?.includes('RESOURCE_EXHAUSTED')) {
-              this.isFirestoreQuotaExceeded = true;
-            }
-          });
-          synced += chunk.length;
-          onProgress?.(synced, total, Math.round((synced / total) * 100));
+      // Asynchronous background upload to PocketBase in chunks
+      for (const item of items) {
+        if (item && (item.id || item.sku)) {
+          const docId = String(item.id || item.sku);
+          this.pushToPocketBase(collectionName, docId, item);
+          synced++;
+          if (synced % 20 === 0 || synced === total) {
+            onProgress?.(synced, total, Math.round((synced / total) * 100));
+          }
         }
-      } else {
-        onProgress?.(total, total, 100);
       }
 
       this.setState({
@@ -768,7 +492,7 @@ class UniversalRealtimeSyncService {
   }
 
   /**
-   * Upload all local records to cloud/VPS
+   * Upload all local records to PocketBase
    */
   public async uploadAllLocalData(): Promise<boolean> {
     try {
@@ -795,7 +519,7 @@ class UniversalRealtimeSyncService {
   }
 
   /**
-   * Delete ALL records in a cloud collection and reset local cache
+   * Reset / clear collection
    */
   public async clearCollection(collectionName: string): Promise<{ deletedCount: number; success: boolean }> {
     try {
@@ -806,22 +530,6 @@ class UniversalRealtimeSyncService {
         map.clear();
       }
 
-      if (db) {
-        try {
-          const colRef = collection(db, collectionName);
-          const snap = await getDocs(colRef).catch(() => null);
-          if (snap && snap.docs.length > 0) {
-            const batchSize = 350;
-            for (let i = 0; i < snap.docs.length; i += batchSize) {
-              const chunk = snap.docs.slice(i, i + batchSize);
-              const batch = writeBatch(db);
-              chunk.forEach((d) => batch.delete(d.ref));
-              await batch.commit().catch(() => {});
-            }
-          }
-        } catch {}
-      }
-
       this.setState({ status: 'connected', isLive: true, lastSyncedAt: new Date() });
       return { deletedCount: count, success: true };
     } catch {
@@ -830,40 +538,24 @@ class UniversalRealtimeSyncService {
   }
 
   /**
-   * Dynamically update VPS / PocketBase server address and re-connect
+   * Reconnect with custom PocketBase URL
    */
   public async reconnectWithServerUrl(newUrl?: string): Promise<boolean> {
     if (newUrl) {
       setCustomPocketBaseUrl(newUrl);
     }
-    if (this.sseEventSource) {
-      try {
-        this.sseEventSource.close();
-      } catch {}
-      this.sseEventSource = null;
-    }
-    this.isVPSActive = false;
-    this.isPocketBaseActive = false;
-
-    this.setState({
-      status: 'connecting',
-      serverUrl: newUrl || getPocketBaseUrl() || DEFAULT_VPS_IP,
-    });
-
-    return await this.connectVPSStream();
+    return await this.connectPocketBase();
   }
 
   // -------------------------------------------------------------
-  // Offline Sync Queue Management
+  // Offline Queue
   // -------------------------------------------------------------
   private queueOfflineDoc(collectionName: string, id: string, data: any, action: 'upsert' | 'delete') {
     try {
       const rawQueue = safeStorage.getItem(STORAGE_KEYS.SYNC_QUEUE);
       const queue: any[] = rawQueue ? JSON.parse(rawQueue) : [];
       queue.push({ collectionName, id, data, action, timestamp: Date.now() });
-      // Keep queue manageable (last 500 items max)
-      const trimmed = queue.slice(-500);
-      safeStorage.setItem(STORAGE_KEYS.SYNC_QUEUE, JSON.stringify(trimmed));
+      safeStorage.setItem(STORAGE_KEYS.SYNC_QUEUE, JSON.stringify(queue.slice(-500)));
     } catch {}
   }
 
@@ -875,8 +567,6 @@ class UniversalRealtimeSyncService {
       if (!Array.isArray(queue) || queue.length === 0) return;
 
       safeStorage.removeItem(STORAGE_KEYS.SYNC_QUEUE);
-      console.log(`[CloudSync] Draining ${queue.length} offline queued records...`);
-
       for (const item of queue) {
         if (item.action === 'upsert' && item.data) {
           await this.syncDocument(item.collectionName, item.id, item.data);
@@ -888,12 +578,6 @@ class UniversalRealtimeSyncService {
   }
 
   public destroy() {
-    if (this.sseEventSource) {
-      try {
-        this.sseEventSource.close();
-      } catch {}
-      this.sseEventSource = null;
-    }
     this.unsubscribes.forEach((unsub) => {
       try {
         unsub();
@@ -904,4 +588,4 @@ class UniversalRealtimeSyncService {
   }
 }
 
-export const cloudSync = new UniversalRealtimeSyncService();
+export const cloudSync = new PocketBaseRealtimeSyncService();

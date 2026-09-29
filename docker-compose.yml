@@ -7,7 +7,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - VITE_POCKETBASE_URL=
+        - VITE_POCKETBASE_URL=http://187.126.115.40:8090
     container_name: richierich
     restart: unless-stopped
     ports:
@@ -29,33 +29,12 @@ services:
     volumes:
       - pb_data:/pb_data
       - ./pb_migrations:/pb_migrations
-    environment:
-      - POCKETBASE_ENCRYPTION_KEY=
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8090/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # -------------------------------------------------------------
-  # 3. Mosquitto MQTT Broker (Industrial & POS Hardware Sync)
-  # -------------------------------------------------------------
-  mosquitto:
-    image: eclipse-mosquitto:latest
-    container_name: richierich-mosquitto
-    restart: unless-stopped
-    ports:
-      - "1883:1883"   # Standard MQTT for Thermal Printers, Scanners, ESP32
-      - "9001:9001"   # WebSocket MQTT for Web POS & Browser Sync
-    volumes:
-      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
-      - mosquitto_data:/mosquitto/data
-      - mosquitto_log:/mosquitto/log
-
 volumes:
   pb_data:
-    driver: local
-  mosquitto_data:
-    driver: local
-  mosquitto_log:
     driver: local

@@ -1,33 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Server,
-  CheckCircle2,
-  RefreshCw,
-  AlertCircle,
-  Database,
-  Wifi,
-  ShieldCheck,
-  ArrowUpDown,
   X,
-  Zap,
-  ExternalLink,
-  Save,
-  Check,
+  Database,
+  RefreshCw,
+  CheckCircle2,
+  AlertTriangle,
+  UploadCloud,
+  HardDrive,
+  Globe,
   Radio,
   SlidersHorizontal,
-  Printer,
-  Cpu,
   Layers,
+  Save,
+  Check,
 } from 'lucide-react';
-import { cloudSync, CloudSyncState } from '../../services/cloudSync';
+import { cloudSync, CloudSyncState, COLLECTIONS } from '../../services/cloudSync';
 import {
   getPocketBaseUrl,
   checkPocketBaseHealth,
-  setCustomPocketBaseUrl,
   PocketBaseHealthResult,
-  DEFAULT_VPS_IP,
+  DEFAULT_POCKETBASE_URL,
 } from '../../services/pocketbaseClient';
-import { mqttSync, MQTTConnectionState, DEFAULT_MQTT_WS_URL } from '../../services/mqttSyncService';
 
 interface CloudSyncModalProps {
   isOpen: boolean;
@@ -39,36 +32,22 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
   const [isPushing, setIsPushing] = useState(false);
   const [pushMessage, setPushMessage] = useState<string | null>(null);
 
-  // Server address configuration
-  const [serverUrlInput, setServerUrlInput] = useState<string>(getPocketBaseUrl() || DEFAULT_VPS_IP);
+  // PocketBase Server Config State
+  const [serverUrlInput, setServerUrlInput] = useState<string>(getPocketBaseUrl() || DEFAULT_POCKETBASE_URL);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<PocketBaseHealthResult | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Mosquitto MQTT State
-  const [mqttState, setMqttState] = useState<MQTTConnectionState>(mqttSync.getState());
-  const [mqttUrlInput, setMqttUrlInput] = useState<string>(mqttSync.getBrokerUrl());
-  const [mqttSaveSuccess, setMqttSaveSuccess] = useState(false);
-  const [hardwareTestFeedback, setHardwareTestFeedback] = useState<string | null>(null);
-
   useEffect(() => {
     if (!isOpen) return;
-    setServerUrlInput(getPocketBaseUrl() || DEFAULT_VPS_IP);
-    setMqttUrlInput(mqttSync.getBrokerUrl());
+    setServerUrlInput(getPocketBaseUrl() || DEFAULT_POCKETBASE_URL);
     setTestResult(null);
     setSaveSuccess(false);
 
     const unsub = cloudSync.subscribe((state) => {
       setSyncState(state);
     });
-    const unsubMqtt = mqttSync.subscribeStatus((st) => {
-      setMqttState(st);
-    });
-
-    return () => {
-      unsub();
-      unsubMqtt();
-    };
+    return unsub;
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -77,405 +56,211 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
     setIsTesting(true);
     setTestResult(null);
     try {
-      const res = await checkPocketBaseHealth(serverUrlInput.trim());
-      setTestResult(res);
+      const result = await checkPocketBaseHealth(serverUrlInput.trim());
+      setTestResult(result);
     } finally {
       setIsTesting(false);
     }
   };
 
-  const handleSaveAndConnect = async () => {
-    setIsTesting(true);
-    try {
-      const cleaned = serverUrlInput.trim().replace(/\/+$/, '');
-      setCustomPocketBaseUrl(cleaned);
-      await cloudSync.reconnectWithServerUrl(cleaned);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } finally {
-      setIsTesting(false);
-    }
-  };
-
-  const handleSaveMqtt = () => {
-    const cleaned = mqttUrlInput.trim();
-    mqttSync.setBrokerUrl(cleaned);
-    setMqttSaveSuccess(true);
-    setTimeout(() => setMqttSaveSuccess(false), 3000);
-  };
-
-  const handleTestMqttHardware = () => {
-    mqttSync.publishHardwareCommand('printer', {
-      action: 'TEST_PRINT',
-      message: 'Richie Rich POS - Mosquitto MQTT Hardware Link Active',
-      timestamp: new Date().toISOString(),
-    });
-    setHardwareTestFeedback('⚡ Test pulse dispatched to MQTT topic: richierich/hardware/printer');
-    setTimeout(() => setHardwareTestFeedback(null), 4000);
+  const handleSaveAndReconnect = async () => {
+    const cleaned = serverUrlInput.trim();
+    setSaveSuccess(true);
+    await cloudSync.reconnectWithServerUrl(cleaned);
+    setTimeout(() => setSaveSuccess(false), 3000);
   };
 
   const handleForceUpload = async () => {
     setIsPushing(true);
     setPushMessage(null);
     try {
-      const ok = await cloudSync.uploadAllLocalData();
-      if (ok) {
-        setPushMessage('✅ Full catalog, stores, and warehouse records successfully synchronized with PocketBase VPS!');
+      const success = await cloudSync.uploadAllLocalData();
+      if (success) {
+        setPushMessage('✅ All local records uploaded to PocketBase server successfully!');
       } else {
-        setPushMessage('⚠️ Could not complete full sync. Check VPS connection.');
+        setPushMessage('⚠️ Could not complete upload. Ensure PocketBase server is running.');
       }
+    } catch (err: any) {
+      setPushMessage(`❌ Error: ${err?.message || 'Upload failed'}`);
     } finally {
       setIsPushing(false);
-      setTimeout(() => setPushMessage(null), 5000);
-    }
-  };
-
-  const getStatusBadge = () => {
-    switch (syncState.status) {
-      case 'connected':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            {syncState.engine === 'firebase'
-              ? 'Cloud Real-Time Active (Firestore)'
-              : syncState.engine === 'hybrid'
-              ? 'Dual Cloud Live (Firestore + PocketBase VPS)'
-              : 'VPS PocketBase Live (Unlimited Credits)'}
-          </span>
-        );
-      case 'syncing':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20">
-            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-            Syncing Changes...
-          </span>
-        );
-      case 'connecting':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-500/10 text-blue-600 border border-blue-500/20">
-            <Wifi className="w-3.5 h-3.5 animate-pulse" />
-            Connecting to Cloud Database...
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-500/10 text-slate-600 border border-slate-500/20">
-            <AlertCircle className="w-3.5 h-3.5" />
-            Local Browser Cache (Offline Safe)
-          </span>
-        );
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="w-full max-w-xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Modal Header */}
-        <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between shrink-0">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400">
-              <Zap className="w-5 h-5" />
+            <div className="p-2.5 rounded-2xl bg-amber-500 text-slate-950 shadow-sm">
+              <Database className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-bold text-base text-white">Real-Time Sync & Server Center</h2>
-              <p className="text-xs text-slate-300">Unlimited Credits VPS Server & Multi-Store Live Sync</p>
+              <h2 className="font-bold text-slate-900 text-base">PocketBase Real-Time Sync</h2>
+              <p className="text-xs text-slate-500 font-medium">
+                Sub-millisecond multi-counter synchronization & persistent storage
+              </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-6 space-y-5 overflow-y-auto">
-          {/* Status Bar */}
-          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
-            <div className="text-xs text-slate-600 font-medium">Real-Time Sync Engine:</div>
-            {getStatusBadge()}
+        {/* Content */}
+        <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+          {/* Status Banner */}
+          <div
+            className={`p-4 rounded-2xl border flex items-start gap-3 ${
+              syncState.isLive
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-900'
+                : 'bg-amber-500/10 border-amber-500/20 text-amber-900'
+            }`}
+          >
+            {syncState.isLive ? (
+              <Radio className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5 animate-pulse" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            )}
+            <div className="text-xs space-y-1">
+              <div className="font-bold flex items-center gap-2">
+                <span>{syncState.isLive ? 'PocketBase Real-Time Active' : 'Operating in Local Mode'}</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold bg-white/70">
+                  {syncState.status.toUpperCase()}
+                </span>
+              </div>
+              <p className="text-slate-600 leading-relaxed">
+                {syncState.isLive
+                  ? 'All sales, invoices, and stock updates stream live between all counter terminals and PocketBase in real time.'
+                  : 'Changes are cached safely in local storage and will automatically synchronize when PocketBase is reachable.'}
+              </p>
+            </div>
           </div>
 
-          {/* Database Specs Grid */}
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-              <div className="text-slate-500 font-medium flex items-center gap-1.5">
-                <Database className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Active Database</span>
-              </div>
-              <div className="font-mono text-slate-800 font-semibold truncate text-[11px]" title={syncState.serverUrl}>
-                {syncState.serverUrl}
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-              <div className="text-slate-500 font-medium flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Live Channels</span>
-              </div>
-              <div className="font-mono text-slate-800 font-semibold text-[11px]">
-                {syncState.activeListenersCount} Live Streams Active
-              </div>
-            </div>
-          </div>
-
-          {/* VPS PocketBase Server Address Card */}
-          <div className="p-4 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/50 via-white to-slate-50 space-y-3">
+          {/* PocketBase Server Configuration */}
+          <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Server className="w-4 h-4 text-indigo-600" />
-                <h3 className="font-bold text-xs text-slate-800">VPS Server Address (Unlimited Credits)</h3>
+                <SlidersHorizontal className="w-4 h-4 text-slate-700" />
+                <h3 className="font-bold text-xs text-slate-800">PocketBase Server Endpoint</h3>
               </div>
-              <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200">
-                0 Quota / $0 Fees
-              </span>
+              <span className="text-[11px] font-mono text-slate-500">Port 8090</span>
             </div>
 
-            <p className="text-[11px] text-slate-600 leading-relaxed">
-              Your self-hosted server runs PocketBase with zero credit consumption. Every store counter, POS order, and stock update syncs without limits.
+            <p className="text-[11px] text-slate-500">
+              Enter your VPS server address hosting PocketBase (default: port 8090):
             </p>
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold text-slate-700">PocketBase Server Address:</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={serverUrlInput}
-                  onChange={(e) => setServerUrlInput(e.target.value)}
-                  placeholder="http://187.126.115.40"
-                  className="flex-1 px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
-                />
-                <button
-                  type="button"
-                  onClick={handleTestConnection}
-                  disabled={isTesting}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors"
-                >
-                  {isTesting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5 text-indigo-600" />}
-                  Test
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveAndConnect}
-                  disabled={isTesting}
-                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
-                >
-                  {saveSuccess ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Save className="w-3.5 h-3.5" />}
-                  Save
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Presets */}
-            <div className="flex flex-wrap items-center gap-2 pt-0.5">
-              <span className="text-[10px] text-slate-400 font-medium">Quick Presets:</span>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={serverUrlInput}
+                onChange={(e) => setServerUrlInput(e.target.value)}
+                placeholder="http://187.126.115.40:8090"
+                className="flex-1 px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800"
+              />
               <button
                 type="button"
-                onClick={() => setServerUrlInput('http://187.126.115.40')}
-                className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 hover:border-indigo-400 cursor-pointer"
+                onClick={handleTestConnection}
+                disabled={isTesting}
+                className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
               >
-                http://187.126.115.40 (Port 80)
+                {isTesting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
+                Test
               </button>
               <button
                 type="button"
-                onClick={() => setServerUrlInput('http://187.126.115.40:8090')}
-                className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 hover:border-indigo-400 cursor-pointer"
+                onClick={handleSaveAndReconnect}
+                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
               >
-                http://187.126.115.40:8090 (Direct)
+                {saveSuccess ? <Check className="w-3.5 h-3.5 text-emerald-950" /> : <Save className="w-3.5 h-3.5" />}
+                Save
               </button>
             </div>
 
-            {/* Test Connection Output */}
             {testResult && (
               <div
-                className={`p-3 rounded-xl text-xs leading-relaxed ${
-                  testResult.status === 'online'
-                    ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                className={`p-2.5 rounded-xl text-xs flex items-center gap-2 border ${
+                  testResult.success
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                     : testResult.status === 'mixed_content'
-                    ? 'bg-amber-50 border border-amber-200 text-amber-900'
-                    : 'bg-rose-50 border border-rose-200 text-rose-800'
+                    ? 'bg-amber-50 text-amber-800 border-amber-200'
+                    : 'bg-red-50 text-red-800 border-red-200'
                 }`}
               >
-                <div className="font-semibold flex items-center gap-1.5 mb-1">
-                  {testResult.status === 'online' ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 text-amber-600" />
-                  )}
-                  <span>
-                    {testResult.status === 'online'
-                      ? 'Server Reachable & Online!'
-                      : testResult.status === 'mixed_content'
-                      ? 'Mixed Content Note (HTTPS Preview)'
-                      : 'Connection Failed'}
-                  </span>
-                </div>
-                <p className="text-[11px]">{testResult.message}</p>
-              </div>
-            )}
-
-            {/* Admin Dashboard & VPS Help */}
-            <div className="pt-1 flex items-center justify-between text-[11px] border-t border-slate-200/80">
-              <span className="text-slate-500">PocketBase Admin Dashboard:</span>
-              <a
-                href="http://187.126.115.40/_/"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer"
-              >
-                <span>http://187.126.115.40/_/</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-          </div>
-
-          {/* Option 4: Mosquitto MQTT Broker (Industrial & High-Speed POS Hardware Sync) */}
-          <div className="p-4 rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-50/60 via-white to-slate-50 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-cyan-600" />
-                <h3 className="font-bold text-xs text-slate-800">
-                  Option 4: Mosquitto MQTT Broker (Industrial POS Hardware Sync)
-                </h3>
-              </div>
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border ${
-                mqttState.isConnected
-                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                  : mqttState.status === 'connecting'
-                  ? 'bg-amber-100 text-amber-800 border-amber-200'
-                  : 'bg-slate-100 text-slate-600 border-slate-200'
-              }`}>
-                {mqttState.isConnected ? '● MQTT Active' : mqttState.status === 'connecting' ? '◌ Connecting...' : '○ Ready'}
-              </span>
-            </div>
-
-            <p className="text-[11px] text-slate-600 leading-relaxed">
-              Eclipse Mosquitto provides <strong>sub-millisecond instant messaging</strong> between POS terminals, thermal receipt printers, electronic cash drawers, and barcode scanners with 0 load time.
-            </p>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-[11px] font-semibold text-slate-700">MQTT WebSocket Broker URL:</label>
-                <span className="text-[10px] text-slate-500 font-mono">Port 9001 (WS) / Port 1883 (TCP)</span>
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={mqttUrlInput}
-                  onChange={(e) => setMqttUrlInput(e.target.value)}
-                  placeholder="ws://187.126.115.40:9001"
-                  className="flex-1 px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-slate-800"
-                />
-                <button
-                  type="button"
-                  onClick={handleSaveMqtt}
-                  className="px-3.5 py-2 bg-cyan-700 hover:bg-cyan-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
-                >
-                  {mqttSaveSuccess ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Save className="w-3.5 h-3.5" />}
-                  Connect
-                </button>
-              </div>
-            </div>
-
-            {/* MQTT Live Telemetry & Hardware Pulse Test */}
-            <div className="grid grid-cols-3 gap-2 text-[11px]">
-              <div className="p-2 rounded-xl bg-white border border-slate-200 text-center">
-                <div className="text-[10px] text-slate-400 font-medium">Packets Sent</div>
-                <div className="font-mono font-bold text-slate-800 text-xs">{mqttState.messagesSent}</div>
-              </div>
-              <div className="p-2 rounded-xl bg-white border border-slate-200 text-center">
-                <div className="text-[10px] text-slate-400 font-medium">Packets Rcvd</div>
-                <div className="font-mono font-bold text-slate-800 text-xs">{mqttState.messagesReceived}</div>
-              </div>
-              <button
-                type="button"
-                onClick={handleTestMqttHardware}
-                className="p-2 rounded-xl bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 text-cyan-800 text-center font-semibold cursor-pointer transition-colors flex flex-col items-center justify-center"
-              >
-                <div className="flex items-center gap-1 text-[10px]">
-                  <Printer className="w-3 h-3 text-cyan-600" />
-                  <span>Hardware Pulse</span>
-                </div>
-                <span className="text-[9px] text-cyan-600">Test Trigger</span>
-              </button>
-            </div>
-
-            {hardwareTestFeedback && (
-              <div className="p-2 rounded-lg bg-cyan-100/70 border border-cyan-300 text-cyan-900 text-[11px] font-medium animate-in fade-in duration-150">
-                {hardwareTestFeedback}
-              </div>
-            )}
-
-            {/* Hardware Ports Reference */}
-            <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5">
-              <span>Hardware (Printers/Scanners): <strong>tcp://187.126.115.40:1883</strong></span>
-              <span>Web POS: <strong>ws://187.126.115.40:9001</strong></span>
-            </div>
-          </div>
-
-          {/* Sync Stats */}
-          <div className="p-3.5 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 text-xs space-y-2">
-            <div className="flex items-center justify-between text-slate-700">
-              <span className="font-bold flex items-center gap-1.5 text-emerald-900">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Automatic Real-Time Sync Active
-              </span>
-              <span className="text-[11px] text-slate-500">
-                {syncState.lastSyncedAt
-                  ? `Last synced at ${syncState.lastSyncedAt.toLocaleTimeString()}`
-                  : 'Ready to sync'}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-600 leading-relaxed">
-              Every POS order, invoice, stock deduction, and warehouse transfer syncs automatically across all store counters in real time. <strong>Manual pushing is never required.</strong>
-            </p>
-          </div>
-
-          {pushMessage && (
-            <div className="p-3 rounded-xl bg-slate-900 text-white text-xs font-medium animate-in fade-in duration-200">
-              {pushMessage}
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="space-y-2 pt-1">
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={handleForceUpload}
-                disabled={isPushing}
-                className="flex-1 py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {isPushing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
-                    <span>Syncing Cloud Database...</span>
-                  </>
+                {testResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                 ) : (
-                  <>
-                    <ArrowUpDown className="w-4 h-4 text-amber-400" />
-                    <span>Force Full Re-Sync (Optional)</span>
-                  </>
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                 )}
-              </button>
+                <span className="leading-snug">{testResult.message}</span>
+              </div>
+            )}
+          </div>
 
-              <button
-                type="button"
-                onClick={onClose}
-                className="py-3 px-5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
-              >
-                Close
-              </button>
+          {/* Sync Telemetry */}
+          <div className="p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-xs space-y-2">
+            <div className="flex items-center justify-between text-slate-700">
+              <span className="text-slate-500">Connected Server:</span>
+              <span className="font-mono font-medium truncate max-w-[240px]">{syncState.serverUrl}</span>
             </div>
-            <p className="text-[10px] text-center text-slate-400">
-              Changes sync automatically in the background. Use the re-sync button only to re-upload all local historical records.
-            </p>
+            <div className="flex items-center justify-between text-slate-700">
+              <span className="text-slate-500">Live SSE Channels:</span>
+              <span className="font-medium text-emerald-600 font-mono">
+                {syncState.activeListenersCount} active collections
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-slate-700">
+              <span className="text-slate-500">Last Synced:</span>
+              <span className="font-medium">
+                {syncState.lastSyncedAt ? syncState.lastSyncedAt.toLocaleTimeString() : 'Waiting for event...'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-slate-700">
+              <span className="text-slate-500">Live Packets Synced:</span>
+              <span className="font-mono font-bold text-slate-900">{syncState.itemsSynced}</span>
+            </div>
+          </div>
+
+          {/* Manual Force Upload */}
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={handleForceUpload}
+              disabled={isPushing}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs cursor-pointer transition-colors shadow-xs disabled:opacity-50"
+            >
+              {isPushing ? <RefreshCw className="w-4 h-4 animate-spin text-amber-400" /> : <UploadCloud className="w-4 h-4 text-amber-400" />}
+              <span>{isPushing ? 'Uploading Local Data to PocketBase...' : 'Push All Local Catalog & Invoices to PocketBase'}</span>
+            </button>
+            {pushMessage && (
+              <p className="text-[11px] font-medium text-center text-slate-700 animate-in fade-in duration-150">
+                {pushMessage}
+              </p>
+            )}
+          </div>
+
+          {/* Quick Collection Reference */}
+          <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-2 text-[11px]">
+            <div className="flex items-center gap-1.5 font-bold text-slate-700">
+              <Layers className="w-3.5 h-3.5 text-amber-600" />
+              <span>PocketBase Collections Monitored</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.values(COLLECTIONS).map((c) => (
+                <span key={c} className="px-2 py-0.5 rounded-md bg-white border border-slate-200 font-mono text-[10px] text-slate-700">
+                  {c}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 };
-

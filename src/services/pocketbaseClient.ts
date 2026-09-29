@@ -1,6 +1,6 @@
 import PocketBase from 'pocketbase';
 
-const env = (import.meta as any).env || {};
+export const DEFAULT_POCKETBASE_URL = 'http://187.126.115.40:8090';
 export const DEFAULT_VPS_IP = 'http://187.126.115.40';
 
 export const getCustomPocketBaseUrl = (): string => {
@@ -23,46 +23,38 @@ export const setCustomPocketBaseUrl = (url: string) => {
   }
 };
 
-// Target PocketBase URL (Defaults to custom setting, env var, or production VPS IP)
+// Target PocketBase URL (Custom override, Vite env, or default VPS PocketBase)
 export const getPocketBaseUrl = (): string => {
   const custom = getCustomPocketBaseUrl();
   if (custom) return custom;
 
+  const env = (import.meta as any).env || {};
   if (env.VITE_POCKETBASE_URL && env.VITE_POCKETBASE_URL.trim() !== '') {
     return env.VITE_POCKETBASE_URL.trim();
   }
 
   if (typeof window !== 'undefined' && window.location) {
     const { port, origin, hostname } = window.location;
-    // When served via production Nginx directly on the VPS host (e.g. 187.126.115.40:80 or custom domain)
-    if (
-      (port === '' || port === '80' || port === '443') &&
-      (hostname === '187.126.115.40' || (!hostname.includes('run.app') && !hostname.includes('localhost') && hostname !== '127.0.0.1'))
-    ) {
-      return origin;
-    }
-    // If accessing explicitly on PocketBase port
+    // When served on VPS host port 8090
     if (port === '8090') {
       return origin;
     }
-    // Local dev server fallback (e.g. localhost:3000)
+    // Local development fallback
     if (hostname && (hostname === 'localhost' || hostname === '127.0.0.1')) {
       return `http://${hostname}:8090`;
     }
   }
 
-  // Default VPS IP provided by user
-  return DEFAULT_VPS_IP;
+  return DEFAULT_POCKETBASE_URL;
 };
 
+// Singleton PocketBase client instance
 export const pb = new PocketBase(getPocketBaseUrl());
 
-// Disable auto-cancellation so multiple rapid queries or real-time calls execute cleanly
+// Disable auto-cancellation so concurrent POS queries and realtime streams don't cancel each other
 pb.autoCancellation(false);
 
-export const isPocketBaseConfigured = (): boolean => {
-  return true;
-};
+export const isPocketBaseConfigured = (): boolean => true;
 
 export interface PocketBaseHealthResult {
   success: boolean;
@@ -73,24 +65,33 @@ export interface PocketBaseHealthResult {
 }
 
 export const checkPocketBaseHealth = async (customUrl?: string): Promise<PocketBaseHealthResult> => {
-  const base = (customUrl || getPocketBaseUrl()).replace(/\/+$/, '');
-  const candidateUrls = [base];
-  if (!base.includes(':8090') && !base.endsWith('/api')) {
-    candidateUrls.push(`${base}:8090`);
+  const rawBase = (customUrl || getPocketBaseUrl()).replace(/\/+$/, '');
+  const candidateUrls: string[] = [];
+
+  // Try exact URL first
+  candidateUrls.push(rawBase);
+
+  // If missing port 8090, add it as candidate
+  if (!rawBase.includes(':8090') && !rawBase.includes(':3000')) {
+    candidateUrls.push(`${rawBase}:8090`);
   }
 
   for (const url of candidateUrls) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(`${url}/api/health`, { signal: controller.signal });
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(`${url}/api/health`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
       clearTimeout(timeoutId);
+
       if (res.ok) {
         const data = await res.json().catch(() => null);
         return {
           success: true,
           status: 'online',
-          message: data?.message || 'Server online and healthy',
+          message: data?.message || 'PocketBase server is online and responding healthy',
           testedUrl: url,
           code: res.status,
         };
@@ -100,7 +101,7 @@ export const checkPocketBaseHealth = async (customUrl?: string): Promise<PocketB
         return {
           success: false,
           status: 'mixed_content',
-          message: 'Mixed Content security: Browsers prevent HTTPS cloud preview from making direct insecure HTTP calls. When accessed on your VPS http://187.126.115.40/ it connects natively with zero limits!',
+          message: 'Browser HTTPS Mixed Content restriction in preview. Works 100% natively when running on your VPS http://187.126.115.40/ or custom domain!',
           testedUrl: url,
         };
       }
@@ -110,8 +111,7 @@ export const checkPocketBaseHealth = async (customUrl?: string): Promise<PocketB
   return {
     success: false,
     status: 'offline',
-    message: 'Could not reach server at this address. Please ensure Docker or PocketBase is running.',
-    testedUrl: base,
+    message: `Could not connect to PocketBase at ${rawBase}. Ensure PocketBase container is running on port 8090.`,
+    testedUrl: rawBase,
   };
 };
-
