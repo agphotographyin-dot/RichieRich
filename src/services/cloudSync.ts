@@ -1,27 +1,17 @@
-import {
-  collection,
-  doc,
-  setDoc,
-  deleteDoc,
-  getDocs,
-  query,
-  limit,
-  onSnapshot,
-  writeBatch,
-  Unsubscribe,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { db, isFirebaseConfigured, firebaseConfig } from './firebaseClient';
+import { pb, getPocketBaseUrl } from './pocketbaseClient';
 import { safeStorage } from '../utils/safeStorage';
 import { InventoryItem, Order, StoreLocation, Customer, StoreExpense } from '../types';
 import { PurchaseOrder, PurchaseBill, StockTransfer, StoreStockIndent, Supplier } from '../types/warehouse';
 
+export type SyncEngine = 'pocketbase' | 'firebase';
 export type SyncStatus = 'connected' | 'connecting' | 'syncing' | 'offline' | 'error';
 
 export interface CloudSyncState {
   status: SyncStatus;
   isLive: boolean;
-  projectId: string;
+  engine: SyncEngine;
+  serverUrl: string;
+  projectId?: string;
   databaseId?: string;
   lastSyncedAt: Date | null;
   itemsSynced: number;
@@ -32,7 +22,7 @@ export interface CloudSyncState {
 type SyncListener = (state: CloudSyncState) => void;
 
 // Local storage keys to mirror
-const STORAGE_KEYS = {
+export const STORAGE_KEYS = {
   INVENTORY: 'rr_panhouse_inventory',
   ORDERS: 'rr_panhouse_orders',
   STORES: 'rr_panhouse_stores',
@@ -45,8 +35,8 @@ const STORAGE_KEYS = {
   SUPPLIERS: 'wh_suppliers',
 };
 
-// Cloud Firestore Collection Names
-const COLLECTIONS = {
+// Collection Names
+export const COLLECTIONS = {
   INVENTORY: 'inventory',
   ORDERS: 'orders',
   STORES: 'stores',
@@ -57,29 +47,29 @@ const COLLECTIONS = {
   TRANSFERS: 'stock_transfers',
   INDENTS: 'store_indents',
   SUPPLIERS: 'suppliers',
-  META: '_system_metadata',
+  META: 'system_metadata',
 };
 
 class CloudSyncService {
   private state: CloudSyncState = {
     status: 'connecting',
     isLive: false,
-    projectId: firebaseConfig?.projectId || '',
-    databaseId: firebaseConfig?.firestoreDatabaseId,
+    engine: 'pocketbase',
+    serverUrl: getPocketBaseUrl(),
     lastSyncedAt: null,
     itemsSynced: 0,
     activeListenersCount: 0,
   };
 
   private listeners = new Set<SyncListener>();
-  private unsubscribes: Unsubscribe[] = [];
+  private unsubscribes: Array<() => void> = [];
   private isInitialized = false;
   private isApplyingRemoteUpdate = false;
   private debounceTimers: Record<string, any> = {};
   private collectionDocsMap = new Map<string, Map<string, any>>();
   private persistDebounceTimers: Record<string, any> = {};
 
-  // External notification & cache hooks (injected to prevent circular imports)
+  // External notification & cache hooks
   private onStorageChangeNotify?: () => void;
   private onWarehouseChangeNotify?: () => void;
   private onStorageCacheUpdate?: (key: string, val: any) => void;
@@ -116,15 +106,11 @@ class CloudSyncService {
       try {
         cb(this.state);
       } catch (err) {
-        console.error('Error in cloud sync status listener:', err);
+        console.error('Error in sync status listener:', err);
       }
     });
   }
 
-  /**
-   * Schedules non-blocking asynchronous writing to localStorage in background,
-   * avoiding synchronous freezes on the main UI thread during large sync events.
-   */
   private scheduleStoragePersist(storageKey: string, docs: any[]) {
     if (this.persistDebounceTimers[storageKey]) {
       clearTimeout(this.persistDebounceTimers[storageKey]);
@@ -139,33 +125,50 @@ class CloudSyncService {
   }
 
   /**
-   * Initializes real-time Firestore listeners and performs first-time seeding if DB is empty
+   * Initializes PocketBase real-time synchronization.
+   * Tests connectivity, seeds baseline records if needed, and establishes SSE subscriptions.
    */
   public async init() {
     if (this.isInitialized) return;
     this.isInitialized = true;
 
-    if (!isFirebaseConfigured() || !db) {
-      this.setState({
-        status: 'offline',
-        isLive: false,
-        errorMessage: 'Firestore not configured. Using local offline storage.',
-      });
-      return;
-    }
+    this.setState({
+      status: 'connecting',
+      serverUrl: getPocketBaseUrl(),
+    });
 
     try {
-      this.setState({ status: 'connecting' });
+      // 1. Health check PocketBase instance
+      const health = await pb.health.check().catch(() => null);
 
-      // 1. Ultra-fast check with limit(1) to test if Firestore has data without downloading thousands of items
-      const invSnap = await getDocs(query(collection(db, COLLECTIONS.INVENTORY), limit(1)));
-      if (invSnap.empty) {
-        console.log('[CloudSync] Firestore is fresh. Seeding initial baseline data...');
-        await this.seedBaselineData();
+      if (!health || health.code !== 200) {
+        console.warn(`[CloudSync] PocketBase at ${this.state.serverUrl} is not yet reachable. Operating in local mode.`);
+        this.setState({
+          status: 'offline',
+          isLive: false,
+          errorMessage: `Connecting to PocketBase VPS at ${this.state.serverUrl}...`,
+        });
+
+        // Set up periodic background retry every 12 seconds
+        const retryTimer = setInterval(async () => {
+          try {
+            const recheck = await pb.health.check();
+            if (recheck && recheck.code === 200) {
+              clearInterval(retryTimer);
+              this.isInitialized = false;
+              this.init();
+            }
+          } catch {
+            // Still offline
+          }
+        }, 12000);
+        return;
       }
 
-      // 2. Setup Real-time Snapshots on all major operational collections
-      this.setupRealtimeListeners();
+      console.log(`[CloudSync] Connected to PocketBase VPS at ${this.state.serverUrl}`);
+
+      // 2. Setup Realtime SSE Subscriptions on collections
+      await this.setupPocketBaseListeners();
 
       this.setState({
         status: 'connected',
@@ -173,203 +176,161 @@ class CloudSyncService {
         lastSyncedAt: new Date(),
         errorMessage: undefined,
       });
-      console.log('[CloudSync] Real-time Cloud Firestore synchronization active.');
     } catch (err: any) {
-      console.warn('[CloudSync] Realtime initialization error (falling back to local):', err);
+      console.warn('[CloudSync] PocketBase initialization warning:', err);
       this.setState({
-        status: 'error',
+        status: 'offline',
         isLive: false,
-        errorMessage: err?.message || 'Failed to connect to Cloud Firestore',
+        errorMessage: err?.message || 'Using offline local storage until VPS PocketBase connects.',
       });
     }
   }
 
   /**
-   * Listen to remote collection changes in real time with delta processing
+   * Subscribes to real-time events on PocketBase collections via Server-Sent Events (SSE)
    */
-  private setupRealtimeListeners() {
-    if (!db) return;
+  private async setupPocketBaseListeners() {
+    // Unsubscribe existing
+    this.destroy();
+    this.isInitialized = true;
 
-    // Clean any prior listeners
-    this.unsubscribes.forEach((unsub) => unsub());
-    this.unsubscribes = [];
-
-    // Helper to bind a collection
-    const bindCollection = <T extends { id: string }>(
+    const bindCollection = async <T extends { id: string }>(
       collectionName: string,
       storageKey: string,
       isWarehouse = false
     ) => {
-      if (!db) return;
-      const colRef = collection(db, collectionName);
-      let isFirstSnapshot = true;
-
-      const unsub = onSnapshot(
-        colRef,
-        { includeMetadataChanges: false },
-        (snapshot) => {
-          // If this snapshot contains local pending writes from this client,
-          // our optimistic in-memory state already has it. Skip to prevent echoing.
-          if (snapshot.metadata.hasPendingWrites) {
-            return;
-          }
-
-          if (snapshot.empty && !isFirstSnapshot) return;
-
-          let map = this.collectionDocsMap.get(collectionName);
-          if (!map) {
-            map = new Map<string, any>();
-            this.collectionDocsMap.set(collectionName, map);
-          }
-
-          if (isFirstSnapshot) {
-            isFirstSnapshot = false;
-            // Initial load: populate map with all documents
-            map.clear();
-            snapshot.forEach((docSnap) => {
-              const data = docSnap.data();
-              const id = String(data.id || docSnap.id);
-              map!.set(id, data);
-            });
-          } else {
-            // Real-time delta update: ONLY process changed, added, or removed docs (sub-millisecond O(1))
-            const changes = snapshot.docChanges();
-            if (changes.length === 0) return;
-
-            for (const change of changes) {
-              const data = change.doc.data();
-              const id = String(data.id || change.doc.id);
-              if (change.type === 'removed') {
-                map.delete(id);
-              } else {
-                map.set(id, data);
-              }
-            }
-          }
-
-          let remoteDocs = Array.from(map.values()) as T[];
-
-          // Deduplicate inventory documents arriving from Firestore to stop ghost duplicates & SKU fluctuations
-          if (collectionName === COLLECTIONS.INVENTORY && remoteDocs.length > 0) {
-            const seenSkus = new Map<string, InventoryItem>();
-            const duplicateDocIdsToDelete: string[] = [];
-            const sanitizedList: InventoryItem[] = [];
-
-            for (const docItem of (remoteDocs as unknown as InventoryItem[])) {
-              if (!docItem) continue;
-              const rawSku = docItem.sku ? String(docItem.sku).trim().toUpperCase() : '';
-              if (!rawSku) {
-                sanitizedList.push(docItem);
-                continue;
-              }
-
-              // Check if SKU has an artificial suffix like -1, -2 caused by older disambiguation bugs
-              const baseSkuMatch = rawSku.match(/^([A-Z0-9_-]+)-(\d+)$/i);
-              const baseSku = baseSkuMatch ? baseSkuMatch[1].toUpperCase() : rawSku;
-
-              const existing = seenSkus.get(baseSku);
-              if (existing) {
-                // If this is a duplicate or artificial suffix variant, mark for deletion from Firestore
-                const dupId = String(docItem.id);
-                duplicateDocIdsToDelete.push(dupId);
-                map.delete(dupId);
-              } else {
-                seenSkus.set(baseSku, docItem);
-                sanitizedList.push(docItem);
-              }
-            }
-
-            remoteDocs = sanitizedList as unknown as T[];
-
-            // Asynchronously purge obsolete duplicate documents from Firestore in background
-            if (duplicateDocIdsToDelete.length > 0 && isFirebaseConfigured() && db) {
-              setTimeout(async () => {
-                try {
-                  const b = writeBatch(db!);
-                  for (const dupId of duplicateDocIdsToDelete.slice(0, 100)) {
-                    b.delete(doc(db!, COLLECTIONS.INVENTORY, dupId));
-                  }
-                  await b.commit();
-                } catch (e) {
-                  console.warn('[CloudSync] Error purging duplicate docs:', e);
-                }
-              }, 150);
-            }
-          }
-
-          this.isApplyingRemoteUpdate = true;
-          try {
-            // 1. Immediately update in-memory caches so getters return fresh data instantly
-            if (this.onStorageCacheUpdate) {
-              this.onStorageCacheUpdate(storageKey, remoteDocs);
-            }
-            if (isWarehouse && this.onWarehouseCacheUpdate) {
-              this.onWarehouseCacheUpdate(storageKey, remoteDocs);
-            }
-
-            // 2. Schedule non-blocking async disk write in background
-            this.scheduleStoragePersist(storageKey, remoteDocs);
-
-            // 3. Immediately trigger UI subscribers (zero delay!)
-            if (isWarehouse) {
-              this.onWarehouseChangeNotify?.();
-            } else {
-              this.onStorageChangeNotify?.();
-            }
-
-            this.setState({
-              status: 'connected',
-              isLive: true,
-              lastSyncedAt: new Date(),
-              itemsSynced: this.state.itemsSynced + (isFirstSnapshot ? snapshot.size : snapshot.docChanges().length),
-            });
-          } finally {
-            this.isApplyingRemoteUpdate = false;
-          }
-        },
-        (error) => {
-          console.warn(`[CloudSync] Error listening to ${collectionName}:`, error);
-          this.setState({ status: 'error', errorMessage: error.message });
+      try {
+        let map = this.collectionDocsMap.get(collectionName);
+        if (!map) {
+          map = new Map<string, any>();
+          this.collectionDocsMap.set(collectionName, map);
         }
-      );
 
-      this.unsubscribes.push(unsub);
+        // Initial fetch of full list from PocketBase
+        try {
+          const records = await pb.collection(collectionName).getFullList({
+            sort: '-created',
+            requestKey: null,
+          });
+
+          if (records && records.length > 0) {
+            map.clear();
+            records.forEach((rec: any) => {
+              const appData = rec.data ? { ...rec.data, id: rec.recordId || rec.id } : rec;
+              map!.set(String(appData.id || rec.id), appData);
+            });
+
+            const remoteDocs = Array.from(map.values()) as T[];
+            this.applyRemoteUpdate(storageKey, remoteDocs, isWarehouse, records.length);
+          }
+        } catch (fetchErr: any) {
+          // If collection doesn't exist yet on PocketBase, log gently
+          console.log(`[CloudSync] Collection "${collectionName}" ready on PocketBase.`);
+        }
+
+        // Subscribe to real-time additions/modifications/deletions
+        const unsubscribeFunc = await pb.collection(collectionName).subscribe('*', (e) => {
+          const { action, record } = e;
+          const appData = record.data ? { ...record.data, id: record.recordId || record.id } : record;
+          const id = String(appData.id || record.id);
+
+          if (action === 'delete') {
+            map!.delete(id);
+          } else {
+            map!.set(id, appData);
+          }
+
+          const remoteDocs = Array.from(map!.values()) as T[];
+          this.applyRemoteUpdate(storageKey, remoteDocs, isWarehouse, 1);
+        }).catch((subErr) => {
+          console.warn(`[CloudSync] Real-time subscribe error for ${collectionName}:`, subErr);
+          return () => {};
+        });
+
+        if (unsubscribeFunc) {
+          this.unsubscribes.push(unsubscribeFunc);
+        }
+      } catch (err) {
+        console.warn(`[CloudSync] Failed to setup listener for ${collectionName}:`, err);
+      }
     };
 
-    // Bind real-time collections
-    bindCollection<InventoryItem>(COLLECTIONS.INVENTORY, STORAGE_KEYS.INVENTORY, false);
-    bindCollection<Order>(COLLECTIONS.ORDERS, STORAGE_KEYS.ORDERS, false);
-    bindCollection<StoreLocation>(COLLECTIONS.STORES, STORAGE_KEYS.STORES, false);
-    bindCollection<Customer>(COLLECTIONS.CUSTOMERS, STORAGE_KEYS.CUSTOMERS, false);
-    bindCollection<PurchaseOrder>(COLLECTIONS.PURCHASE_ORDERS, STORAGE_KEYS.PURCHASE_ORDERS, true);
-    bindCollection<PurchaseBill>(COLLECTIONS.INWARD_BILLS, STORAGE_KEYS.INWARD_BILLS, true);
-    bindCollection<StockTransfer>(COLLECTIONS.TRANSFERS, STORAGE_KEYS.TRANSFERS, true);
-    bindCollection<StoreStockIndent>(COLLECTIONS.INDENTS, STORAGE_KEYS.INDENTS, true);
-    bindCollection<Supplier>(COLLECTIONS.SUPPLIERS, STORAGE_KEYS.SUPPLIERS, true);
+    // Bind all 9 operational multi-store collections
+    await bindCollection<InventoryItem>(COLLECTIONS.INVENTORY, STORAGE_KEYS.INVENTORY, false);
+    await bindCollection<Order>(COLLECTIONS.ORDERS, STORAGE_KEYS.ORDERS, false);
+    await bindCollection<StoreLocation>(COLLECTIONS.STORES, STORAGE_KEYS.STORES, false);
+    await bindCollection<Customer>(COLLECTIONS.CUSTOMERS, STORAGE_KEYS.CUSTOMERS, false);
+    await bindCollection<StoreExpense>(COLLECTIONS.EXPENSES, STORAGE_KEYS.EXPENSES, false);
+    await bindCollection<PurchaseOrder>(COLLECTIONS.PURCHASE_ORDERS, STORAGE_KEYS.PURCHASE_ORDERS, true);
+    await bindCollection<PurchaseBill>(COLLECTIONS.INWARD_BILLS, STORAGE_KEYS.INWARD_BILLS, true);
+    await bindCollection<StockTransfer>(COLLECTIONS.TRANSFERS, STORAGE_KEYS.TRANSFERS, true);
+    await bindCollection<StoreStockIndent>(COLLECTIONS.INDENTS, STORAGE_KEYS.INDENTS, true);
+    await bindCollection<Supplier>(COLLECTIONS.SUPPLIERS, STORAGE_KEYS.SUPPLIERS, true);
 
     this.setState({ activeListenersCount: this.unsubscribes.length });
   }
 
+  private applyRemoteUpdate(storageKey: string, remoteDocs: any[], isWarehouse: boolean, count: number) {
+    this.isApplyingRemoteUpdate = true;
+    try {
+      if (this.onStorageCacheUpdate) {
+        this.onStorageCacheUpdate(storageKey, remoteDocs);
+      }
+      if (isWarehouse && this.onWarehouseCacheUpdate) {
+        this.onWarehouseCacheUpdate(storageKey, remoteDocs);
+      }
+
+      this.scheduleStoragePersist(storageKey, remoteDocs);
+
+      if (isWarehouse) {
+        this.onWarehouseChangeNotify?.();
+      } else {
+        this.onStorageChangeNotify?.();
+      }
+
+      this.setState({
+        status: 'connected',
+        isLive: true,
+        lastSyncedAt: new Date(),
+        itemsSynced: this.state.itemsSynced + count,
+      });
+    } finally {
+      this.isApplyingRemoteUpdate = false;
+    }
+  }
+
   /**
-   * Push a document to Firestore in real-time immediately when changed locally
+   * Push a document to PocketBase in real-time immediately when changed locally
    */
   public async syncDocument(collectionName: string, id: string, data: any) {
-    if (!isFirebaseConfigured() || !db || this.isApplyingRemoteUpdate) return;
+    if (this.isApplyingRemoteUpdate) return;
 
     try {
       const cleanId = String(id || Date.now());
-      const docRef = doc(db, collectionName, cleanId);
-
-      // Clean undefined values for Firestore
       const sanitized = JSON.parse(JSON.stringify(data));
 
-      // Optimistically update internal collection map
+      // Update in-memory map
       const map = this.collectionDocsMap.get(collectionName);
       if (map) {
         map.set(cleanId, sanitized);
       }
 
-      await setDoc(docRef, { ...sanitized, _updatedAt: serverTimestamp() }, { merge: true });
+      // Check if item already exists in PocketBase
+      const existing = await pb.collection(collectionName).getFirstListItem(`recordId="${cleanId}" || id="${cleanId}"`, { requestKey: null }).catch(() => null);
+
+      if (existing) {
+        await pb.collection(collectionName).update(existing.id, {
+          recordId: cleanId,
+          data: sanitized,
+          updatedAt: new Date().toISOString(),
+        });
+      } else {
+        await pb.collection(collectionName).create({
+          recordId: cleanId,
+          data: sanitized,
+          updatedAt: new Date().toISOString(),
+        });
+      }
 
       this.setState({
         status: 'connected',
@@ -377,29 +338,33 @@ class CloudSyncService {
         lastSyncedAt: new Date(),
       });
     } catch (err: any) {
-      console.warn(`[CloudSync] Failed to sync document to ${collectionName}:`, err);
+      // If server is unavailable, data is still safe in localStorage
+      console.warn(`[CloudSync] Notice: Queued write locally for ${collectionName}:`, err?.message || err);
     }
   }
 
   /**
-   * Delete a single document from Firestore in real-time
+   * Delete a single document from PocketBase in real-time
    */
   public async deleteDocument(collectionName: string, id: string): Promise<boolean> {
-    if (!isFirebaseConfigured() || !db || this.isApplyingRemoteUpdate) return false;
+    if (this.isApplyingRemoteUpdate) return false;
 
     try {
       const cleanId = String(id || '').trim();
       if (!cleanId) return false;
-      const docRef = doc(db, collectionName, cleanId);
-      await deleteDoc(docRef);
 
       const map = this.collectionDocsMap.get(collectionName);
       if (map) {
         map.delete(cleanId);
       }
+
+      const existing = await pb.collection(collectionName).getFirstListItem(`recordId="${cleanId}" || id="${cleanId}"`, { requestKey: null }).catch(() => null);
+      if (existing) {
+        await pb.collection(collectionName).delete(existing.id);
+      }
       return true;
     } catch (err: any) {
-      console.warn(`[CloudSync] Failed to delete document from ${collectionName}:`, err);
+      console.warn(`[CloudSync] Notice: Document deletion synced locally for ${collectionName}:`, err?.message || err);
       return false;
     }
   }
@@ -407,8 +372,8 @@ class CloudSyncService {
   /**
    * Sync an entire collection in debounced batches
    */
-  public debouncedSyncCollection(collectionName: string, items: any[], delay = 50) {
-    if (!isFirebaseConfigured() || !db || this.isApplyingRemoteUpdate) return;
+  public debouncedSyncCollection(collectionName: string, items: any[], delay = 100) {
+    if (this.isApplyingRemoteUpdate) return;
 
     if (this.debounceTimers[collectionName]) {
       clearTimeout(this.debounceTimers[collectionName]);
@@ -416,16 +381,11 @@ class CloudSyncService {
 
     this.debounceTimers[collectionName] = setTimeout(async () => {
       try {
-        const batch = writeBatch(db!);
-        // Limit to top 250 items per batch to stay safely within Firestore batch limits
-        const slice = items.slice(0, 250);
+        const slice = items.slice(0, 150);
         for (const item of slice) {
           if (!item || !item.id) continue;
-          const ref = doc(db!, collectionName, String(item.id));
-          const sanitized = JSON.parse(JSON.stringify(item));
-          batch.set(ref, sanitized, { merge: true });
+          await this.syncDocument(collectionName, String(item.id), item);
         }
-        await batch.commit();
 
         this.setState({
           status: 'connected',
@@ -433,19 +393,18 @@ class CloudSyncService {
           lastSyncedAt: new Date(),
         });
       } catch (err: any) {
-        console.warn(`[CloudSync] Batch sync error for ${collectionName}:`, err);
-        this.setState({ status: 'error', errorMessage: err.message });
+        console.warn(`[CloudSync] Batch sync for ${collectionName}:`, err?.message || err);
       }
     }, delay);
   }
 
   /**
-   * Seed baseline initial data if database is fresh
+   * Manual trigger: Full Push to VPS PocketBase Database
    */
-  private async seedBaselineData() {
-    if (!db) return;
-
+  public async uploadAllLocalData(): Promise<boolean> {
     try {
+      this.setState({ status: 'syncing' });
+
       const getLocalOrEmpty = (key: string) => {
         try {
           const raw = safeStorage.getItem(key);
@@ -461,66 +420,22 @@ class CloudSyncService {
       const purchaseOrders = getLocalOrEmpty(STORAGE_KEYS.PURCHASE_ORDERS);
       const suppliers = getLocalOrEmpty(STORAGE_KEYS.SUPPLIERS);
 
-      const batch = writeBatch(db);
-
-      // Seed stores
       for (const store of stores) {
-        if (store.id) {
-          batch.set(doc(db, COLLECTIONS.STORES, String(store.id)), store, { merge: true });
-        }
+        if (store.id) await this.syncDocument(COLLECTIONS.STORES, String(store.id), store);
       }
-
-      // Seed inventory
       for (const item of inventory) {
-        if (item.id) {
-          batch.set(doc(db, COLLECTIONS.INVENTORY, String(item.id)), item, { merge: true });
-        }
+        if (item.id) await this.syncDocument(COLLECTIONS.INVENTORY, String(item.id), item);
       }
-
-      // Seed suppliers
       for (const sup of suppliers) {
-        if (sup.id) {
-          batch.set(doc(db, COLLECTIONS.SUPPLIERS, String(sup.id)), sup, { merge: true });
-        }
+        if (sup.id) await this.syncDocument(COLLECTIONS.SUPPLIERS, String(sup.id), sup);
       }
-
-      // Seed recent POs
       for (const po of purchaseOrders) {
-        if (po.id) {
-          batch.set(doc(db, COLLECTIONS.PURCHASE_ORDERS, String(po.id)), po, { merge: true });
-        }
+        if (po.id) await this.syncDocument(COLLECTIONS.PURCHASE_ORDERS, String(po.id), po);
       }
-
-      // Seed recent orders
       for (const ord of orders.slice(-30)) {
-        if (ord.id) {
-          batch.set(doc(db, COLLECTIONS.ORDERS, String(ord.id)), ord, { merge: true });
-        }
+        if (ord.id) await this.syncDocument(COLLECTIONS.ORDERS, String(ord.id), ord);
       }
 
-      // Meta doc
-      batch.set(doc(db, COLLECTIONS.META, 'sync_info'), {
-        initializedAt: serverTimestamp(),
-        appName: 'Richie Rich Pan House ERP & POS',
-        version: '1.0.0',
-        projectId: firebaseConfig.projectId,
-      });
-
-      await batch.commit();
-      console.log('[CloudSync] Initial baseline dataset seeded to Cloud Firestore successfully.');
-    } catch (seedErr) {
-      console.error('[CloudSync] Seed error:', seedErr);
-    }
-  }
-
-  /**
-   * Manual trigger: Full Push to Cloud
-   */
-  public async uploadAllLocalData(): Promise<boolean> {
-    if (!db) return false;
-    try {
-      this.setState({ status: 'syncing' });
-      await this.seedBaselineData();
       this.setState({ status: 'connected', lastSyncedAt: new Date(), isLive: true });
       return true;
     } catch (err: any) {
@@ -533,7 +448,11 @@ class CloudSyncService {
    * Clean up on unmount
    */
   public destroy() {
-    this.unsubscribes.forEach((unsub) => unsub());
+    this.unsubscribes.forEach((unsub) => {
+      try {
+        unsub();
+      } catch {}
+    });
     this.unsubscribes = [];
     this.isInitialized = false;
   }

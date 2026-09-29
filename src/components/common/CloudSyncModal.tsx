@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Cloud,
+  Server,
   CheckCircle2,
   RefreshCw,
   AlertCircle,
@@ -44,9 +44,9 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
     try {
       const ok = await cloudSync.uploadAllLocalData();
       if (ok) {
-        setPushMessage('✅ Full catalog, stores, and warehouse records successfully synced to Cloud Firestore!');
+        setPushMessage('✅ Full catalog, stores, and warehouse records successfully synchronized with PocketBase VPS!');
       } else {
-        setPushMessage('⚠️ Could not complete full cloud push. Check network connection.');
+        setPushMessage('⚠️ Could not complete full sync. Check VPS connection.');
       }
     } finally {
       setIsPushing(false);
@@ -60,7 +60,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Live Cloud Connected (Real-Time)
+            VPS PocketBase Live (Real-Time)
           </span>
         );
       case 'syncing':
@@ -74,149 +74,126 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-500/10 text-blue-600 border border-blue-500/20">
             <Wifi className="w-3.5 h-3.5 animate-pulse" />
-            Establishing Cloud Channel...
+            Connecting to PocketBase...
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-600 border border-rose-500/20">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-500/10 text-slate-600 border border-slate-500/20">
             <AlertCircle className="w-3.5 h-3.5" />
-            Offline Storage Mode
+            Local Browser Cache (Offline Safe)
           </span>
         );
     }
   };
 
-  const syncChannels = [
-    { name: 'Multi-Store Product Catalog', icon: Package, count: 'Live Inventory & Pricing', status: 'Active' },
-    { name: 'Store Outlet Locations', icon: Store, count: 'Bopal, Gota, Sindhu Bhavan, SG Highway', status: 'Active' },
-    { name: 'POS Counter Billing & Orders', icon: Receipt, count: 'Instant Sale Invoices & Stock Deductions', status: 'Active' },
-    { name: 'Warehouse Purchase Orders', icon: Truck, count: 'Vendor POs & Direct-to-Store Deliveries', status: 'Active' },
-    { name: 'Stock Transfers & Indents', icon: ArrowUpDown, count: 'Inter-Branch Stock Movement', status: 'Active' },
-    { name: 'Enterprise Safety & Khata', icon: ShieldCheck, count: 'Offline Cashier Resiliency & Auto-Sync', status: 'Active' },
-  ];
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white border-b border-slate-800">
+        <div className="px-6 py-5 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <Cloud className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-amber-400">
+              <Server className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-base flex items-center gap-2">
-                Cloud Firestore Real-Time Sync
-                <Zap className="w-4 h-4 text-amber-400" />
-              </h3>
-              <p className="text-xs text-slate-400">
-                Multi-outlet synchronized live database powered by Google Cloud Firestore
-              </p>
+              <h2 className="font-bold text-base text-white">VPS PocketBase Sync Center</h2>
+              <p className="text-xs text-slate-300">Self-Hosted Multi-Store Real-Time Engine</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-6 text-sm text-slate-700">
-          {/* Status Card */}
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-slate-900">Connection State:</span>
-                {getStatusBadge()}
+        <div className="p-6 space-y-5">
+          {/* Status Bar */}
+          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+            <div className="text-xs text-slate-600 font-medium">Sync Engine Status:</div>
+            {getStatusBadge()}
+          </div>
+
+          {/* Database Specs Grid */}
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+              <div className="text-slate-500 font-medium flex items-center gap-1.5">
+                <Server className="w-3.5 h-3.5 text-indigo-600" />
+                <span>PocketBase Server</span>
               </div>
-              <p className="text-xs text-slate-500">
-                Project ID: <code className="bg-slate-200/80 px-1.5 py-0.5 rounded text-slate-800 font-mono text-[11px]">{syncState.projectId}</code>
-                {syncState.databaseId && (
-                  <span className="ml-2">
-                    Database: <code className="bg-slate-200/80 px-1.5 py-0.5 rounded text-slate-800 font-mono text-[11px]">{syncState.databaseId}</code>
-                  </span>
-                )}
-              </p>
-              {syncState.lastSyncedAt && (
-                <p className="text-[11px] text-slate-500">
-                  Last Real-Time Stream Event: <span className="font-medium text-slate-700">{syncState.lastSyncedAt.toLocaleTimeString()}</span>
-                </p>
-              )}
+              <div className="font-mono text-slate-800 font-semibold truncate text-[11px]" title={syncState.serverUrl}>
+                {syncState.serverUrl}
+              </div>
             </div>
 
-            <button
-              onClick={handleForceUpload}
-              disabled={isPushing}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all shrink-0"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isPushing ? 'animate-spin' : ''}`} />
-              <span>{isPushing ? 'Syncing...' : 'Force Sync All'}</span>
-            </button>
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+              <div className="text-slate-500 font-medium flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-amber-600" />
+                <span>Real-Time Channels</span>
+              </div>
+              <div className="font-mono text-slate-800 font-semibold text-[11px]">
+                {syncState.activeListenersCount} SSE Streams Active
+              </div>
+            </div>
+          </div>
+
+          {/* Sync Stats */}
+          <div className="p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-xs space-y-2">
+            <div className="flex items-center justify-between text-slate-700">
+              <span className="font-semibold flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                Zero-Latency Instant POS
+              </span>
+              <span className="text-[11px] text-slate-500">
+                {syncState.lastSyncedAt
+                  ? `Synced at ${syncState.lastSyncedAt.toLocaleTimeString()}`
+                  : 'Ready to sync'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600 leading-relaxed">
+              Every POS order, invoice, stock deduction, and warehouse transfer syncs seamlessly across all store outlets and your PocketBase VPS in real time.
+            </p>
           </div>
 
           {pushMessage && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-800 animate-in fade-in">
+            <div className="p-3 rounded-xl bg-slate-900 text-white text-xs font-medium animate-in fade-in duration-200">
               {pushMessage}
             </div>
           )}
 
-          {/* Active Realtime Channels */}
-          <div>
-            <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
-              <Database className="w-3.5 h-3.5 text-indigo-600" />
-              Synchronized Real-Time Channels
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {syncChannels.map((ch, idx) => {
-                const Icon = ch.icon;
-                return (
-                  <div
-                    key={idx}
-                    className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs flex items-start gap-3 hover:border-indigo-200 transition-all"
-                  >
-                    <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 shrink-0">
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="font-bold text-slate-900 text-xs truncate">{ch.name}</span>
-                        <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                          Live
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 truncate">{ch.count}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={handleForceUpload}
+              disabled={isPushing}
+              className="flex-1 py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isPushing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                  <span>Syncing to VPS...</span>
+                </>
+              ) : (
+                <>
+                  <ArrowUpDown className="w-4 h-4 text-amber-400" />
+                  <span>Push All Local Data to VPS</span>
+                </>
+              )}
+            </button>
 
-          {/* Offline Resilience & Architecture Info */}
-          <div className="p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 text-xs text-amber-950 space-y-2">
-            <div className="flex items-center gap-2 font-bold text-amber-900">
-              <ShieldCheck className="w-4 h-4 text-amber-600" />
-              Offline-First Guarantee for Retail Stores
-            </div>
-            <p className="text-amber-900/90 leading-relaxed text-[12px]">
-              If a store’s broadband or mobile hotspot drops, cashiers can continue generating bills and scanning items without interruption. Invoices and stock deductions are securely preserved in the local database and automatically pushed to the cloud in real time the moment connectivity is restored.
-            </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="py-3 px-5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+            >
+              Close
+            </button>
           </div>
-        </div>
-
-        {/* Modal Footer */}
-        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
-          <span>Protocol: Firestore WebSocket Duplex Stream</span>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 font-bold text-slate-700 transition-colors"
-          >
-            Close
-          </button>
         </div>
       </div>
     </div>
