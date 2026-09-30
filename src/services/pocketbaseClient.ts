@@ -23,7 +23,7 @@ export const setCustomPocketBaseUrl = (url: string) => {
   }
 };
 
-// Target PocketBase URL (Custom override, Vite env, or default VPS PocketBase)
+// Target PocketBase URL (Custom override, Vite env, reverse proxy, or default VPS PocketBase)
 export const getPocketBaseUrl = (): string => {
   const custom = getCustomPocketBaseUrl();
   if (custom) return custom;
@@ -34,9 +34,17 @@ export const getPocketBaseUrl = (): string => {
   }
 
   if (typeof window !== 'undefined' && window.location) {
-    const { port, origin, hostname } = window.location;
-    // When served on VPS host port 8090
+    const { port, origin, hostname, protocol } = window.location;
+    // When served over HTTPS, avoid mixed content errors by preferring same-origin
+    if (protocol === 'https:') {
+      return origin;
+    }
+    // When served directly on VPS host port 8090
     if (port === '8090') {
+      return origin;
+    }
+    // Behind reverse proxy (port 80 or default web port) where Nginx forwards /api/ to PocketBase
+    if (port === '80' || port === '') {
       return origin;
     }
     // Local development fallback
@@ -46,6 +54,27 @@ export const getPocketBaseUrl = (): string => {
   }
 
   return DEFAULT_POCKETBASE_URL;
+};
+
+// Priority list of candidate endpoints for health check & resilient fallback
+export const getCandidatePocketBaseUrls = (customUrl?: string): string[] => {
+  const urls: string[] = [];
+  const primary = customUrl || getPocketBaseUrl();
+  if (primary) urls.push(primary.replace(/\/+$/, ''));
+
+  if (typeof window !== 'undefined' && window.location) {
+    const { origin, hostname, protocol } = window.location;
+    if (origin && !urls.includes(origin)) urls.push(origin);
+    if (protocol !== 'https:') {
+      const localhost8090 = `http://${hostname || 'localhost'}:8090`;
+      if (!urls.includes(localhost8090)) urls.push(localhost8090);
+      if (!urls.includes(DEFAULT_POCKETBASE_URL)) urls.push(DEFAULT_POCKETBASE_URL);
+    }
+  } else {
+    if (!urls.includes(DEFAULT_POCKETBASE_URL)) urls.push(DEFAULT_POCKETBASE_URL);
+  }
+
+  return urls;
 };
 
 // Singleton PocketBase client instance
@@ -67,12 +96,7 @@ export interface PocketBaseHealthResult {
 
 export const checkPocketBaseHealth = async (customUrl?: string): Promise<PocketBaseHealthResult> => {
   const rawBase = (customUrl || getPocketBaseUrl()).replace(/\/+$/, '');
-  const candidateUrls: string[] = [];
-
-  candidateUrls.push(rawBase);
-  if (!rawBase.includes(':8090') && !rawBase.includes(':3000')) {
-    candidateUrls.push(`${rawBase}:8090`);
-  }
+  const candidateUrls = getCandidatePocketBaseUrls(customUrl);
 
   for (const url of candidateUrls) {
     try {

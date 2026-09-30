@@ -1366,6 +1366,7 @@ export class StorageService {
   private listeners: Set<() => void> = new Set();
   private memoryCache: Map<string, any> = new Map();
   private isNotifyPending = false;
+  private isRealtimeBusConnected = false;
 
   private constructor() {
     this.initDefaultData();
@@ -1378,6 +1379,20 @@ export class StorageService {
       StorageService.instance = new StorageService();
     }
     return StorageService.instance;
+  }
+
+  /**
+   * Check if storage service listeners are currently attached to the realtime bus
+   */
+  public isRealtimeBusAttached(): boolean {
+    return this.isRealtimeBusConnected;
+  }
+
+  /**
+   * Ensure that the storage service listeners are attached to the cross-tab/client realtime bus
+   */
+  public attachRealtimeBus(): boolean {
+    return this.setupSyncListener();
   }
 
   getCached<T>(key: string, loader: () => T): T {
@@ -1435,25 +1450,44 @@ export class StorageService {
     });
   }
 
-  private setupSyncListener() {
-    if (typeof window === 'undefined') return;
+  public setupSyncListener(): boolean {
+    if (typeof window === 'undefined') return false;
 
-    if (syncChannel) {
-      syncChannel.onmessage = (event) => {
-        if (event.data && event.data.type === 'STATE_CHANGED') {
-          this.memoryCache.clear();
-          this.notify(false); // Do not echo back to prevent tab ping-pong loops
-        }
-      };
-    }
-
-    // Also listen to storage event as fallback
-    window.addEventListener('storage', (e) => {
-      if (e.key && (Object.values(STORAGE_KEYS).includes(e.key) || e.key.startsWith('rr_'))) {
-        this.memoryCache.clear();
-        this.notify(false); // Do not echo back
+    try {
+      if (!syncChannel && 'BroadcastChannel' in window) {
+        syncChannel = new BroadcastChannel('richie_rich_sync_bus');
       }
-    });
+
+      if (syncChannel) {
+        // Use addEventListener or onmessage to handle cross-client sync bus messages
+        syncChannel.onmessage = (event) => {
+          if (!event || !event.data) return;
+          const { type, key, val } = event.data;
+          if (type === 'STATE_CHANGED' || type === 'SYNC_UPDATE' || type === 'STORAGE_UPDATE') {
+            if (key && val !== undefined) {
+              this.setCached(key, val);
+            } else {
+              this.memoryCache.clear();
+            }
+            this.notify(false); // Do not echo back to prevent tab ping-pong loops
+          }
+        };
+        this.isRealtimeBusConnected = true;
+      }
+
+      // Also listen to storage event as fallback
+      window.addEventListener('storage', (e) => {
+        if (e.key && (Object.values(STORAGE_KEYS).includes(e.key) || e.key.startsWith('rr_') || e.key.startsWith('wh_'))) {
+          this.memoryCache.clear();
+          this.notify(false); // Do not echo back
+        }
+      });
+
+      return this.isRealtimeBusConnected;
+    } catch (err) {
+      console.warn('[Storage] Error setting up realtime bus sync listener:', err);
+      return false;
+    }
   }
 
   private initDefaultData() {

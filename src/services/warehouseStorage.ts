@@ -354,6 +354,22 @@ storage.subscribe(() => {
   warehouseStorage.notifySubscribers();
 });
 
+// Cross-tab real-time warehouse sync via BroadcastChannel
+let whSyncChannel: BroadcastChannel | null = null;
+try {
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    whSyncChannel = new BroadcastChannel('richie_rich_sync_bus');
+    whSyncChannel.addEventListener('message', (event) => {
+      if (event.data && (event.data.type === 'WAREHOUSE_STATE_CHANGED' || event.data.type === 'STATE_CHANGED')) {
+        clearWhCache();
+        warehouseStorage.notifySubscribers(false);
+      }
+    });
+  }
+} catch (e) {
+  console.warn('[Warehouse] BroadcastChannel note:', e);
+}
+
 export const warehouseStorage = {
   invalidateCache(key?: string): void {
     clearWhCache(key);
@@ -370,7 +386,7 @@ export const warehouseStorage = {
     };
   },
 
-  notifySubscribers(): void {
+  notifySubscribers(broadcast = true): void {
     if (isWhNotifyPending) return;
     isWhNotifyPending = true;
     queueMicrotask(() => {
@@ -382,6 +398,11 @@ export const warehouseStorage = {
           console.error('Error notifying warehouse listener', e);
         }
       });
+      if (broadcast && whSyncChannel) {
+        try {
+          whSyncChannel.postMessage({ type: 'WAREHOUSE_STATE_CHANGED', timestamp: Date.now() });
+        } catch {}
+      }
     });
   },
 
