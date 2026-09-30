@@ -185,6 +185,20 @@ export interface InventoryItem {
   profitPerUnit?: number;    // Calculated selling - cost
   tags?: string[];
   storeAllocations?: Record<string, number>; // Stock per store: { bopal: 10, gota: 18, sindhubhavan: 8, sg_highway: 6 }
+  // --- BOX & LOOSE PRODUCT FIELDS ---
+  piecesPerBox?: number;          // Total individual pieces contained in one box (e.g. 10)
+  sellAsLoose?: boolean;          // Whether product can be sold individually (true/false)
+  boxBarcode?: string;            // Barcode identifying 1 complete box (defaults to barcode)
+  looseBarcode?: string;          // Separate barcode identifying 1 individual piece
+  loosePrice?: number;            // Selling price of 1 individual piece
+  loosePriceType?: 'fixed' | 'variable'; // Price type for loose piece: 'fixed' or 'variable' (POS manual entry)
+  fullBoxStock?: number;          // Full boxes in master catalog
+  loosePieceStock?: number;       // Loose pieces in master catalog
+  full_box_stock?: number;        // Alias for fullBoxStock
+  loose_piece_stock?: number;     // Alias for loosePieceStock
+  totalPieceEquivalent?: number;  // (fullBoxStock * piecesPerBox) + loosePieceStock
+  total_piece_equivalent?: number;// Alias for totalPieceEquivalent
+  storeBoxAllocations?: Record<string, { fullBoxes: number; loosePieces: number; totalPieces?: number; total_piece_equivalent?: number }>; // Per-store Box + Loose tracking
 }
 
 export interface Customer {
@@ -216,6 +230,9 @@ export interface OrderItem {
   profit: number;
   isTaxApplicable?: boolean;
   taxRate?: number;
+  saleType?: 'box' | 'loose';        // 'box' (whole box) or 'loose' (individual piece)
+  piecesPerBox?: number;             // Pieces per box
+  boxEquivalentSold?: number;        // Decimal/fractional box equivalent for inventory tracking
 }
 
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled';

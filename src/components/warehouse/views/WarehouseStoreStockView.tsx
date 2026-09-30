@@ -31,7 +31,7 @@ import {
 import * as XLSX from 'xlsx';
 import { StoreLocation, InventoryItem } from '../../../types';
 import { Warehouse, StockTransfer } from '../../../types/warehouse';
-import { CURRENCY, storage } from '../../../services/storage';
+import { CURRENCY, storage, getBoxLooseStockSummary } from '../../../services/storage';
 import { pdfReportService } from '../../../services/pdfReportService';
 import { soundEffects } from '../../../services/audio';
 
@@ -54,7 +54,7 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
 }) => {
   // Sub-view tab navigation matching Master Inventory
   const [activeSubView, setActiveSubView] = useState<
-    'single_store' | 'matrix' | 'urgent' | 'overview'
+    'single_store' | 'box_loose' | 'matrix' | 'urgent' | 'overview'
   >('single_store');
 
   const [selectedStoreId, setSelectedStoreId] = useState<string>(stores[0]?.id || 'gota');
@@ -736,6 +736,21 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
 
         <button
           onClick={() => {
+            setActiveSubView('box_loose');
+            soundEffects.playClick();
+          }}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+            activeSubView === 'box_loose'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Boxes className="w-3.5 h-3.5" />
+          <span>Store Box & Loose Stock</span>
+        </button>
+
+        <button
+          onClick={() => {
             setActiveSubView('matrix');
             soundEffects.playClick();
           }}
@@ -1053,19 +1068,35 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
 
                           {/* Store Stock Qty */}
                           <td className="py-3 px-3 text-center">
-                            <div className="font-mono font-bold text-sm">
-                              <span
-                                className={
-                                  isOut
-                                    ? 'text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md'
-                                    : isLow
-                                    ? 'text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md'
-                                    : 'text-slate-900'
-                                }
-                              >
-                                {storeQty} {item.unit}
-                              </span>
-                            </div>
+                            {item.sellAsLoose || (item.piecesPerBox && item.piecesPerBox > 1) ? (
+                              (() => {
+                                const bl = getBoxLooseStockSummary(item, currentStore.id);
+                                return (
+                                  <div className="flex flex-col items-center gap-0.5 font-mono">
+                                    <span className="font-extrabold text-xs text-indigo-900 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200 whitespace-nowrap">
+                                      {bl.fullBoxes} Box + {bl.loosePieces} Loose
+                                    </span>
+                                    <span className="text-[10px] text-slate-500">
+                                      ({bl.piecesPerBox}/box = {bl.totalPieces} pcs)
+                                    </span>
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <div className="font-mono font-bold text-sm">
+                                <span
+                                  className={
+                                    isOut
+                                      ? 'text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md'
+                                      : isLow
+                                      ? 'text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md'
+                                      : 'text-slate-900'
+                                  }
+                                >
+                                  {storeQty} {item.unit}
+                                </span>
+                              </div>
+                            )}
                           </td>
 
                           {/* Central Hub Stock */}
@@ -1139,6 +1170,149 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
             </div>
 
             {renderPagination(currentPage, sortedSingleStoreItems.length, setCurrentPage)}
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* SUB-VIEW: STORE BOX & LOOSE PRODUCT INVENTORY                */}
+      {/* ============================================================ */}
+      {activeSubView === 'box_loose' && (
+        <div className="space-y-4">
+          {/* Header & Store Selector */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Boxes className="w-5 h-5 text-emerald-600" />
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Store Box & Loose Inventory ({currentStore.name})
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Displays exact <strong>Full Boxes</strong>, <strong>Loose Pieces</strong>, <strong>Pieces / Box</strong>, and <strong>Total Pieces Equivalent</strong>.
+              </p>
+            </div>
+
+            {/* Outlet Selector */}
+            <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto">
+              {stores.map((st) => (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => setSelectedStoreId(st.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    st.id === selectedStoreId
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {st.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Formula Callout Banner */}
+          <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 text-emerald-950 font-bold">
+              <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white font-mono text-[10px]">FORMULA</span>
+              <span>Total Pieces = (Full Boxes × Pieces per Box) + Loose Pieces</span>
+            </div>
+            <div className="text-[11px] text-emerald-800 font-medium">
+              Replenishing adds full boxes (e.g. +5 boxes, 0 loose). POS sales automatically unbox 1 box when loose pieces are depleted.
+            </div>
+          </div>
+
+          {/* Table (Requirement 10: Product | Full Boxes | Loose Pieces | Pieces/Box | Total Pieces) */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/80 text-slate-700 border-b border-slate-200 uppercase tracking-wider text-[11px] font-bold">
+                  <tr>
+                    <th className="py-3 px-4">Product</th>
+                    <th className="py-3 px-3 text-center">Full Boxes</th>
+                    <th className="py-3 px-3 text-center">Loose Pieces</th>
+                    <th className="py-3 px-3 text-center">Pieces / Box</th>
+                    <th className="py-3 px-4 text-center">Total Pieces</th>
+                    <th className="py-3 px-3">Box Barcode</th>
+                    <th className="py-3 px-3">Loose Barcode</th>
+                    <th className="py-3 px-3 text-right">Box Price</th>
+                    <th className="py-3 px-3 text-right">Single Piece Price</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(() => {
+                    const boxLooseItems = inventory.filter((i) => i.sellAsLoose || (i.piecesPerBox && i.piecesPerBox > 1));
+                    if (boxLooseItems.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={9} className="py-12 text-center text-slate-400">
+                            No Box & Loose products configured in catalog yet.
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return boxLooseItems.map((item) => {
+                      const bl = getBoxLooseStockSummary(item, currentStore.id);
+                      const loosePrice = item.loosePrice !== undefined ? item.loosePrice : Math.round((item.sellingPrice / bl.piecesPerBox) * 100) / 100;
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-slate-900">{item.name}</div>
+                            <div className="text-[10px] font-mono text-slate-500">{item.sku} • {item.category}</div>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className="px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-900 font-mono font-extrabold text-sm border border-indigo-200">
+                              {bl.fullBoxes}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className={`px-2.5 py-1 rounded-lg font-mono font-extrabold text-sm border ${
+                              bl.loosePieces > 0 ? 'bg-amber-100 text-amber-900 border-amber-200' : 'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}>
+                              {bl.loosePieces}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono font-bold text-slate-700 bg-slate-50">
+                            {bl.piecesPerBox}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex flex-col items-center">
+                              <span className="px-3 py-1 rounded-lg bg-emerald-100 text-emerald-950 font-mono font-black text-sm border border-emerald-300">
+                                {bl.totalPieces}
+                              </span>
+                              <span className="text-[9px] text-slate-500 font-mono">
+                                ({bl.fullBoxes} × {bl.piecesPerBox}) + {bl.loosePieces}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 font-mono text-[10px] text-slate-700">
+                            <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                              {item.boxBarcode || item.barcode}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 font-mono text-[10px] text-slate-700">
+                            {item.looseBarcode ? (
+                              <span className="bg-amber-50 text-amber-900 px-1.5 py-0.5 rounded border border-amber-200 font-bold">
+                                {item.looseBarcode}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">N/A</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">
+                            {CURRENCY}{item.sellingPrice}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono font-bold text-amber-700">
+                            {CURRENCY}{loosePrice}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

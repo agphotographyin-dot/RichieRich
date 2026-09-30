@@ -47,6 +47,8 @@ interface POSTerminalProps {
 interface CartItem extends OrderItem {
   stockAvailable: number;
   priceType?: 'fixed' | 'variable';
+  saleType?: 'box' | 'loose';
+  piecesPerBox?: number;
 }
 
 interface POSActiveTerminalProps extends POSTerminalProps {
@@ -74,6 +76,7 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
     isEditMode?: boolean;
     initialPrice: number;
     note?: string;
+    saleType?: 'box' | 'loose';
   } | null>(null);
   const [customPriceInput, setCustomPriceInput] = useState<string>('');
   const [customNoteInput, setCustomNoteInput] = useState<string>('');
@@ -113,32 +116,86 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
     timestamp: number;
   } | null>(null);
 
-  // Commit item to cart with determined price
-  const commitAddToCart = (item: InventoryItem, priceToUse: number, customPref?: string) => {
-    const availableStock = getItemStoreStock(item);
+  // Get store specific available stock for this counter's branch
+  const getItemStoreStock = (item: InventoryItem, saleType: 'box' | 'loose' = 'box'): number => {
+    const isBoxLoose = Boolean(item.sellAsLoose || (item.piecesPerBox && item.piecesPerBox > 1));
+    if (!isBoxLoose) {
+      if (item.storeAllocations && posSession.storeId in item.storeAllocations) {
+        return item.storeAllocations[posSession.storeId] || 0;
+      }
+      return 0;
+    }
+
+    const piecesPerBox = item.piecesPerBox && item.piecesPerBox > 0 ? item.piecesPerBox : 10;
+    const storeBox = item.storeBoxAllocations?.[posSession.storeId];
+
+    let fullBoxes = 0;
+    let loosePieces = 0;
+
+    if (storeBox) {
+      fullBoxes = storeBox.fullBoxes || 0;
+      loosePieces = storeBox.loosePieces || 0;
+    } else {
+      fullBoxes = item.storeAllocations?.[posSession.storeId] || 0;
+      loosePieces = 0;
+    }
+
+    const totalPieces = fullBoxes * piecesPerBox + loosePieces;
+
+    if (saleType === 'loose') {
+      return totalPieces;
+    }
+    return fullBoxes;
+  };
+
+  // Commit item to cart with determined price and saleType (Box vs Loose)
+  const commitAddToCart = (
+    item: InventoryItem,
+    priceToUse: number,
+    customPref?: string,
+    saleType: 'box' | 'loose' = 'box'
+  ) => {
+    const availableStock = getItemStoreStock(item, saleType);
 
     if (availableStock <= 0) {
       soundEffects.playWarningChime();
-      alert(`"${item.name}" is out of stock at ${posSession?.storeName || 'the store'}!`);
+      alert(
+        saleType === 'loose'
+          ? `"${item.name}" has no pieces remaining in stock at ${posSession?.storeName || 'the store'}!`
+          : `"${item.name}" has no full boxes in stock at ${posSession?.storeName || 'the store'}!`
+      );
       return;
     }
 
     soundEffects.playScanBeep();
 
+    const displayName =
+      saleType === 'loose'
+        ? `${item.name} (Loose Piece)`
+        : item.sellAsLoose
+        ? `${item.name} (1 Box)`
+        : item.name;
+
+    const displayBarcode = saleType === 'loose' ? item.looseBarcode || item.barcode : item.barcode;
+
     setLastScannedFeedback({
-      name: item.name,
-      barcode: item.barcode,
+      name: displayName,
+      barcode: displayBarcode,
       price: priceToUse,
       timestamp: Date.now(),
     });
 
     setCart((prev) => {
       const existing = prev.find(
-        (ci) => ci.itemId === item.id && ci.price === priceToUse && ci.customization === (customPref || undefined)
+        (ci) =>
+          ci.itemId === item.id &&
+          (ci.saleType || 'box') === saleType &&
+          ci.price === priceToUse &&
+          ci.customization === (customPref || undefined)
       );
       if (existing) {
         if (existing.quantity >= availableStock) {
-          alert(`Cannot add more than available branch stock (${availableStock} units).`);
+          alert(`Cannot add more than available branch stock (${availableStock} ${saleType === 'loose' ? 'pieces' : 'boxes'}).`);
           return prev;
         }
         return prev.map((ci) =>
@@ -152,21 +209,28 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
             : ci
         );
       } else {
+        const itemCost =
+          saleType === 'loose'
+            ? Math.round((item.costPrice / (item.piecesPerBox || 1)) * 100) / 100
+            : item.costPrice;
+
         return [
           ...prev,
           {
             itemId: item.id,
-            name: item.name,
+            name: displayName,
             sku: item.sku,
             price: priceToUse,
-            costPrice: item.costPrice,
+            costPrice: itemCost,
             quantity: 1,
             customization: customPref,
             subtotal: priceToUse,
-            profit: priceToUse - item.costPrice,
+            profit: priceToUse - itemCost,
             stockAvailable: availableStock,
             isTaxApplicable: item.isTaxApplicable !== false,
-            priceType: item.priceType || 'fixed',
+            priceType: saleType === 'loose' ? item.loosePriceType || 'fixed' : item.priceType || 'fixed',
+            saleType,
+            piecesPerBox: item.piecesPerBox || 1,
           },
         ];
       }
@@ -174,21 +238,42 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
   };
 
   // Cart operations
-  const addToCart = (item: InventoryItem, customPref?: string) => {
-    // If product has variable price, ask cashier to specify the unit price
+  const addToCart = (item: InventoryItem, customPref?: string, forceSaleType?: 'box' | 'loose') => {
+    const saleType = forceSaleType || 'box';
+
+    if (saleType === 'loose') {
+      if (item.loosePriceType === 'variable') {
+        setVariablePriceModal({
+          item,
+          initialPrice: item.loosePrice || 0,
+          isEditMode: false,
+          note: customPref || '',
+          saleType: 'loose',
+        });
+        setCustomPriceInput(item.loosePrice ? String(item.loosePrice) : '');
+        setCustomNoteInput(customPref || '');
+        return;
+      }
+      const price = item.loosePrice !== undefined ? item.loosePrice : Math.round((item.sellingPrice / (item.piecesPerBox || 1)) * 100) / 100;
+      commitAddToCart(item, price, customPref, 'loose');
+      return;
+    }
+
+    // Box sale
     if (item.priceType === 'variable' || (item.sellingPrice <= 0 && !item.priceType)) {
       setVariablePriceModal({
         item,
         initialPrice: item.sellingPrice || 0,
         isEditMode: false,
         note: customPref || '',
+        saleType: 'box',
       });
       setCustomPriceInput(item.sellingPrice > 0 ? String(item.sellingPrice) : '');
       setCustomNoteInput(customPref || '');
       return;
     }
 
-    commitAddToCart(item, item.sellingPrice, customPref);
+    commitAddToCart(item, item.sellingPrice, customPref, 'box');
   };
 
   // Open price override modal for existing cart item
@@ -218,6 +303,7 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
       isEditMode: true,
       initialPrice: target.price,
       note: target.customization || '',
+      saleType: target.saleType || 'box',
     });
     setCustomPriceInput(String(target.price));
     setCustomNoteInput(target.customization || '');
@@ -251,20 +337,33 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
       );
     } else {
       // Add new item with custom price
-      commitAddToCart(variablePriceModal.item, parsedPrice, customNoteInput.trim() || undefined);
+      commitAddToCart(
+        variablePriceModal.item,
+        parsedPrice,
+        customNoteInput.trim() || undefined,
+        variablePriceModal.saleType || 'box'
+      );
     }
 
     setVariablePriceModal(null);
   };
 
-  // Direct Barcode Scan Handler -> Auto Adds to Cart
+  // Direct Barcode Scan Handler -> Auto Adds Box or Loose Piece to Cart
   const handleBarcodeScanned = (barcode: string) => {
-    const found = storage.findItemByBarcode(barcode) || inventory.find(
-      (i) => i.barcode.toLowerCase() === barcode.trim().toLowerCase() || i.sku.toLowerCase() === barcode.trim().toLowerCase()
-    );
+    const cleanCode = barcode.trim();
+    const meta = storage.findItemByBarcodeWithMeta(cleanCode);
 
-    if (found) {
-      addToCart(found);
+    if (meta) {
+      if (meta.matchedType === 'loose') {
+        if (!meta.item.sellAsLoose) {
+          soundEffects.playWarningChime();
+          alert(`Loose sales are disabled for "${meta.item.name}".`);
+          return;
+        }
+        addToCart(meta.item, undefined, 'loose');
+      } else {
+        addToCart(meta.item, undefined, 'box');
+      }
       setSearchTerm('');
     } else {
       soundEffects.playWarningChime();
@@ -308,18 +407,12 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
         if (buffer.length >= 3) {
           const scannedCode = buffer.trim();
           buffer = '';
-          const match = storage.findItemByBarcode(scannedCode) || inventory.find(
-            (i) => i.barcode.toLowerCase() === scannedCode.toLowerCase() || i.sku.toLowerCase() === scannedCode.toLowerCase()
-          );
-
-          if (match) {
-            if (isInput) {
-              (target as HTMLInputElement).value = '';
-            }
-            e.preventDefault();
-            addToCart(match);
-            return;
+          if (isInput) {
+            (target as HTMLInputElement).value = '';
           }
+          e.preventDefault();
+          handleBarcodeScanned(scannedCode);
+          return;
         }
         buffer = '';
       } else if (e.key.length === 1) {
@@ -344,14 +437,6 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
     }, 3000);
     return () => clearTimeout(timer);
   }, [lastScannedFeedback]);
-
-  // Get store specific available stock for this counter's branch
-  const getItemStoreStock = (item: InventoryItem): number => {
-    if (item.storeAllocations && posSession.storeId in item.storeAllocations) {
-      return item.storeAllocations[posSession.storeId] || 0;
-    }
-    return 0;
-  };
 
   // Filter products (active only)
   const filteredProducts = inventory.filter((item) => {
@@ -518,6 +603,12 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
           subtotal: c.subtotal,
           profit: c.profit,
           isTaxApplicable: c.isTaxApplicable !== false,
+          saleType: c.saleType || 'box',
+          piecesPerBox: c.piecesPerBox || 1,
+          boxEquivalentSold:
+            c.saleType === 'loose'
+              ? Math.round((c.quantity / (c.piecesPerBox || 1)) * 100) / 100
+              : c.quantity,
         })),
         subtotal,
         discountAmount: effectiveDiscount,
@@ -715,14 +806,30 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
           {/* Product Cards Grid: Scales responsively from 2 up to 5 columns on wide monitors */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 max-h-[calc(100vh-220px)] min-h-[500px] overflow-y-auto pr-1">
             {filteredProducts.map((item, idx) => {
-              const storeStock = getItemStoreStock(item);
-              const isLow = storeStock <= item.lowStockThreshold && storeStock > 0;
-              const isOut = storeStock === 0;
+              const isBoxLoose = Boolean(item.sellAsLoose || (item.piecesPerBox && item.piecesPerBox > 1));
+              const piecesPerBox = item.piecesPerBox && item.piecesPerBox > 0 ? item.piecesPerBox : 10;
+              const fullBoxes = getItemStoreStock(item, 'box');
+              const totalPieces = getItemStoreStock(item, 'loose');
+              const loosePieces = item.storeBoxAllocations?.[posSession.storeId]?.loosePieces ?? 0;
+              const storeStock = isBoxLoose ? totalPieces : getItemStoreStock(item);
+
+              const isOut = isBoxLoose ? totalPieces === 0 : storeStock === 0;
+              const isLow = !isOut && (isBoxLoose ? fullBoxes <= (item.lowStockThreshold || 5) : storeStock <= item.lowStockThreshold);
+
+              const loosePiecePrice = item.loosePrice !== undefined ? item.loosePrice : Math.round((item.sellingPrice / piecesPerBox) * 100) / 100;
 
               return (
                 <div
                   key={item.id ? `${item.id}-${idx}` : `pos-item-${idx}`}
-                  onClick={() => !isOut && addToCart(item)}
+                  onClick={() => {
+                    if (isOut) return;
+                    if (isBoxLoose) {
+                      if (fullBoxes > 0) addToCart(item, undefined, 'box');
+                      else if (totalPieces > 0) addToCart(item, undefined, 'loose');
+                    } else {
+                      addToCart(item);
+                    }
+                  }}
                   className={`bg-white border rounded-2xl p-3 flex flex-col justify-between transition-all group select-none relative ${
                     isOut
                       ? 'opacity-60 border-red-200 bg-red-50/20 cursor-not-allowed'
@@ -754,8 +861,17 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                             : 'bg-slate-900/80 text-white backdrop-blur-xs'
                         }`}
                       >
-                        {storeStock} {item.unit}
+                        {isBoxLoose
+                          ? `${fullBoxes} Box + ${loosePieces} Loose`
+                          : `${storeStock} ${item.unit}`}
                       </span>
+
+                      {/* Box & Loose indicator badge on photo */}
+                      {item.sellAsLoose && (
+                        <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-indigo-900/90 text-indigo-100 text-[9px] font-extrabold backdrop-blur-xs border border-indigo-400/40">
+                          1 Box = {piecesPerBox} Pcs
+                        </span>
+                      )}
                     </div>
 
                     <h4 className="font-bold text-xs text-slate-800 group-hover:text-amber-700 line-clamp-2 leading-tight">
@@ -768,42 +884,89 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                           {item.brand}
                         </span>
                       )}
+                      {item.sellAsLoose && (
+                        <span className="px-1.5 py-0.2 bg-purple-50 text-purple-700 text-[9px] font-bold rounded-sm border border-purple-200">
+                          Box + Loose
+                        </span>
+                      )}
                       {item.priceType === 'variable' && (
                         <span className="px-1.5 py-0.2 bg-amber-100 text-amber-900 text-[9px] font-bold rounded-sm border border-amber-300 flex items-center gap-0.5">
                           <SlidersHorizontal className="w-2.5 h-2.5" />
-                          Variable Price
+                          Variable
                         </span>
                       )}
                       {item.isTaxApplicable === false ? (
                         <span className="px-1.5 py-0.2 bg-slate-100 text-slate-600 text-[9px] font-bold rounded-sm border border-slate-200">
-                          0% Exempt
+                          0% Tax
                         </span>
                       ) : (
                         <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-800 text-[9px] font-bold rounded-sm border border-emerald-200">
-                          5% GST
+                          {item.taxRate ?? 5}% GST
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100">
-                    {item.priceType === 'variable' ? (
-                      <span className="text-xs font-bold text-amber-700 flex items-center gap-1">
-                        <Edit3 className="w-3 h-3" />
-                        Custom Price
-                      </span>
+                  {/* Pricing and Action Buttons */}
+                  <div className="mt-3 pt-2 border-t border-slate-100">
+                    {item.sellAsLoose ? (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-500 font-medium">Box: <strong>{CURRENCY}{item.sellingPrice}</strong></span>
+                          <span className="text-slate-500 font-medium">Loose: <strong>{CURRENCY}{loosePiecePrice}</strong></span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            disabled={fullBoxes <= 0}
+                            onClick={() => addToCart(item, undefined, 'box')}
+                            className={`py-1 px-1.5 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
+                              fullBoxes <= 0
+                                ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                                : 'bg-slate-900 hover:bg-slate-800 text-white border-slate-900 shadow-2xs'
+                            }`}
+                            title={`Add 1 Complete Box (${CURRENCY}${item.sellingPrice})`}
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                            <span>Box ({fullBoxes})</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={totalPieces <= 0}
+                            onClick={() => addToCart(item, undefined, 'loose')}
+                            className={`py-1 px-1.5 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
+                              totalPieces <= 0
+                                ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                                : 'bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-400 shadow-2xs'
+                            }`}
+                            title={`Add 1 Loose Piece (${CURRENCY}${loosePiecePrice})`}
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                            <span>Loose (₹{loosePiecePrice})</span>
+                          </button>
+                        </div>
+                      </div>
                     ) : (
-                      <span className="text-sm font-black text-slate-900">
-                        {CURRENCY}{item.sellingPrice.toFixed(2)}
-                      </span>
+                      <div className="flex items-center justify-between">
+                        {item.priceType === 'variable' ? (
+                          <span className="text-xs font-bold text-amber-700 flex items-center gap-1">
+                            <Edit3 className="w-3 h-3" />
+                            Custom Price
+                          </span>
+                        ) : (
+                          <span className="text-sm font-black text-slate-900">
+                            {CURRENCY}{item.sellingPrice.toFixed(2)}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          disabled={isOut}
+                          className="p-1.5 rounded-lg bg-slate-100 group-hover:bg-[#1E293B] text-slate-600 group-hover:text-white transition-colors cursor-pointer border border-slate-200 group-hover:border-slate-800"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     )}
-                    <button
-                      type="button"
-                      disabled={isOut}
-                      className="p-1.5 rounded-lg bg-slate-100 group-hover:bg-[#1E293B] text-slate-600 group-hover:text-white transition-colors cursor-pointer border border-slate-200 group-hover:border-slate-800"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
                   </div>
                 </div>
               );

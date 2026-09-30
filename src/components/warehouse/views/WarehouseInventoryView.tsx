@@ -41,7 +41,7 @@ import {
 } from 'lucide-react';
 import { InventoryItem, Category } from '../../../types';
 import { BatchRecord, Warehouse } from '../../../types/warehouse';
-import { CURRENCY, storage, getItemStockSummary, getCatalogStockMetrics } from '../../../services/storage';
+import { CURRENCY, storage, getItemStockSummary, getCatalogStockMetrics, getBoxLooseStockSummary } from '../../../services/storage';
 import { warehouseStorage } from '../../../services/warehouseStorage';
 import { pdfReportService } from '../../../services/pdfReportService';
 import { excelInventoryService } from '../../../services/excelInventoryService';
@@ -84,7 +84,8 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
   onOpenRegisterBarcode,
   onOpenScanner,
 }) => {
-  const [activeSubView, setActiveSubView] = useState<'catalog' | 'batches' | 'store_allocations' | 'labels'>('catalog');
+  const [activeSubView, setActiveSubView] = useState<'catalog' | 'box_loose' | 'batches' | 'store_allocations' | 'labels'>('catalog');
+  const [selectedBoxLooseStore, setSelectedBoxLooseStore] = useState<string>('central');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [stockStatusFilter, setStockStatusFilter] = useState<
     'all' | 'low' | 'critical' | 'out_of_stock' | 'healthy' | 'high_margin' | 'tax_exempt'
@@ -654,6 +655,18 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveSubView('box_loose')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeSubView === 'box_loose'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Boxes className="w-3.5 h-3.5" />
+            <span>Box & Loose Stock (1 Box = X Pcs)</span>
+          </button>
+
+          <button
             onClick={() => setActiveSubView('batches')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeSubView === 'batches'
@@ -1021,15 +1034,26 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                               </button>
                             </div>
 
-                            <div className="flex items-center gap-1.5 text-[10px] font-mono">
-                              <span className="text-slate-500" title="Live auto-fetched aggregate stock across all retail outlets">
-                                Stores: <strong className="text-slate-700 font-bold">{storesSum}</strong>
-                              </span>
-                              <span className="text-slate-300">•</span>
-                              <span className="text-slate-900 font-bold" title="Accurate total SKU stock across Central WH & Retail Stores">
-                                Total: <strong className="text-slate-950 font-black">{totalSKUStock}</strong> {item.unit}
-                              </span>
-                            </div>
+                            {item.sellAsLoose || (item.piecesPerBox && item.piecesPerBox > 1) ? (
+                              <div className="flex flex-col items-center gap-0.5 text-[10px] font-mono">
+                                <div className="text-indigo-700 font-bold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 whitespace-nowrap">
+                                  {getBoxLooseStockSummary(item).fullBoxes} Boxes + {getBoxLooseStockSummary(item).loosePieces} Loose
+                                </div>
+                                <span className="text-slate-500 text-[9px]">
+                                  ({item.piecesPerBox || 10}/box = {getBoxLooseStockSummary(item).totalPieces} Total Pcs)
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                                <span className="text-slate-500" title="Live auto-fetched aggregate stock across all retail outlets">
+                                  Stores: <strong className="text-slate-700 font-bold">{storesSum}</strong>
+                                </span>
+                                <span className="text-slate-300">•</span>
+                                <span className="text-slate-900 font-bold" title="Accurate total SKU stock across Central WH & Retail Stores">
+                                  Total: <strong className="text-slate-950 font-black">{totalSKUStock}</strong> {item.unit}
+                                </span>
+                              </div>
+                            )}
 
                             <div className="flex items-center gap-1 text-[9px]">
                               {isOut ? (
@@ -1074,6 +1098,312 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
             </table>
           </div>
           {renderPaginationFooter()}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUB-VIEW: BOX & LOOSE PRODUCT INVENTORY (1 BOX = X PIECES)                */}
+      {/* ========================================================================= */}
+      {activeSubView === 'box_loose' && (
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden space-y-4 p-5">
+          {/* Header & Location Selector */}
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div>
+              <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                <Boxes className="w-4 h-4 text-indigo-600" />
+                <span>Box & Loose Product Inventory Management</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Maintains <strong>1 Box = X Pieces</strong> relationship. Stock is tracked as <strong>Full Boxes + Loose Pieces = Total Pieces</strong>.
+              </p>
+            </div>
+
+            {/* Location Selector: Central Warehouse vs Store Outlets */}
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold overflow-x-auto w-full md:w-auto">
+              <span className="text-slate-500 px-2 text-[11px] font-bold shrink-0">Location:</span>
+              <button
+                type="button"
+                onClick={() => setSelectedBoxLooseStore('central')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                  selectedBoxLooseStore === 'central'
+                    ? 'bg-white shadow-xs font-bold text-indigo-700'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Central Warehouse
+              </button>
+              {storage.getStores().map((st) => (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => setSelectedBoxLooseStore(st.id)}
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                    selectedBoxLooseStore === st.id
+                      ? 'bg-white shadow-xs font-bold text-indigo-700'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {st.shortName || st.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Metrics & Formula Banner */}
+          {(() => {
+            const locKey = selectedBoxLooseStore === 'central' ? undefined : selectedBoxLooseStore;
+            const boxLooseItems = inventory.filter((i) => i.sellAsLoose || (i.piecesPerBox && i.piecesPerBox > 1));
+            const sumBoxes = boxLooseItems.reduce((acc, i) => acc + getBoxLooseStockSummary(i, locKey).fullBoxes, 0);
+            const sumLoose = boxLooseItems.reduce((acc, i) => acc + getBoxLooseStockSummary(i, locKey).loosePieces, 0);
+            const sumTotalPieces = boxLooseItems.reduce((acc, i) => acc + getBoxLooseStockSummary(i, locKey).totalPieces, 0);
+
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <span className="text-[10px] uppercase font-bold text-slate-500">Box & Loose SKUs</span>
+                    <div className="text-xl font-extrabold text-slate-900 mt-0.5">{boxLooseItems.length}</div>
+                    <span className="text-[10px] text-slate-500">Configured in Master Catalog</span>
+                  </div>
+
+                  <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200/80">
+                    <span className="text-[10px] uppercase font-bold text-indigo-700">Full Boxes</span>
+                    <div className="text-xl font-extrabold text-indigo-900 mt-0.5">{sumBoxes}</div>
+                    <span className="text-[10px] text-indigo-600">Complete Sealed Boxes</span>
+                  </div>
+
+                  <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200/80">
+                    <span className="text-[10px] uppercase font-bold text-amber-700">Loose Pieces</span>
+                    <div className="text-xl font-extrabold text-amber-900 mt-0.5">{sumLoose}</div>
+                    <span className="text-[10px] text-amber-600">Individual Loose Sticks/Units</span>
+                  </div>
+
+                  <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200/80">
+                    <span className="text-[10px] uppercase font-bold text-emerald-700">Total Pieces Equivalent</span>
+                    <div className="text-xl font-extrabold text-emerald-900 mt-0.5">{sumTotalPieces}</div>
+                    <span className="text-[10px] text-emerald-600">(Full Boxes × Pcs/Box) + Loose</span>
+                  </div>
+                </div>
+
+                <div className="bg-indigo-50/80 border border-indigo-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 text-indigo-950 font-bold">
+                    <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white font-mono text-[10px]">CORE RULE</span>
+                    <span>Total Pieces = (Full Boxes × Pieces per Box) + Loose Pieces</span>
+                  </div>
+                  <div className="text-[11px] text-indigo-800 font-medium">
+                    POS: Scanning <strong>Box Barcode</strong> sells 1 full box. Scanning <strong>Loose Barcode</strong> auto-unboxes and sells 1 piece.
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Box & Loose Inventory Table (Matching Requirement 10 exactly) */}
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-700 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
+                <tr>
+                  <th className="py-3 px-4">Product</th>
+                  <th className="py-3 px-3 text-center">Full Boxes</th>
+                  <th className="py-3 px-3 text-center">Loose Pieces</th>
+                  <th className="py-3 px-3 text-center">Pieces / Box</th>
+                  <th className="py-3 px-4 text-center">Total Pieces</th>
+                  <th className="py-3 px-3">Price (Box / Loose)</th>
+                  <th className="py-3 px-3">Barcodes (Box / Loose)</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(() => {
+                  const locKey = selectedBoxLooseStore === 'central' ? undefined : selectedBoxLooseStore;
+                  const boxLooseItems = inventory.filter((i) => i.sellAsLoose || (i.piecesPerBox && i.piecesPerBox > 1));
+
+                  if (boxLooseItems.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-slate-400">
+                          <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                          <p className="font-semibold text-slate-600">No Box & Loose products configured yet.</p>
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            Click &quot;Add New Product&quot; to register a product with Pieces per Box and Sell as Loose enabled.
+                          </p>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return boxLooseItems.map((item) => {
+                    const summary = getBoxLooseStockSummary(item, locKey);
+                    const piecesPerBox = summary.piecesPerBox;
+                    const fullBoxes = summary.fullBoxes;
+                    const loosePieces = summary.loosePieces;
+                    const totalPieces = summary.totalPieces;
+                    const loosePrice = item.loosePrice !== undefined ? item.loosePrice : Math.round((item.sellingPrice / piecesPerBox) * 100) / 100;
+
+                    const handleUnboxOne = () => {
+                      if (fullBoxes <= 0) {
+                        alert('No full boxes available to unbox.');
+                        return;
+                      }
+                      const items = storage.getInventory();
+                      const target = items.find((i) => i.id === item.id);
+                      if (!target) return;
+
+                      if (locKey) {
+                        if (!target.storeBoxAllocations) target.storeBoxAllocations = {};
+                        if (!target.storeBoxAllocations[locKey]) {
+                          target.storeBoxAllocations[locKey] = { fullBoxes, loosePieces };
+                        }
+                        target.storeBoxAllocations[locKey].fullBoxes = Math.max(0, target.storeBoxAllocations[locKey].fullBoxes - 1);
+                        target.storeBoxAllocations[locKey].loosePieces = (target.storeBoxAllocations[locKey].loosePieces || 0) + piecesPerBox;
+                        if (!target.storeAllocations) target.storeAllocations = {};
+                        target.storeAllocations[locKey] = target.storeBoxAllocations[locKey].fullBoxes;
+                      } else {
+                        target.fullBoxStock = Math.max(0, (target.fullBoxStock || target.stockQuantity || 0) - 1);
+                        target.loosePieceStock = (target.loosePieceStock || 0) + piecesPerBox;
+                        target.stockQuantity = target.fullBoxStock;
+                      }
+                      storage.saveInventory(items);
+                      soundEffects.playClick();
+                    };
+
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                        {/* Product */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            {item.imageUrl ? (
+                              <img
+                                src={item.imageUrl}
+                                alt={item.name}
+                                className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center text-slate-400">
+                                <Package className="w-4 h-4" />
+                              </div>
+                            )}
+                            <div>
+                              <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                                <span>{item.name}</span>
+                                {item.sellAsLoose && (
+                                  <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded text-[9px] font-extrabold border border-emerald-200">
+                                    Loose Enabled
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 font-mono text-[11px] text-slate-500 mt-0.5">
+                                <span>SKU: <strong className="text-slate-700">{item.sku}</strong></span>
+                                <span>•</span>
+                                <span>{item.category}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Full Boxes */}
+                        <td className="py-3 px-3 text-center">
+                          <span className="px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-900 font-mono font-extrabold text-sm border border-indigo-200">
+                            {fullBoxes}
+                          </span>
+                        </td>
+
+                        {/* Loose Pieces */}
+                        <td className="py-3 px-3 text-center">
+                          <span className={`px-2.5 py-1 rounded-lg font-mono font-extrabold text-sm border ${
+                            loosePieces > 0 ? 'bg-amber-100 text-amber-900 border-amber-200' : 'bg-slate-100 text-slate-500 border-slate-200'
+                          }`}>
+                            {loosePieces}
+                          </span>
+                        </td>
+
+                        {/* Pieces / Box */}
+                        <td className="py-3 px-3 text-center">
+                          <span className="font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs">
+                            {piecesPerBox}
+                          </span>
+                        </td>
+
+                        {/* Total Pieces Equivalent */}
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex flex-col items-center">
+                            <span className="px-3 py-1 rounded-lg bg-emerald-100 text-emerald-900 font-mono font-black text-sm border border-emerald-300">
+                              {totalPieces}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono mt-0.5">
+                              ({fullBoxes} × {piecesPerBox}) + {loosePieces}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Price (Box / Loose) */}
+                        <td className="py-3 px-3">
+                          <div className="space-y-0.5 font-mono text-[11px]">
+                            <div className="text-slate-800">
+                              Box: <strong className="font-bold text-slate-900">{CURRENCY}{item.sellingPrice}</strong>
+                            </div>
+                            <div className="text-amber-800">
+                              Loose: <strong className="font-bold">{CURRENCY}{loosePrice}</strong>
+                              <span className="text-[9px] text-slate-500 ml-1">({item.loosePriceType || 'fixed'})</span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Barcodes */}
+                        <td className="py-3 px-3">
+                          <div className="space-y-1 font-mono text-[10px]">
+                            <div className="flex items-center gap-1">
+                              <span className="px-1 py-0.2 rounded bg-indigo-50 text-indigo-700 font-bold border border-indigo-100">Box</span>
+                              <span className="text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                {item.boxBarcode || item.barcode}
+                              </span>
+                            </div>
+                            {item.looseBarcode && (
+                              <div className="flex items-center gap-1">
+                                <span className="px-1 py-0.2 rounded bg-amber-50 text-amber-800 font-bold border border-amber-100">Pcs</span>
+                                <span className="text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                  {item.looseBarcode}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={handleUnboxOne}
+                              disabled={fullBoxes <= 0}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1 cursor-pointer ${
+                                fullBoxes <= 0
+                                  ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border-indigo-200'
+                              }`}
+                              title="Manually open 1 box: -1 Box, +Pieces to Loose Pieces"
+                            >
+                              <span>Open 1 Box</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setEditingItem(item)}
+                              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer"
+                              title="Edit product configuration"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

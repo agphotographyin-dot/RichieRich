@@ -95,6 +95,54 @@ export function normalizeProductCategory(rawCat?: string): 'Paan' | 'Cafe' | 'Es
   return 'Essentials';
 }
 
+/**
+ * --- BOX & LOOSE PRODUCT INVENTORY TYPES & HELPERS ---
+ */
+export interface BoxLooseStock {
+  fullBoxes: number;
+  loosePieces: number;
+  piecesPerBox: number;
+  totalPieces: number;
+}
+
+/**
+ * Calculates current Full Boxes, Loose Pieces, and Total Pieces Equivalent for any product
+ */
+export function getProductBoxLooseStock(item: InventoryItem, storeId?: string): BoxLooseStock {
+  const piecesPerBox = item.piecesPerBox && item.piecesPerBox > 0 ? item.piecesPerBox : 1;
+
+  if (storeId) {
+    const storeBox = item.storeBoxAllocations?.[storeId];
+    if (storeBox) {
+      const fullBoxes = Math.max(0, storeBox.fullBoxes || 0);
+      const loosePieces = Math.max(0, storeBox.loosePieces || 0);
+      return {
+        fullBoxes,
+        loosePieces,
+        piecesPerBox,
+        totalPieces: fullBoxes * piecesPerBox + loosePieces,
+      };
+    }
+
+    const rawBoxes = Math.max(0, item.storeAllocations?.[storeId] || 0);
+    return {
+      fullBoxes: rawBoxes,
+      loosePieces: 0,
+      piecesPerBox,
+      totalPieces: rawBoxes * piecesPerBox,
+    };
+  }
+
+  const fullBoxes = item.fullBoxStock !== undefined ? item.fullBoxStock : Math.max(0, item.stockQuantity || 0);
+  const loosePieces = item.loosePieceStock !== undefined ? item.loosePieceStock : 0;
+  return {
+    fullBoxes,
+    loosePieces,
+    piecesPerBox,
+    totalPieces: fullBoxes * piecesPerBox + loosePieces,
+  };
+}
+
 // Initial Store Admin Login Credentials
 export const INITIAL_STORE_ADMINS: StoreAdminCredential[] = [
   {
@@ -745,6 +793,46 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     tags: ['Herbal', '0% Tobacco'],
     storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
   },
+  {
+    id: 'item-box-cig-1',
+    sku: 'CIG-CLK-01',
+    barcode: '890100801',
+    name: 'Classic Gold Filter (10 Pcs Box / Loose)',
+    category: 'Essentials',
+    brand: 'Richie Rich Signature',
+    vendor: 'Gujarat Betel Traders',
+    priceType: 'fixed',
+    status: 'active',
+    description: 'Gold tipped herbal filtered sticks. Sold either as a full 10-piece box or as individual loose pieces.',
+    costPrice: 45,
+    sellingPrice: 100,
+    stockQuantity: 20,
+    lowStockThreshold: 5,
+    unit: 'boxes',
+    imageUrl: 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=600&auto=format&fit=crop&q=80',
+    isTaxApplicable: true,
+    taxRate: 18,
+    isAvailableForOnline: true,
+    ingredients: ['Herbal Extracts', 'Aromatic Spices', 'Pure Filter Tip'],
+    marginPercentage: 55,
+    profitPerUnit: 55,
+    tags: ['Box & Loose', '1 Box = 10 Pcs'],
+    storeAllocations: { bopal: 10, gota: 20, sindhubhavan: 8, sg_highway: 6 },
+    piecesPerBox: 10,
+    sellAsLoose: true,
+    boxBarcode: '890100801',
+    looseBarcode: 'PCS-890100801',
+    loosePrice: 10,
+    loosePriceType: 'fixed',
+    fullBoxStock: 20,
+    loosePieceStock: 0,
+    storeBoxAllocations: {
+      bopal: { fullBoxes: 10, loosePieces: 0 },
+      gota: { fullBoxes: 20, loosePieces: 0 },
+      sindhubhavan: { fullBoxes: 8, loosePieces: 0 },
+      sg_highway: { fullBoxes: 6, loosePieces: 0 },
+    },
+  },
 ];
 
 // Initial Seed Customers
@@ -1130,6 +1218,88 @@ export const INITIAL_ORDERS: Order[] = [
     paymentStatus: 'paid',
     status: 'completed',
     createdAt: getRelativeDateISO(2, 18, 10), // 2 days ago
+  },
+  {
+    id: 'ord-1011',
+    orderNumber: 'RR-2026-1011',
+    source: 'pos_counter',
+    storeId: 'gota',
+    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
+    counterNumber: 1,
+    counterName: 'Counter 1 (Royal Paan Special)',
+    cashierName: 'Mahesh Solanki',
+    customerName: 'Aditya Dave',
+    customerPhone: '9825012345',
+    items: [
+      {
+        itemId: 'item-box-cig-1',
+        name: 'Classic Gold Filter (1 Box)',
+        sku: 'CIG-CLK-01',
+        price: 100,
+        costPrice: 45,
+        quantity: 5,
+        subtotal: 500,
+        profit: 275,
+        isTaxApplicable: true,
+        taxRate: 18,
+        saleType: 'box',
+        piecesPerBox: 10,
+        boxEquivalentSold: 5,
+      },
+    ],
+    subtotal: 500,
+    discountAmount: 0,
+    loyaltyPointsUsed: 0,
+    loyaltyPointsEarned: 50,
+    taxAmount: 90,
+    grandTotal: 590,
+    totalCost: 225,
+    totalProfit: 275,
+    paymentMethod: 'upi_qr',
+    paymentStatus: 'paid',
+    status: 'completed',
+    createdAt: getRelativeDateISO(0, 11, 20), // Today
+  },
+  {
+    id: 'ord-1012',
+    orderNumber: 'RR-2026-1012',
+    source: 'pos_counter',
+    storeId: 'gota',
+    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
+    counterNumber: 1,
+    counterName: 'Counter 1 (Royal Paan Special)',
+    cashierName: 'Mahesh Solanki',
+    customerName: 'Harsh Trivedi',
+    customerPhone: '9825098765',
+    items: [
+      {
+        itemId: 'item-box-cig-1',
+        name: 'Classic Gold Filter (Loose Piece)',
+        sku: 'CIG-CLK-01',
+        price: 10,
+        costPrice: 4.5,
+        quantity: 17,
+        subtotal: 170,
+        profit: 93.5,
+        isTaxApplicable: true,
+        taxRate: 18,
+        saleType: 'loose',
+        piecesPerBox: 10,
+        boxEquivalentSold: 1.7,
+      },
+    ],
+    subtotal: 170,
+    discountAmount: 0,
+    loyaltyPointsUsed: 0,
+    loyaltyPointsEarned: 17,
+    taxAmount: 30.6,
+    grandTotal: 200.6,
+    totalCost: 76.5,
+    totalProfit: 93.5,
+    paymentMethod: 'cash',
+    paymentStatus: 'paid',
+    status: 'completed',
+    createdAt: getRelativeDateISO(0, 13, 40), // Today
   },
 ];
 
@@ -1703,19 +1873,61 @@ export class StorageService {
       item.storeAllocations = {};
     }
 
-    const fromQty = item.storeAllocations[fromStoreId] || 0;
+    const isFromWH = fromStoreId === 'warehouse' || fromStoreId === 'central' || fromStoreId === 'wh-central-amd';
+    const isToWH = toStoreId === 'warehouse' || toStoreId === 'central' || toStoreId === 'wh-central-amd';
+
+    const fromQty = isFromWH ? (item.stockQuantity || 0) : (item.storeAllocations[fromStoreId] || 0);
     if (fromQty < quantity) return false;
 
-    item.storeAllocations[fromStoreId] = fromQty - quantity;
-    item.storeAllocations[toStoreId] = (item.storeAllocations[toStoreId] || 0) + quantity;
+    const piecesPerBox = item.piecesPerBox && item.piecesPerBox > 0 ? item.piecesPerBox : 10;
+
+    // 1. Deduct from source
+    if (isFromWH) {
+      item.stockQuantity = Math.max(0, (item.stockQuantity || 0) - quantity);
+      if (item.fullBoxStock !== undefined) {
+        item.fullBoxStock = Math.max(0, (item.fullBoxStock || 0) - quantity);
+        item.full_box_stock = item.fullBoxStock;
+        item.totalPieceEquivalent = (item.fullBoxStock * piecesPerBox) + (item.loosePieceStock || 0);
+        item.total_piece_equivalent = item.totalPieceEquivalent;
+      }
+    } else {
+      item.storeAllocations[fromStoreId] = Math.max(0, fromQty - quantity);
+      if (item.storeBoxAllocations && item.storeBoxAllocations[fromStoreId]) {
+        item.storeBoxAllocations[fromStoreId].fullBoxes = Math.max(0, (item.storeBoxAllocations[fromStoreId].fullBoxes || 0) - quantity);
+        item.storeBoxAllocations[fromStoreId].totalPieces = (item.storeBoxAllocations[fromStoreId].fullBoxes * piecesPerBox) + (item.storeBoxAllocations[fromStoreId].loosePieces || 0);
+        item.storeBoxAllocations[fromStoreId].total_piece_equivalent = item.storeBoxAllocations[fromStoreId].totalPieces;
+      }
+    }
+
+    // 2. Add to destination
+    if (isToWH) {
+      item.stockQuantity = (item.stockQuantity || 0) + quantity;
+      if (item.fullBoxStock !== undefined) {
+        item.fullBoxStock = (item.fullBoxStock || 0) + quantity;
+        item.full_box_stock = item.fullBoxStock;
+        item.totalPieceEquivalent = (item.fullBoxStock * piecesPerBox) + (item.loosePieceStock || 0);
+        item.total_piece_equivalent = item.totalPieceEquivalent;
+      }
+    } else {
+      item.storeAllocations[toStoreId] = (item.storeAllocations[toStoreId] || 0) + quantity;
+      if (item.sellAsLoose || (item.piecesPerBox && item.piecesPerBox > 1)) {
+        if (!item.storeBoxAllocations) item.storeBoxAllocations = {};
+        if (!item.storeBoxAllocations[toStoreId]) {
+          item.storeBoxAllocations[toStoreId] = { fullBoxes: 0, loosePieces: 0 };
+        }
+        item.storeBoxAllocations[toStoreId].fullBoxes += quantity;
+        item.storeBoxAllocations[toStoreId].totalPieces = (item.storeBoxAllocations[toStoreId].fullBoxes * piecesPerBox) + (item.storeBoxAllocations[toStoreId].loosePieces || 0);
+        item.storeBoxAllocations[toStoreId].total_piece_equivalent = item.storeBoxAllocations[toStoreId].totalPieces;
+      }
+    }
 
     this.saveInventory(items);
 
-    const fromStoreName = this.getStoreById(fromStoreId)?.shortName || fromStoreId;
-    const toStoreName = this.getStoreById(toStoreId)?.shortName || toStoreId;
+    const fromStoreName = isFromWH ? 'Central Warehouse' : (this.getStoreById(fromStoreId)?.shortName || fromStoreId);
+    const toStoreName = isToWH ? 'Central Warehouse' : (this.getStoreById(toStoreId)?.shortName || toStoreId);
 
     this.addNotification({
-      title: `📦 Stock Inter-Store Transfer Complete`,
+      title: `📦 Stock Transfer Complete`,
       message: `Transferred ${quantity} ${item.unit} of "${item.name}" from ${fromStoreName} to ${toStoreName}.`,
       type: 'low_stock',
       targetRole: 'admin',
@@ -2117,9 +2329,36 @@ export class StorageService {
     return items.find(
       (i) =>
         i.barcode.trim().toLowerCase() === clean ||
+        (i.boxBarcode && i.boxBarcode.trim().toLowerCase() === clean) ||
+        (i.looseBarcode && i.looseBarcode.trim().toLowerCase() === clean) ||
+        i.sku.trim().toLowerCase() === clean ||
+        clean.includes(i.barcode.trim().toLowerCase()) ||
+        (i.looseBarcode && clean.includes(i.looseBarcode.trim().toLowerCase()))
+    );
+  }
+
+  findItemByBarcodeWithMeta(barcode: string): { item: InventoryItem; matchedType: 'box' | 'loose' } | undefined {
+    const items = this.getInventory();
+    const clean = barcode.trim().toLowerCase();
+    for (const i of items) {
+      // Check loose barcode first if product allows selling loose
+      if (
+        i.sellAsLoose &&
+        i.looseBarcode &&
+        (i.looseBarcode.trim().toLowerCase() === clean || clean.includes(i.looseBarcode.trim().toLowerCase()))
+      ) {
+        return { item: i, matchedType: 'loose' };
+      }
+      if (
+        i.barcode.trim().toLowerCase() === clean ||
+        (i.boxBarcode && i.boxBarcode.trim().toLowerCase() === clean) ||
         i.sku.trim().toLowerCase() === clean ||
         clean.includes(i.barcode.trim().toLowerCase())
-    );
+      ) {
+        return { item: i, matchedType: 'box' };
+      }
+    }
+    return undefined;
   }
 
   adjustStock(id: string, delta: number, reason: string = 'Manual Adjustment'): boolean {
@@ -2129,6 +2368,9 @@ export class StorageService {
     if (!item) return false;
 
     item.stockQuantity = Math.max(0, item.stockQuantity + delta);
+    if (item.fullBoxStock !== undefined) {
+      item.fullBoxStock = Math.max(0, item.fullBoxStock + delta);
+    }
     this.saveInventory(items);
     cloudSync.syncDocument('inventory', item.id, item);
 
@@ -2149,6 +2391,9 @@ export class StorageService {
       const item = items.find((i) => i.id === id || (i.sku && i.sku.trim().toLowerCase() === cleanId));
       if (item) {
         item.stockQuantity = Math.max(0, item.stockQuantity + delta);
+        if (item.fullBoxStock !== undefined) {
+          item.fullBoxStock = Math.max(0, item.fullBoxStock + delta);
+        }
         modified = true;
         if (delta < 0 && item.stockQuantity <= item.lowStockThreshold) {
           anyLowStockWarning = true;
@@ -2350,36 +2595,254 @@ export class StorageService {
     const inventory = this.getInventory();
     const stores = this.getStores();
     let triggeredStoreLowStock = false;
+    const auditRecords: any[] = [];
+    const locName = orderData.storeName || (orderData.storeId ? `Store (${orderData.storeId})` : 'Central Warehouse');
 
     orderData.items.forEach((item) => {
       const invItem = inventory.find((i) => i.id === item.itemId || i.sku === item.sku);
       if (invItem) {
-        if (orderData.storeId) {
-          if (!invItem.storeAllocations) invItem.storeAllocations = {};
-          const currentStoreStock = invItem.storeAllocations[orderData.storeId] || 0;
-          const newStoreStock = Math.max(0, currentStoreStock - item.quantity);
-          invItem.storeAllocations[orderData.storeId] = newStoreStock;
+        const isBoxLoose = Boolean(invItem.sellAsLoose || (invItem.piecesPerBox && invItem.piecesPerBox > 1));
+        const piecesPerBox = invItem.piecesPerBox && invItem.piecesPerBox > 0 ? invItem.piecesPerBox : 10;
 
-          const storeMinThreshold = Math.max(2, Math.round((invItem.lowStockThreshold || 10) * 0.4));
-          if (newStoreStock <= storeMinThreshold) {
-            triggeredStoreLowStock = true;
-            const stObj = stores.find((s) => s.id === orderData.storeId);
-            const stName = stObj ? stObj.shortName || stObj.name : orderData.storeId.toUpperCase();
-            this.addNotification({
-              title: `⚠️ In-Store Low Stock: ${stName} - ${invItem.name}`,
-              message: `Post-Sale Alert: ${stName} stock dropped to ${newStoreStock} ${invItem.unit} (Threshold: ${storeMinThreshold}). Warehouse replenishment needed!`,
-              type: 'low_stock',
-              targetRole: 'admin',
-              read: false,
-              linkTab: 'store_stock',
-            });
+        if (isBoxLoose && item.saleType === 'loose') {
+          // Selling individual loose piece(s)
+          const piecesToDeduct = item.quantity;
+          let finalFullBoxes = 0;
+          let finalLoosePieces = 0;
+          let totalPieceEq = 0;
+
+          if (orderData.storeId) {
+            // Strictly deduct from STORE ONLY - NEVER ADD TO OR TOUCH WAREHOUSE
+            if (!invItem.storeBoxAllocations) invItem.storeBoxAllocations = {};
+            if (!invItem.storeBoxAllocations[orderData.storeId]) {
+              const currentBoxes = invItem.storeAllocations?.[orderData.storeId] || 0;
+              invItem.storeBoxAllocations[orderData.storeId] = { fullBoxes: currentBoxes, loosePieces: 0 };
+            }
+            let { fullBoxes, loosePieces } = invItem.storeBoxAllocations[orderData.storeId];
+
+            if (loosePieces >= piecesToDeduct) {
+              // Loose stock is sufficient: decrement directly
+              loosePieces -= piecesToDeduct;
+            } else {
+              // Loose stock insufficient: trigger box-to-loose conversion
+              // Reduces full_box_stock by required boxes, increments loose_piece_stock by (boxesToOpen * pieces_per_box) - piecesToDeduct
+              const needed = piecesToDeduct - loosePieces;
+              const boxesToOpen = Math.min(fullBoxes, Math.ceil(needed / piecesPerBox));
+              fullBoxes = Math.max(0, fullBoxes - boxesToOpen);
+              loosePieces = Math.max(0, (loosePieces + (boxesToOpen * piecesPerBox)) - piecesToDeduct);
+            }
+
+            finalFullBoxes = fullBoxes;
+            finalLoosePieces = loosePieces;
+            totalPieceEq = (fullBoxes * piecesPerBox) + loosePieces;
+
+            invItem.storeBoxAllocations[orderData.storeId] = {
+              fullBoxes,
+              loosePieces,
+              totalPieces: totalPieceEq,
+              total_piece_equivalent: totalPieceEq,
+            };
+            if (!invItem.storeAllocations) invItem.storeAllocations = {};
+            invItem.storeAllocations[orderData.storeId] = fullBoxes;
+
+            if (totalPieceEq <= piecesPerBox) {
+              triggeredStoreLowStock = true;
+            }
+          } else {
+            // Central Warehouse direct dispatch (online/unallocated)
+            let fullBoxes = invItem.fullBoxStock !== undefined ? invItem.fullBoxStock : Math.max(0, invItem.stockQuantity || 0);
+            let loosePieces = invItem.loosePieceStock !== undefined ? invItem.loosePieceStock : 0;
+
+            if (loosePieces >= piecesToDeduct) {
+              loosePieces -= piecesToDeduct;
+            } else {
+              const needed = piecesToDeduct - loosePieces;
+              const boxesToOpen = Math.min(fullBoxes, Math.ceil(needed / piecesPerBox));
+              fullBoxes = Math.max(0, fullBoxes - boxesToOpen);
+              loosePieces = Math.max(0, (loosePieces + (boxesToOpen * piecesPerBox)) - piecesToDeduct);
+            }
+
+            finalFullBoxes = fullBoxes;
+            finalLoosePieces = loosePieces;
+            totalPieceEq = (fullBoxes * piecesPerBox) + loosePieces;
+
+            invItem.fullBoxStock = fullBoxes;
+            invItem.loosePieceStock = loosePieces;
+            invItem.full_box_stock = fullBoxes;
+            invItem.loose_piece_stock = loosePieces;
+            invItem.totalPieceEquivalent = totalPieceEq;
+            invItem.total_piece_equivalent = totalPieceEq;
+            invItem.stockQuantity = fullBoxes;
           }
+
+          item.boxEquivalentSold = Math.round((piecesToDeduct / piecesPerBox) * 100) / 100;
+
+          // Record BOTH loose sale AND box-equivalent consumption in audit log
+          auditRecords.push({
+            referenceNumber: orderNumber,
+            itemId: invItem.id,
+            sku: invItem.sku,
+            itemName: `${invItem.name} (Loose Piece Sale)`,
+            movementType: 'pos_sales_consumption',
+            fromLocation: locName,
+            toLocation: `Customer (${orderData.customerName || 'Walk-in Guest'})`,
+            quantity: -piecesToDeduct,
+            unit: 'pieces',
+            balanceAfter: finalLoosePieces,
+            unitCost: item.costPrice,
+            totalCostImpact: -(piecesToDeduct * item.costPrice),
+            performedBy: orderData.cashierName || 'POS Cashier',
+            userRole: 'POS Cashier',
+            notes: `POS Loose Piece Sale: Sold ${piecesToDeduct} piece(s) (Full Boxes: ${finalFullBoxes}, Loose: ${finalLoosePieces}, Total Pieces Equivalent: ${totalPieceEq} pcs).`,
+          });
+
+          auditRecords.push({
+            referenceNumber: orderNumber,
+            itemId: invItem.id,
+            sku: invItem.sku,
+            itemName: `${invItem.name} (Box-Equivalent Consumption)`,
+            movementType: 'pos_sales_consumption',
+            fromLocation: locName,
+            toLocation: 'Internal Box-to-Loose Conversion',
+            quantity: -item.boxEquivalentSold,
+            unit: 'boxes',
+            balanceAfter: finalFullBoxes,
+            unitCost: invItem.costPrice,
+            totalCostImpact: -(item.boxEquivalentSold * invItem.costPrice),
+            performedBy: orderData.cashierName || 'POS Cashier',
+            userRole: 'POS Cashier',
+            notes: `Box-Equivalent Consumption: ${item.boxEquivalentSold} box consumed for loose sale of ${piecesToDeduct} piece(s) (${piecesPerBox} pcs/box). Full Boxes Remaining: ${finalFullBoxes}.`,
+          });
+        } else if (isBoxLoose && (item.saleType === 'box' || !item.saleType)) {
+          // Selling complete box(es)
+          const boxesToDeduct = item.quantity;
+          let finalBoxes = 0;
+
+          if (orderData.storeId) {
+            // Strictly deduct from STORE ONLY - NEVER ADD TO OR TOUCH WAREHOUSE
+            if (!invItem.storeBoxAllocations) invItem.storeBoxAllocations = {};
+            if (!invItem.storeBoxAllocations[orderData.storeId]) {
+              const currentBoxes = invItem.storeAllocations?.[orderData.storeId] || 0;
+              invItem.storeBoxAllocations[orderData.storeId] = { fullBoxes: currentBoxes, loosePieces: 0 };
+            }
+            let { fullBoxes, loosePieces } = invItem.storeBoxAllocations[orderData.storeId];
+            fullBoxes = Math.max(0, fullBoxes - boxesToDeduct);
+            finalBoxes = fullBoxes;
+            const totalEq = (fullBoxes * piecesPerBox) + loosePieces;
+
+            invItem.storeBoxAllocations[orderData.storeId] = {
+              fullBoxes,
+              loosePieces,
+              totalPieces: totalEq,
+              total_piece_equivalent: totalEq,
+            };
+            if (!invItem.storeAllocations) invItem.storeAllocations = {};
+            invItem.storeAllocations[orderData.storeId] = fullBoxes;
+
+            if (fullBoxes <= (invItem.lowStockThreshold || 5)) {
+              triggeredStoreLowStock = true;
+            }
+          } else {
+            let fullBoxes = invItem.fullBoxStock !== undefined ? invItem.fullBoxStock : Math.max(0, invItem.stockQuantity || 0);
+            fullBoxes = Math.max(0, fullBoxes - boxesToDeduct);
+            finalBoxes = fullBoxes;
+            const totalEq = (fullBoxes * piecesPerBox) + (invItem.loosePieceStock || 0);
+
+            invItem.fullBoxStock = fullBoxes;
+            invItem.full_box_stock = fullBoxes;
+            invItem.totalPieceEquivalent = totalEq;
+            invItem.total_piece_equivalent = totalEq;
+            invItem.stockQuantity = fullBoxes;
+          }
+          item.boxEquivalentSold = boxesToDeduct;
+
+          // Record box sale in audit log
+          auditRecords.push({
+            referenceNumber: orderNumber,
+            itemId: invItem.id,
+            sku: invItem.sku,
+            itemName: `${invItem.name} (Complete Box Sale)`,
+            movementType: 'pos_sales_consumption',
+            fromLocation: locName,
+            toLocation: `Customer (${orderData.customerName || 'Walk-in Guest'})`,
+            quantity: -boxesToDeduct,
+            unit: 'boxes',
+            balanceAfter: finalBoxes,
+            unitCost: invItem.costPrice,
+            totalCostImpact: -(boxesToDeduct * invItem.costPrice),
+            performedBy: orderData.cashierName || 'POS Cashier',
+            userRole: 'POS Cashier',
+            notes: `POS Complete Box Sale: Sold ${boxesToDeduct} box(es). Full Boxes Remaining: ${finalBoxes}.`,
+          });
         } else {
-          // Central Warehouse dispatch for unallocated / direct orders
-          invItem.stockQuantity = Math.max(0, invItem.stockQuantity - item.quantity);
+          // Standard product (not box/loose)
+          if (orderData.storeId) {
+            // Strictly deduct from STORE ONLY - NEVER ADD TO OR TOUCH WAREHOUSE
+            if (!invItem.storeAllocations) invItem.storeAllocations = {};
+            const currentStoreStock = invItem.storeAllocations[orderData.storeId] || 0;
+            const newStoreStock = Math.max(0, currentStoreStock - item.quantity);
+            invItem.storeAllocations[orderData.storeId] = newStoreStock;
+
+            const storeMinThreshold = Math.max(2, Math.round((invItem.lowStockThreshold || 10) * 0.4));
+            if (newStoreStock <= storeMinThreshold) {
+              triggeredStoreLowStock = true;
+              const stObj = stores.find((s) => s.id === orderData.storeId);
+              const stName = stObj ? stObj.shortName || stObj.name : orderData.storeId.toUpperCase();
+              this.addNotification({
+                title: `⚠️ In-Store Low Stock: ${stName} - ${invItem.name}`,
+                message: `Post-Sale Alert: ${stName} stock dropped to ${newStoreStock} ${invItem.unit} (Threshold: ${storeMinThreshold}). Warehouse replenishment needed!`,
+                type: 'low_stock',
+                targetRole: 'admin',
+                read: false,
+                linkTab: 'store_stock',
+              });
+            }
+          } else {
+            // Central Warehouse dispatch for unallocated / direct orders
+            invItem.stockQuantity = Math.max(0, invItem.stockQuantity - item.quantity);
+          }
+          item.boxEquivalentSold = item.quantity;
+
+          auditRecords.push({
+            referenceNumber: orderNumber,
+            itemId: invItem.id,
+            sku: invItem.sku,
+            itemName: invItem.name,
+            movementType: 'pos_sales_consumption',
+            fromLocation: locName,
+            toLocation: `Customer (${orderData.customerName || 'Walk-in Guest'})`,
+            quantity: -item.quantity,
+            unit: invItem.unit || 'units',
+            balanceAfter: orderData.storeId ? (invItem.storeAllocations?.[orderData.storeId] || 0) : invItem.stockQuantity,
+            unitCost: invItem.costPrice,
+            totalCostImpact: -(item.quantity * invItem.costPrice),
+            performedBy: orderData.cashierName || 'POS Cashier',
+            userRole: 'POS Cashier',
+            notes: `POS Sale: Sold ${item.quantity} ${invItem.unit || 'units'}. Store Stock Remaining: ${orderData.storeId ? (invItem.storeAllocations?.[orderData.storeId] || 0) : invItem.stockQuantity}.`,
+          });
         }
       }
     });
+
+    // Record audits via registered warehouseStorageRef or direct fallback
+    if (auditRecords.length > 0) {
+      if (warehouseStorageRef && typeof warehouseStorageRef.addAuditRecords === 'function') {
+        warehouseStorageRef.addAuditRecords(auditRecords);
+      } else {
+        try {
+          const raw = safeStorage.getItem('rr_wh_audit_trail');
+          const list = raw ? JSON.parse(raw) : [];
+          const now = Date.now();
+          const newRecs = auditRecords.map((a, idx) => ({
+            ...a,
+            id: `aud-${now}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+            timestamp: new Date().toISOString(),
+          }));
+          safeStorage.setItem('rr_wh_audit_trail', JSON.stringify([...newRecs, ...list].slice(0, 1000)));
+        } catch {}
+      }
+    }
+
     // Deduct stock in memory and persist via saveInventory so subscribers and Firestore are updated
     this.saveInventory(inventory);
 
@@ -3235,6 +3698,14 @@ export class StorageService {
 
 export const storage = StorageService.getInstance();
 
+let warehouseStorageRef: any = null;
+export function setWarehouseStorageRef(ref: any) {
+  warehouseStorageRef = ref;
+}
+export function getWarehouseStorageRef() {
+  return warehouseStorageRef;
+}
+
 /**
  * Calculates current stock for a single inventory item across Central Warehouse and Retail Stores
  */
@@ -3324,4 +3795,58 @@ export function getCatalogStockMetrics(inventoryList: InventoryItem[]): CatalogS
     centralValuationCost,
     storesValuationCost,
   };
+}
+
+/**
+ * Box & Loose Stock Helper
+ * Calculates full boxes, loose pieces, pieces/box, and total pieces equivalent.
+ * Total Pieces = (Full Boxes * Pieces per Box) + Loose Pieces
+ */
+export function getBoxLooseStockSummary(item: InventoryItem, storeId?: string): {
+  fullBoxes: number;
+  loosePieces: number;
+  piecesPerBox: number;
+  totalPieces: number;
+  totalPieceEquivalent: number;
+  total_piece_equivalent: number;
+  isBoxLoose: boolean;
+} {
+  const isBoxLoose = Boolean(item.sellAsLoose || (item.piecesPerBox && item.piecesPerBox > 1));
+  const piecesPerBox = item.piecesPerBox && item.piecesPerBox > 0 ? item.piecesPerBox : (isBoxLoose ? 10 : 1);
+
+  if (storeId) {
+    const storeBox = item.storeBoxAllocations?.[storeId];
+    let fullBoxes = 0;
+    let loosePieces = 0;
+    if (storeBox) {
+      fullBoxes = typeof storeBox.fullBoxes === 'number' ? storeBox.fullBoxes : 0;
+      loosePieces = typeof storeBox.loosePieces === 'number' ? storeBox.loosePieces : 0;
+    } else {
+      fullBoxes = (item.storeAllocations && item.storeAllocations[storeId]) || 0;
+      loosePieces = 0;
+    }
+    const totalPieces = (fullBoxes * piecesPerBox) + loosePieces;
+    return {
+      fullBoxes,
+      loosePieces,
+      piecesPerBox,
+      totalPieces,
+      totalPieceEquivalent: totalPieces,
+      total_piece_equivalent: totalPieces,
+      isBoxLoose,
+    };
+  } else {
+    const fullBoxes = typeof item.fullBoxStock === 'number' ? item.fullBoxStock : (item.stockQuantity || 0);
+    const loosePieces = typeof item.loosePieceStock === 'number' ? item.loosePieceStock : 0;
+    const totalPieces = (fullBoxes * piecesPerBox) + loosePieces;
+    return {
+      fullBoxes,
+      loosePieces,
+      piecesPerBox,
+      totalPieces,
+      totalPieceEquivalent: totalPieces,
+      total_piece_equivalent: totalPieces,
+      isBoxLoose,
+    };
+  }
 }

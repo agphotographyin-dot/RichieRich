@@ -13,7 +13,7 @@ import {
   WarehouseOverviewStats,
   WarehouseSubRole,
 } from '../types/warehouse';
-import { storage } from './storage';
+import { storage, setWarehouseStorageRef } from './storage';
 import { cloudSync } from './cloudSync';
 
 const WH_KEYS = {
@@ -859,6 +859,22 @@ export const warehouseStorage = {
     }));
     storage.batchAdjustStock(stockDeltas);
 
+    // Fulfill Box & Loose Receiving Logic: Adds full boxes (+X Boxes, +0 Loose Pieces)
+    const currentInventory = storage.getInventory();
+    let whModified = false;
+    newBill.items.forEach((item) => {
+      const invItem = currentInventory.find((i) => i.id === item.itemId);
+      if (invItem && (invItem.sellAsLoose || (invItem.piecesPerBox && invItem.piecesPerBox > 1))) {
+        invItem.fullBoxStock = (invItem.fullBoxStock !== undefined ? invItem.fullBoxStock : invItem.stockQuantity) + item.quantity;
+        if (invItem.loosePieceStock === undefined) invItem.loosePieceStock = 0;
+        invItem.stockQuantity = invItem.fullBoxStock;
+        whModified = true;
+      }
+    });
+    if (whModified) {
+      storage.saveInventory(currentInventory);
+    }
+
     // Record Batched Audit Trail
     const auditRecords = newBill.items.map((item) => ({
       referenceNumber: billNumber,
@@ -1030,6 +1046,14 @@ export const warehouseStorage = {
           if (invItem && invItem.storeAllocations) {
             const currentStoreStock = invItem.storeAllocations[newTransfer.sourceId] || 0;
             invItem.storeAllocations[newTransfer.sourceId] = Math.max(0, currentStoreStock - qty);
+            if (invItem.storeBoxAllocations && invItem.storeBoxAllocations[newTransfer.sourceId]) {
+              const currentBoxes = invItem.storeBoxAllocations[newTransfer.sourceId].fullBoxes || 0;
+              invItem.storeBoxAllocations[newTransfer.sourceId].fullBoxes = Math.max(0, currentBoxes - qty);
+              const piecesPerBox = invItem.piecesPerBox || 10;
+              const loose = invItem.storeBoxAllocations[newTransfer.sourceId].loosePieces || 0;
+              invItem.storeBoxAllocations[newTransfer.sourceId].totalPieces = (invItem.storeBoxAllocations[newTransfer.sourceId].fullBoxes * piecesPerBox) + loose;
+              invItem.storeBoxAllocations[newTransfer.sourceId].total_piece_equivalent = invItem.storeBoxAllocations[newTransfer.sourceId].totalPieces;
+            }
             invModified = true;
           }
         });
@@ -1126,6 +1150,14 @@ export const warehouseStorage = {
         if (invItem && invItem.storeAllocations) {
           const currentStoreStock = invItem.storeAllocations[transfer.sourceId] || 0;
           invItem.storeAllocations[transfer.sourceId] = Math.max(0, currentStoreStock - qty);
+          if (invItem.storeBoxAllocations && invItem.storeBoxAllocations[transfer.sourceId]) {
+            const currentBoxes = invItem.storeBoxAllocations[transfer.sourceId].fullBoxes || 0;
+            invItem.storeBoxAllocations[transfer.sourceId].fullBoxes = Math.max(0, currentBoxes - qty);
+            const piecesPerBox = invItem.piecesPerBox || 10;
+            const loose = invItem.storeBoxAllocations[transfer.sourceId].loosePieces || 0;
+            invItem.storeBoxAllocations[transfer.sourceId].totalPieces = (invItem.storeBoxAllocations[transfer.sourceId].fullBoxes * piecesPerBox) + loose;
+            invItem.storeBoxAllocations[transfer.sourceId].total_piece_equivalent = invItem.storeBoxAllocations[transfer.sourceId].totalPieces;
+          }
           invModified = true;
         }
       });
@@ -1211,15 +1243,36 @@ export const warehouseStorage = {
       // Add stock to store allocations in storage
       const invItem = inventory.find((i) => i.id === item.itemId);
       if (invItem) {
+        const piecesPerBox = invItem.piecesPerBox || 10;
         if (transfer.type === 'store_to_warehouse_return') {
           // Returning to Central Warehouse
           invItem.stockQuantity = (invItem.stockQuantity || 0) + receivedQty;
+          if (invItem.sellAsLoose || (invItem.piecesPerBox && invItem.piecesPerBox > 1) || invItem.fullBoxStock !== undefined) {
+            invItem.fullBoxStock = (invItem.fullBoxStock !== undefined ? invItem.fullBoxStock : (invItem.stockQuantity - receivedQty)) + receivedQty;
+            invItem.full_box_stock = invItem.fullBoxStock;
+            invItem.stockQuantity = invItem.fullBoxStock;
+            invItem.totalPieceEquivalent = (invItem.fullBoxStock * piecesPerBox) + (invItem.loosePieceStock || 0);
+            invItem.total_piece_equivalent = invItem.totalPieceEquivalent;
+          }
           inventoryModified = true;
         } else {
           // Inwarding at destination Store
           if (!invItem.storeAllocations) invItem.storeAllocations = {};
           const destStoreKey = transfer.destinationId;
-          invItem.storeAllocations[destStoreKey] = (invItem.storeAllocations[destStoreKey] || 0) + receivedQty;
+          const currentStoreAlloc = invItem.storeAllocations[destStoreKey] || 0;
+          invItem.storeAllocations[destStoreKey] = currentStoreAlloc + receivedQty;
+
+          // Box & Loose Replenishment / Receiving logic:
+          // Store receives full boxes, 0 loose pieces added. Does not convert into loose pieces until sold!
+          if (invItem.sellAsLoose || (invItem.piecesPerBox && invItem.piecesPerBox > 1)) {
+            if (!invItem.storeBoxAllocations) invItem.storeBoxAllocations = {};
+            if (!invItem.storeBoxAllocations[destStoreKey]) {
+              invItem.storeBoxAllocations[destStoreKey] = { fullBoxes: currentStoreAlloc, loosePieces: 0 };
+            }
+            invItem.storeBoxAllocations[destStoreKey].fullBoxes += receivedQty;
+            invItem.storeBoxAllocations[destStoreKey].totalPieces = (invItem.storeBoxAllocations[destStoreKey].fullBoxes * piecesPerBox) + (invItem.storeBoxAllocations[destStoreKey].loosePieces || 0);
+            invItem.storeBoxAllocations[destStoreKey].total_piece_equivalent = invItem.storeBoxAllocations[destStoreKey].totalPieces;
+          }
           inventoryModified = true;
         }
       }
@@ -1681,3 +1734,6 @@ export const warehouseStorage = {
     };
   },
 };
+
+// Register warehouse storage reference with storage service for bi-directional audit logging
+setWarehouseStorageRef(warehouseStorage);

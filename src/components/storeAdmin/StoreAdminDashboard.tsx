@@ -43,7 +43,7 @@ import {
   Order,
   InventoryItem,
 } from '../../types';
-import { storage } from '../../services/storage';
+import { storage, getBoxLooseStockSummary } from '../../services/storage';
 import { warehouseStorage } from '../../services/warehouseStorage';
 import { authService } from '../../services/auth';
 import { soundEffects } from '../../services/audio';
@@ -1312,10 +1312,42 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                               ₹{item.sellingPrice.toFixed(2)}
                             </td>
                             <td className="py-3 px-4 font-mono font-bold text-slate-900">
-                              {allocatedStock} {item.unit || 'units'}
+                              {item.sellAsLoose || (item.piecesPerBox && item.piecesPerBox > 1) ? (
+                                (() => {
+                                  const bl = getBoxLooseStockSummary(item, activeStoreId);
+                                  return (
+                                    <div className="flex flex-col">
+                                      <span className="font-extrabold text-indigo-900 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200 text-xs whitespace-nowrap inline-block w-fit">
+                                        {bl.fullBoxes} Box + {bl.loosePieces} Loose
+                                      </span>
+                                      <span className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                        ({bl.piecesPerBox}/box = {bl.totalPieces} Pcs)
+                                      </span>
+                                    </div>
+                                  );
+                                })()
+                              ) : (
+                                <span>{allocatedStock} {item.unit || 'units'}</span>
+                              )}
                             </td>
                             <td className="py-3 px-4 font-mono font-bold text-indigo-700 bg-indigo-50/20 text-center" title="Stock physically present and available in Central Warehouse">
-                              {centralStock} {item.unit || 'units'}
+                              {item.sellAsLoose || (item.piecesPerBox && item.piecesPerBox > 1) ? (
+                                (() => {
+                                  const cbl = getBoxLooseStockSummary(item);
+                                  return (
+                                    <div className="flex flex-col items-center">
+                                      <span className="text-xs font-bold text-indigo-800">
+                                        {cbl.fullBoxes} Box + {cbl.loosePieces} Loose
+                                      </span>
+                                      <span className="text-[10px] text-indigo-500 font-mono">
+                                        ({cbl.totalPieces} Pcs)
+                                      </span>
+                                    </div>
+                                  );
+                                })()
+                              ) : (
+                                <span>{centralStock} {item.unit || 'units'}</span>
+                              )}
                             </td>
                             <td className="py-3 px-4">
                               <span

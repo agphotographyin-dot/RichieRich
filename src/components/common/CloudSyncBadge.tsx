@@ -15,16 +15,6 @@ export const CloudSyncBadge: React.FC = () => {
   }, []);
 
   const renderBadgeContent = () => {
-    // If backend is currently running a VPS backup cycle, show background indicator
-    if (syncState.vpsBackup?.status === 'running') {
-      return (
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-400">
-          <RefreshCw className="w-3 h-3 animate-spin" />
-          <span className="hidden sm:inline">VPS Backing Up...</span>
-        </div>
-      );
-    }
-
     switch (syncState.status) {
       case 'connected':
         return (

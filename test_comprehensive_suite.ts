@@ -13,7 +13,7 @@
  * 10. Financial Reconciliation & Report Exports (Daily collection CSV, Monthly analytical CSV, Store statement)
  */
 
-import { storage } from './src/services/storage';
+import { storage, getBoxLooseStockSummary } from './src/services/storage';
 import { warehouseStorage } from './src/services/warehouseStorage';
 import { authService } from './src/services/auth';
 import { createSignedBackupEnvelope, verifyAndSanitizeImportFile, validateAndSanitizeBackupPayload } from './src/services/backupIntegrityService';
@@ -573,6 +573,413 @@ async function runAllTests() {
   const cleanCatalog = storage.getInventory();
   assert(cleanCatalog.length === 50, 'InventoryPurge', 'Catalog contains exactly 50 new items without retaining any old SKUs');
   assert(cleanCatalog[0].sku === 'NEW-SKU-001', 'InventoryPurge', 'First imported SKU verified (NEW-SKU-001)');
+
+  // ==========================================
+  // MODULE 13: BOX & LOOSE PRODUCT INVENTORY & POS
+  // ==========================================
+  console.log('\n--- MODULE 13: BOX & LOOSE PRODUCT INVENTORY & POS ---');
+
+  // 13.1 Register Master Box & Loose Item
+  const boxItem = storage.addInventoryItem({
+    name: 'Classic Gold Cigarettes (Box & Loose)',
+    sku: 'CIG-GOLD-100',
+    category: 'Cigarettes',
+    description: 'Classic Gold Filter Cigarette Box & Loose Product',
+    lowStockThreshold: 5,
+    piecesPerBox: 10,
+    sellAsLoose: true,
+    boxBarcode: 'BOX-8901001',
+    looseBarcode: 'PCS-8901001',
+    barcode: 'BOX-8901001',
+    sellingPrice: 100, // Box price
+    costPrice: 60,
+    loosePrice: 10, // Single piece price
+    loosePriceType: 'fixed',
+    stockQuantity: 20, // 20 boxes opening
+    fullBoxStock: 20,
+    loosePieceStock: 0,
+    unit: 'boxes',
+    storeAllocations: { bopal: 20, gota: 0 },
+    storeBoxAllocations: {
+      bopal: { fullBoxes: 20, loosePieces: 0 },
+      gota: { fullBoxes: 0, loosePieces: 0 },
+    },
+    isAvailableForOnline: true,
+  });
+
+  assert(boxItem.piecesPerBox === 10, 'BoxLoose', 'Pieces per Box configured (10)');
+  assert(boxItem.sellAsLoose === true, 'BoxLoose', 'Sell as Loose enabled');
+
+  // 13.2 Initial Stock Equivalent Verification
+  const initialStockSummary = getBoxLooseStockSummary(boxItem, 'bopal');
+  assert(initialStockSummary.fullBoxes === 20, 'BoxLoose', 'Initial Full Boxes at Bopal = 20');
+  assert(initialStockSummary.loosePieces === 0, 'BoxLoose', 'Initial Loose Pieces at Bopal = 0');
+  assert(initialStockSummary.totalPieces === 200, 'BoxLoose', 'Total Equivalent Pieces = 200 (20 boxes * 10 pcs)');
+
+  // 13.3 Barcode Lookup Verification (Box and Loose point to same SKU)
+  const boxScan = storage.findItemByBarcodeWithMeta('BOX-8901001');
+  assert(boxScan !== null && boxScan.matchedType === 'box' && boxScan.item.id === boxItem.id, 'BoxLoose', 'Box Barcode Lookup matches master item as box');
+  const looseScan = storage.findItemByBarcodeWithMeta('PCS-8901001');
+  assert(looseScan !== null && looseScan.matchedType === 'loose' && looseScan.item.id === boxItem.id, 'BoxLoose', 'Loose Barcode Lookup matches master item as loose');
+
+  // 13.4 Box Sale (Customer buys 1 Complete Box)
+  // Expected: Box stock 20 -> 19, Loose: 0, Total: 190. Does NOT create loose piece sale.
+  storage.processOrder({
+    source: 'pos_counter',
+    storeId: 'bopal',
+    storeName: 'Richie Rich Pan House - Bopal Branch',
+    counterNumber: 1,
+    counterName: 'Main Counter',
+    cashierName: 'Ramesh Patel',
+    customerName: 'Customer 1 (Box Buyer)',
+    items: [
+      {
+        itemId: boxItem.id,
+        name: `${boxItem.name} (1 Box)`,
+        sku: boxItem.sku,
+        price: 100,
+        costPrice: 60,
+        quantity: 1,
+        subtotal: 100,
+        profit: 40,
+        saleType: 'box',
+        piecesPerBox: 10,
+        boxEquivalentSold: 1,
+      },
+    ],
+    subtotal: 100,
+    discountAmount: 0,
+    taxAmount: 5,
+    grandTotal: 105,
+    totalProfit: 40,
+    totalCost: 60,
+    paymentMethod: 'cash',
+    paymentStatus: 'paid',
+    status: 'completed',
+  });
+
+  const afterBoxSaleItem = storage.getInventory().find((i) => i.id === boxItem.id)!;
+  const afterBoxSaleSummary = getBoxLooseStockSummary(afterBoxSaleItem, 'bopal');
+  assert(afterBoxSaleSummary.fullBoxes === 19, 'BoxLoose', 'Full Boxes reduced 20 -> 19 after 1 Box sale');
+  assert(afterBoxSaleSummary.loosePieces === 0, 'BoxLoose', 'Loose Pieces remains 0 (No loose pieces created by box sale)');
+  assert(afterBoxSaleSummary.totalPieces === 190, 'BoxLoose', 'Total Pieces Equivalent = 190 (19 boxes * 10)');
+
+  // 13.5 Loose Piece Sale (Customer buys 1 Individual Piece)
+  // Expected: 1 box auto-unboxed -> Full boxes: 18, Loose pieces: 9, Total: 189 pieces equivalent.
+  storage.processOrder({
+    source: 'pos_counter',
+    storeId: 'bopal',
+    storeName: 'Richie Rich Pan House - Bopal Branch',
+    counterNumber: 1,
+    counterName: 'Main Counter',
+    cashierName: 'Ramesh Patel',
+    customerName: 'Customer 2 (Single Piece Buyer)',
+    items: [
+      {
+        itemId: boxItem.id,
+        name: `${boxItem.name} (Loose Piece)`,
+        sku: boxItem.sku,
+        price: 10,
+        costPrice: 6,
+        quantity: 1,
+        subtotal: 10,
+        profit: 4,
+        saleType: 'loose',
+        piecesPerBox: 10,
+        boxEquivalentSold: 0.1,
+      },
+    ],
+    subtotal: 10,
+    discountAmount: 0,
+    taxAmount: 0.5,
+    grandTotal: 10.5,
+    totalProfit: 4,
+    totalCost: 6,
+    paymentMethod: 'cash',
+    paymentStatus: 'paid',
+    status: 'completed',
+  });
+
+  const afterLooseSale1Item = storage.getInventory().find((i) => i.id === boxItem.id)!;
+  const afterLooseSale1Summary = getBoxLooseStockSummary(afterLooseSale1Item, 'bopal');
+  assert(afterLooseSale1Summary.fullBoxes === 18, 'BoxLoose', 'Auto-conversion: 1 box converted into loose pieces (19 -> 18 full boxes)');
+  assert(afterLooseSale1Summary.loosePieces === 9, 'BoxLoose', 'Auto-conversion: 9 loose pieces remain after 1 sold');
+  assert(afterLooseSale1Summary.totalPieces === 189, 'BoxLoose', 'Total Pieces = 189 (18 * 10 + 9)');
+
+  // 13.6 Continued Loose Sales (Customer buys 9 more loose cigarettes)
+  // Expected: Consumes all 9 loose pieces -> Full boxes: 18, Loose pieces: 0, Total: 180 pieces equivalent.
+  storage.processOrder({
+    source: 'pos_counter',
+    storeId: 'bopal',
+    storeName: 'Richie Rich Pan House - Bopal Branch',
+    counterNumber: 1,
+    counterName: 'Main Counter',
+    cashierName: 'Ramesh Patel',
+    customerName: 'Customer 3 (9 Loose Pieces)',
+    items: [
+      {
+        itemId: boxItem.id,
+        name: `${boxItem.name} (Loose Piece)`,
+        sku: boxItem.sku,
+        price: 10,
+        costPrice: 6,
+        quantity: 9,
+        subtotal: 90,
+        profit: 36,
+        saleType: 'loose',
+        piecesPerBox: 10,
+        boxEquivalentSold: 0.9,
+      },
+    ],
+    subtotal: 90,
+    discountAmount: 0,
+    taxAmount: 4.5,
+    grandTotal: 94.5,
+    totalProfit: 36,
+    totalCost: 54,
+    paymentMethod: 'cash',
+    paymentStatus: 'paid',
+    status: 'completed',
+  });
+
+  const afterLooseSale9Item = storage.getInventory().find((i) => i.id === boxItem.id)!;
+  const afterLooseSale9Summary = getBoxLooseStockSummary(afterLooseSale9Item, 'bopal');
+  assert(afterLooseSale9Summary.fullBoxes === 18, 'BoxLoose', 'Full Boxes remains 18 after consuming existing loose pieces');
+  assert(afterLooseSale9Summary.loosePieces === 0, 'BoxLoose', 'Loose Pieces = 0 (10 individual pieces consumed from initial unboxed box)');
+  assert(afterLooseSale9Summary.totalPieces === 180, 'BoxLoose', 'Total Pieces Equivalent = 180 (18 * 10 + 0)');
+
+  // 13.7 Multi-Box Unboxing on Large Loose Sale (Sell 17 loose pieces when loose stock is 0)
+  // Needs 17 pieces: Opens 2 boxes (20 pieces). 18 boxes -> 16 boxes. Loose remaining: 20 - 17 = 3.
+  // Total pieces: 180 - 17 = 163 (16 * 10 + 3 = 163).
+  storage.processOrder({
+    source: 'pos_counter',
+    storeId: 'bopal',
+    storeName: 'Richie Rich Pan House - Bopal Branch',
+    counterNumber: 1,
+    counterName: 'Main Counter',
+    cashierName: 'Ramesh Patel',
+    customerName: 'Customer 4 (17 Loose Pieces)',
+    items: [
+      {
+        itemId: boxItem.id,
+        name: `${boxItem.name} (Loose Piece)`,
+        sku: boxItem.sku,
+        price: 10,
+        costPrice: 6,
+        quantity: 17,
+        subtotal: 170,
+        profit: 68,
+        saleType: 'loose',
+        piecesPerBox: 10,
+        boxEquivalentSold: 1.7,
+      },
+    ],
+    subtotal: 170,
+    discountAmount: 0,
+    taxAmount: 8.5,
+    grandTotal: 178.5,
+    totalProfit: 68,
+    totalCost: 102,
+    paymentMethod: 'cash',
+    paymentStatus: 'paid',
+    status: 'completed',
+  });
+
+  const afterLargeLooseItem = storage.getInventory().find((i) => i.id === boxItem.id)!;
+  const afterLargeLooseSummary = getBoxLooseStockSummary(afterLargeLooseItem, 'bopal');
+  assert(afterLargeLooseSummary.fullBoxes === 16, 'BoxLoose', 'Full Boxes reduced 18 -> 16 (opened 2 boxes for 17 pcs)');
+  assert(afterLargeLooseSummary.loosePieces === 3, 'BoxLoose', 'Loose pieces = 3 (20 opened - 17 sold = 3 loose pieces)');
+  assert(afterLargeLooseSummary.totalPieces === 163, 'BoxLoose', 'Total pieces = 163 (16 * 10 + 3 = 163)');
+
+  // 13.8 Replenishment / Receiving Logic (Requirement 9)
+  // When store receives +5 boxes, add to Full Boxes (+5) and 0 loose pieces. Total pieces = 163 + 50 = 213.
+  const currentInvList = storage.getInventory();
+  const currentTarget = currentInvList.find((i) => i.id === boxItem.id)!;
+  if (!currentTarget.storeBoxAllocations) currentTarget.storeBoxAllocations = {};
+  currentTarget.storeBoxAllocations['bopal'] = {
+    fullBoxes: (currentTarget.storeBoxAllocations['bopal']?.fullBoxes || 0) + 5,
+    loosePieces: currentTarget.storeBoxAllocations['bopal']?.loosePieces || 0, // Loose pieces untouched!
+  };
+  if (!currentTarget.storeAllocations) currentTarget.storeAllocations = {};
+  currentTarget.storeAllocations['bopal'] = currentTarget.storeBoxAllocations['bopal'].fullBoxes;
+  storage.saveInventory(currentInvList);
+
+  const afterReplenishItem = storage.getInventory().find((i) => i.id === boxItem.id)!;
+  const afterReplenishSummary = getBoxLooseStockSummary(afterReplenishItem, 'bopal');
+  assert(afterReplenishSummary.fullBoxes === 21, 'BoxLoose', 'Replenishment: Full Boxes increased 16 + 5 = 21');
+  assert(afterReplenishSummary.loosePieces === 3, 'BoxLoose', 'Replenishment: Loose pieces untouched at 3');
+  assert(afterReplenishSummary.totalPieces === 213, 'BoxLoose', 'Replenishment: Total pieces = 213 (21 * 10 + 3)');
+
+  // 13.9 Audit Trail: Loose Sale AND Box-Equivalent Consumption Recorded (User Requirement 1)
+  const auditTrail = warehouseStorage.getAuditTrail();
+  const hasLooseSaleAudit = auditTrail.some(
+    (a) => a.itemName.includes('Loose Piece Sale') && a.quantity < 0
+  );
+  assert(hasLooseSaleAudit, 'BoxLooseAudit', 'Audit Trail contains dedicated Loose Piece Sale entry');
+
+  const hasBoxEqAudit = auditTrail.some(
+    (a) => a.itemName.includes('Box-Equivalent Consumption') && a.quantity < 0 && a.unit === 'boxes'
+  );
+  assert(hasBoxEqAudit, 'BoxLooseAudit', 'Audit Trail contains dedicated Box-Equivalent Consumption entry');
+
+  // 13.10 Warehouse-to-Store and Store-to-Warehouse Number Accuracy (User Requirement 2)
+  // Create an item with exactly 25 units in Central Warehouse
+  const transferItem = storage.addInventoryItem({
+    sku: 'TRF-TEST-25',
+    barcode: '8901234567890',
+    name: 'Transfer Accuracy Pan Test Item',
+    category: 'Paan',
+    costPrice: 20,
+    sellingPrice: 40,
+    stockQuantity: 25,
+    lowStockThreshold: 5,
+    unit: 'boxes',
+    piecesPerBox: 10,
+    sellAsLoose: true,
+    fullBoxStock: 25,
+    loosePieceStock: 0,
+    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
+    storeBoxAllocations: {
+      bopal: { fullBoxes: 0, loosePieces: 0 },
+      gota: { fullBoxes: 0, loosePieces: 0 },
+      sindhubhavan: { fullBoxes: 0, loosePieces: 0 },
+      sg_highway: { fullBoxes: 0, loosePieces: 0 },
+    },
+    isTaxApplicable: true,
+    isAvailableForOnline: true,
+    description: 'Transfer verification item',
+  });
+
+  // Verify initial warehouse stock = 25, store stock = 0
+  const initItem = storage.getInventory().find((i) => i.id === transferItem.id)!;
+  assert(initItem.stockQuantity === 25, 'StockTransfer', 'Initial Central WH stock = 25');
+  assert(initItem.storeAllocations?.['bopal'] === 0, 'StockTransfer', 'Initial Bopal Store stock = 0');
+
+  // Transfer 20 from Central Warehouse to Bopal store
+  const transfer1 = warehouseStorage.createStockTransfer({
+    type: 'warehouse_to_store',
+    sourceType: 'warehouse',
+    sourceId: 'wh-central-amd',
+    sourceName: 'Central Warehouse',
+    destinationType: 'store',
+    destinationId: 'bopal',
+    destinationName: 'Richie Rich Pan House - Bopal Branch',
+    requestedDate: '2026-09-30',
+    dispatchDate: '2026-09-30',
+    status: 'dispatched_in_transit',
+    items: [
+      {
+        itemId: transferItem.id,
+        sku: transferItem.sku,
+        name: transferItem.name,
+        batchNumber: 'BATCH-TRF-01',
+        requestedQty: 20,
+        dispatchedQty: 20,
+        receivedQty: 0,
+        unit: 'boxes',
+        unitCost: 20,
+      },
+    ],
+  });
+
+  // Receive 20 at store
+  warehouseStorage.receiveTransfer(transfer1.id, 'Store Manager Bopal', {
+    [transferItem.id]: 20,
+  });
+
+  const afterTrf1 = storage.getInventory().find((i) => i.id === transferItem.id)!;
+  assert(afterTrf1.stockQuantity === 5, 'StockTransfer', 'Central WH retains exactly 5 units (25 - 20 = 5)');
+  assert(afterTrf1.storeAllocations?.['bopal'] === 20, 'StockTransfer', 'Bopal Store received exactly 20 units');
+  assert(afterTrf1.storeBoxAllocations?.['bopal']?.fullBoxes === 20, 'StockTransfer', 'Bopal Store box allocation = 20 full boxes');
+  assert(afterTrf1.stockQuantity + (afterTrf1.storeAllocations?.['bopal'] || 0) === 25, 'StockTransfer', 'Total network stock strictly conserved at 25');
+
+  // Transfer 5 back from Bopal Store to Central Warehouse (Return)
+  const transfer2 = warehouseStorage.createStockTransfer({
+    type: 'store_to_warehouse_return',
+    sourceType: 'store',
+    sourceId: 'bopal',
+    sourceName: 'Richie Rich Pan House - Bopal Branch',
+    destinationType: 'warehouse',
+    destinationId: 'wh-central-amd',
+    destinationName: 'Central Warehouse',
+    requestedDate: '2026-09-30',
+    dispatchDate: '2026-09-30',
+    status: 'dispatched_in_transit',
+    items: [
+      {
+        itemId: transferItem.id,
+        sku: transferItem.sku,
+        name: transferItem.name,
+        batchNumber: 'BATCH-TRF-01',
+        requestedQty: 5,
+        dispatchedQty: 5,
+        receivedQty: 0,
+        unit: 'boxes',
+        unitCost: 20,
+      },
+    ],
+  });
+
+  warehouseStorage.receiveTransfer(transfer2.id, 'Warehouse Manager', {
+    [transferItem.id]: 5,
+  });
+
+  const afterTrf2 = storage.getInventory().find((i) => i.id === transferItem.id)!;
+  assert(afterTrf2.storeAllocations?.['bopal'] === 15, 'StockTransfer', 'Bopal Store reduced to 15 (20 - 5 = 15)');
+  assert(afterTrf2.storeBoxAllocations?.['bopal']?.fullBoxes === 15, 'StockTransfer', 'Bopal Store box allocation accurately updated to 15');
+  assert(afterTrf2.stockQuantity === 10, 'StockTransfer', 'Central WH increased to 10 (5 + 5 = 10)');
+  assert(afterTrf2.stockQuantity + (afterTrf2.storeAllocations?.['bopal'] || 0) === 25, 'StockTransfer', 'Total network stock strictly conserved at 25 after return');
+
+  // 13.11 POS Sale Stock Isolation: 1 piece less from store, and Central Warehouse is UNTOUCHED (User Requirement 3)
+  const whStockBeforePOS = afterTrf2.stockQuantity; // 10
+  const storePiecesBeforePOS = getBoxLooseStockSummary(afterTrf2, 'bopal').totalPieces; // 150 pieces
+
+  storage.processOrder({
+    source: 'pos_counter',
+    storeId: 'bopal',
+    storeName: 'Richie Rich Pan House - Bopal Branch',
+    counterNumber: 1,
+    counterName: 'Main Counter',
+    cashierName: 'Ramesh Patel',
+    customerName: 'POS Guest',
+    items: [
+      {
+        itemId: transferItem.id,
+        name: `${transferItem.name} (Loose Piece)`,
+        sku: transferItem.sku,
+        price: 5,
+        costPrice: 2,
+        quantity: 1,
+        subtotal: 5,
+        profit: 3,
+        saleType: 'loose',
+        piecesPerBox: 10,
+        boxEquivalentSold: 0.1,
+      },
+    ],
+    subtotal: 5,
+    discountAmount: 0,
+    taxAmount: 0,
+    grandTotal: 5,
+    totalProfit: 3,
+    totalCost: 2,
+    paymentMethod: 'cash',
+    paymentStatus: 'paid',
+    status: 'completed',
+  });
+
+  const afterPOSItem = storage.getInventory().find((i) => i.id === transferItem.id)!;
+  const storeSummaryAfterPOS = getBoxLooseStockSummary(afterPOSItem, 'bopal');
+  assert(
+    storeSummaryAfterPOS.totalPieces === storePiecesBeforePOS - 1,
+    'POSStockIsolation',
+    'POS sale decreased store stock by exactly 1 piece (150 -> 149)'
+  );
+  assert(
+    afterPOSItem.stockQuantity === whStockBeforePOS,
+    'POSStockIsolation',
+    'Central Warehouse stock was NOT touched or incremented on POS store sale (remains exactly 10)'
+  );
 
   console.log('\n===============================================================');
   console.log(`ALL ${results.length} FEATURES VERIFIED AND PASSED WITH 100% SUCCESS!`);

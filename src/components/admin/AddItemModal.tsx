@@ -64,6 +64,13 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
   const [isCameraScanning, setIsCameraScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
+  // Box & Loose Product Inventory States
+  const [piecesPerBox, setPiecesPerBox] = useState<number>(10);
+  const [sellAsLoose, setSellAsLoose] = useState<boolean>(false);
+  const [looseBarcode, setLooseBarcode] = useState<string>('');
+  const [loosePrice, setLoosePrice] = useState<number>(10);
+  const [loosePriceType, setLoosePriceType] = useState<'fixed' | 'variable'>('fixed');
+
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerElementId = 'add-item-camera-scanner-view';
 
@@ -90,13 +97,20 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
       setSellingPrice(70);
       setStockQuantity(25);
       setLowStockThreshold(10);
-      setUnit('pieces');
+      setUnit('boxes');
       setImageUrl('https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&auto=format&fit=crop&q=80');
       setIsTaxApplicable(true);
       setTaxRate(5);
       setIngredientsText('Betel Leaf, Gulkand, Cardamom, Dry Fruits');
       setIsCameraScanning(false);
       setCameraError(null);
+
+      // Reset Box & Loose Product
+      setPiecesPerBox(10);
+      setSellAsLoose(false);
+      setLooseBarcode(`PCS-${randomSuffix}${Math.floor(1000 + Math.random() * 9000)}`);
+      setLoosePrice(10);
+      setLoosePriceType('fixed');
     } else {
       stopCamera().catch(() => {});
     }
@@ -110,6 +124,12 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
     const prefix = (category || 'ITEM').slice(0, 3).toUpperCase();
     setSku(`${prefix}-${randomSuffix.toString().slice(-3)}`);
     setBarcode(`890100${randomSuffix}`);
+    soundEffects.playClick();
+  };
+
+  const autoGenerateLooseBarcode = () => {
+    const randomSuffix = Math.floor(10000000 + Math.random() * 90000000);
+    setLooseBarcode(`PCS-${randomSuffix}`);
     soundEffects.playClick();
   };
 
@@ -183,6 +203,36 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
     const generatedSku = sku.trim() || `SKU-${Date.now().toString().slice(-4)}`;
     const generatedBarcode = barcode.trim() || `8901${Math.floor(10000 + Math.random() * 90000)}`;
 
+    // Box & Loose Validations
+    if (sellAsLoose) {
+      if (!piecesPerBox || piecesPerBox <= 0) {
+        alert('Total Pieces per Box must be greater than 0 when selling as loose product.');
+        return;
+      }
+      if (!looseBarcode.trim()) {
+        alert('Loose Product Barcode is required when selling as loose product.');
+        return;
+      }
+      if (looseBarcode.trim().toLowerCase() === generatedBarcode.toLowerCase()) {
+        alert('Loose Product Barcode must be different from the Box Barcode.');
+        return;
+      }
+      const existingItems = storage.getInventory();
+      const duplicateLoose = existingItems.find(
+        (i) =>
+          (i.looseBarcode && i.looseBarcode.trim().toLowerCase() === looseBarcode.trim().toLowerCase()) ||
+          i.barcode.trim().toLowerCase() === looseBarcode.trim().toLowerCase()
+      );
+      if (duplicateLoose) {
+        alert(`Loose Barcode "${looseBarcode}" is already in use by product: ${duplicateLoose.name}. Please enter or generate a unique barcode.`);
+        return;
+      }
+      if (loosePriceType === 'fixed' && (!loosePrice || loosePrice <= 0)) {
+        alert('Single Piece Selling Price is required and must be greater than 0.');
+        return;
+      }
+    }
+
     const initialStock = Number(stockQuantity) || 0;
     // Central Warehouse initial stock only. Store allocations start at 0 until transferred via Stock Transfer
     const storeAllocations = {
@@ -190,6 +240,13 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
       bopal: 0,
       sindhubhavan: 0,
       sg_highway: 0,
+    };
+
+    const storeBoxAllocations = {
+      gota: { fullBoxes: 0, loosePieces: 0 },
+      bopal: { fullBoxes: 0, loosePieces: 0 },
+      sindhubhavan: { fullBoxes: 0, loosePieces: 0 },
+      sg_highway: { fullBoxes: 0, loosePieces: 0 },
     };
 
     storage.addInventoryItem({
@@ -215,6 +272,16 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
       ingredients: ingredients.length > 0 ? ingredients : ['Artisanal Spices', 'Premium Extract'],
       tags: ['New Arrival'],
       storeAllocations,
+      // Box & Loose Fields
+      piecesPerBox: piecesPerBox > 0 ? Number(piecesPerBox) : 1,
+      sellAsLoose,
+      boxBarcode: generatedBarcode,
+      looseBarcode: sellAsLoose ? looseBarcode.trim() : undefined,
+      loosePrice: sellAsLoose ? (loosePriceType === 'variable' ? 0 : Number(loosePrice) || 0) : undefined,
+      loosePriceType: sellAsLoose ? loosePriceType : undefined,
+      fullBoxStock: initialStock,
+      loosePieceStock: 0,
+      storeBoxAllocations,
     });
 
     soundEffects.playSuccessJingle();
@@ -619,6 +686,193 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                 ? `Calculates ${taxRate}% GST (SGST ${(taxRate / 2).toFixed(1)}% + CGST ${(taxRate / 2).toFixed(1)}%) on customer invoice.`
                 : 'Tax will NOT be applicable on this product. The line item will be charged at 0% tax.'}
             </p>
+          </div>
+
+          {/* ========================================================= */}
+          {/* BOX & LOOSE PRODUCT INVENTORY CONFIGURATION (1 Box = X Pieces) */}
+          {/* ========================================================= */}
+          <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/40 space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+                  📦
+                </div>
+                <div>
+                  <h4 className="text-xs text-slate-900 font-extrabold flex items-center gap-1.5">
+                    <span>Box & Loose Product Configuration</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-mono font-bold">
+                      1 Box = {piecesPerBox || 1} Pieces
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-600">
+                    Maintain dual Box + Loose Piece inventory with separate Barcodes and automatic box-opening conversion.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Field 1: Total Pieces per Box & Field 2: Sell as Loose Toggle */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-3 rounded-xl border border-indigo-100">
+              <div>
+                <label className="text-xs text-slate-800 font-bold block mb-1">
+                  Total Pieces per Box *
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={piecesPerBox}
+                    onChange={(e) => setPiecesPerBox(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-hidden focus:border-indigo-400"
+                  />
+                  <span className="absolute right-3 top-2 text-[11px] text-slate-500 font-medium">pcs / box</span>
+                </div>
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Example: 10 cigarettes per box, 12 bottles per crate.
+                </span>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-800 font-bold block mb-1">
+                  Sell as Loose Product? *
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSellAsLoose(true);
+                      if (!looseBarcode) autoGenerateLooseBarcode();
+                    }}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      sellAsLoose
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Check className={`w-3.5 h-3.5 ${sellAsLoose ? 'opacity-100' : 'opacity-0'}`} />
+                    <span>Yes, Sell Loose</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSellAsLoose(false)}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      !sellAsLoose
+                        ? 'bg-[#1E293B] text-white border-slate-800 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Check className={`w-3.5 h-3.5 ${!sellAsLoose ? 'opacity-100' : 'opacity-0'}`} />
+                    <span>No, Box Only</span>
+                  </button>
+                </div>
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  {sellAsLoose ? 'Can be sold both as a complete box AND as single loose pieces.' : 'Can only be sold as a complete box.'}
+                </span>
+              </div>
+            </div>
+
+            {/* When Sell as Loose = Yes: Loose Barcode & Single Piece Price Settings */}
+            {sellAsLoose && (
+              <div className="p-3 bg-white rounded-xl border border-indigo-200 space-y-3 animate-in fade-in">
+                {/* Field 3: Loose Product Barcode */}
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-slate-800 font-bold">
+                      Loose Product Barcode (Single Piece Scanner ID) *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={autoGenerateLooseBarcode}
+                      className="text-[10px] text-indigo-700 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-2.5 h-2.5" /> Auto-Generate Loose Barcode
+                    </button>
+                  </div>
+                  <div className="relative mt-1">
+                    <BarcodeIcon className="w-3.5 h-3.5 text-indigo-500 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={looseBarcode}
+                      onChange={(e) => setLooseBarcode(e.target.value)}
+                      placeholder="e.g. PCS-890100205"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3.5 py-2 text-xs text-slate-900 font-mono placeholder-slate-400 focus:outline-hidden focus:border-indigo-400"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Scanning <strong>{barcode || 'Box Barcode'}</strong> sells 1 complete box. Scanning <strong>{looseBarcode || 'Loose Barcode'}</strong> sells 1 single piece.
+                  </p>
+
+                  {looseBarcode.trim() && (
+                    <div className="pt-2 mt-2 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        Loose Piece Barcode Preview:
+                      </span>
+                      <div className="bg-slate-50 px-2 py-1 rounded-md border border-slate-200">
+                        <BarcodeVisualizer value={looseBarcode.trim()} width={130} height={24} showText={true} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Field 4: Single Piece Pricing & Model */}
+                <div className="pt-2 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-slate-800 font-bold">Single Piece Price Type</label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setLoosePriceType('fixed')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          loosePriceType === 'fixed'
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        Fixed Price
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLoosePriceType('variable')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          loosePriceType === 'variable'
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        Variable Price (POS)
+                      </button>
+                    </div>
+                  </div>
+
+                  {loosePriceType === 'fixed' ? (
+                    <div>
+                      <label className="text-xs text-slate-700 font-bold block mb-1">
+                        Single Piece Selling Price ({CURRENCY}) *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        required
+                        value={loosePrice}
+                        onChange={(e) => setLoosePrice(Number(e.target.value))}
+                        placeholder="e.g. 10"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-hidden focus:border-indigo-400"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Predefined selling price when customer purchases 1 single piece. (Box Price is {CURRENCY}{sellingPrice}).
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 rounded-lg bg-purple-50 text-purple-900 border border-purple-200 text-xs">
+                      Cashier will be prompted to enter the single-piece selling price at the POS counter when scanning the loose barcode.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ========================================================= */}

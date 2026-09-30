@@ -19,6 +19,9 @@ import {
   CheckCircle2,
   Layers,
   Filter,
+  Boxes,
+  PackageCheck,
+  Package,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -54,7 +57,7 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
   const [selectedStoreId, setSelectedStoreId] = useState<string>('all');
   const [selectedCounter, setSelectedCounter] = useState<string>('all');
   const [selectedStaff, setSelectedStaff] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'financial' | 'staff' | 'inventory'>('financial');
+  const [activeTab, setActiveTab] = useState<'financial' | 'staff' | 'inventory' | 'box_loose'>('financial');
 
   const stores = storage.getStores();
 
@@ -220,6 +223,175 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
     const a = document.createElement('a');
     a.href = url;
     a.download = `Richie_Rich_Financial_Performance_${selectedStoreId}_${selectedMonth.replace(' ', '_')}.csv`;
+    a.click();
+  };
+
+  // Box & Loose Product Sales & Consumption Analytics (Requirement 12)
+  const boxLooseReportData = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        itemId: string;
+        name: string;
+        sku: string;
+        category: string;
+        piecesPerBox: number;
+        boxPrice: number;
+        loosePrice: number;
+        boxSalesCount: number;
+        looseSalesCount: number;
+        totalPiecesSold: number;
+        boxEquivalentConsumed: number;
+        boxRevenue: number;
+        looseRevenue: number;
+        totalRevenue: number;
+        totalProfit: number;
+      }
+    >();
+
+    // Seed with all configured box & loose products from inventory
+    inventory.forEach((inv) => {
+      if (inv.sellAsLoose || (inv.piecesPerBox && inv.piecesPerBox > 1)) {
+        const ppb = inv.piecesPerBox && inv.piecesPerBox > 0 ? inv.piecesPerBox : 10;
+        const looseP =
+          inv.loosePrice !== undefined
+            ? inv.loosePrice
+            : Math.round((inv.sellingPrice / ppb) * 100) / 100;
+        map.set(inv.id, {
+          itemId: inv.id,
+          name: inv.name,
+          sku: inv.sku,
+          category: inv.category,
+          piecesPerBox: ppb,
+          boxPrice: inv.sellingPrice,
+          loosePrice: looseP,
+          boxSalesCount: 0,
+          looseSalesCount: 0,
+          totalPiecesSold: 0,
+          boxEquivalentConsumed: 0,
+          boxRevenue: 0,
+          looseRevenue: 0,
+          totalRevenue: 0,
+          totalProfit: 0,
+        });
+      }
+    });
+
+    // Scan filtered orders for sales transactions
+    filteredOrders.forEach((o) => {
+      o.items.forEach((it) => {
+        const inv = inventory.find((i) => i.id === it.itemId);
+        const isBoxLoose =
+          it.saleType === 'box' ||
+          it.saleType === 'loose' ||
+          Boolean(inv && (inv.sellAsLoose || (inv.piecesPerBox && inv.piecesPerBox > 1)));
+
+        if (!isBoxLoose) return;
+
+        const ppb = it.piecesPerBox || inv?.piecesPerBox || 10;
+        let record = map.get(it.itemId);
+        if (!record) {
+          const looseP =
+            inv?.loosePrice !== undefined
+              ? inv.loosePrice
+              : Math.round(((inv?.sellingPrice || it.price) / ppb) * 100) / 100;
+          record = {
+            itemId: it.itemId,
+            name: it.name.replace(/\s*\((?:1 Box|Loose Piece)\)/i, ''),
+            sku: it.sku || inv?.sku || '',
+            category: inv?.category || 'General',
+            piecesPerBox: ppb,
+            boxPrice: inv?.sellingPrice || it.price,
+            loosePrice: looseP,
+            boxSalesCount: 0,
+            looseSalesCount: 0,
+            totalPiecesSold: 0,
+            boxEquivalentConsumed: 0,
+            boxRevenue: 0,
+            looseRevenue: 0,
+            totalRevenue: 0,
+            totalProfit: 0,
+          };
+          map.set(it.itemId, record);
+        }
+
+        if (it.saleType === 'loose') {
+          record.looseSalesCount += it.quantity;
+          record.looseRevenue += it.subtotal;
+        } else {
+          record.boxSalesCount += it.quantity;
+          record.boxRevenue += it.subtotal;
+        }
+        record.totalProfit += it.profit || 0;
+        record.totalRevenue += it.subtotal;
+      });
+    });
+
+    return Array.from(map.values()).map((rec) => {
+      const totalPieces = rec.boxSalesCount * rec.piecesPerBox + rec.looseSalesCount;
+      const boxEq = totalPieces > 0 ? Number((totalPieces / rec.piecesPerBox).toFixed(2)) : 0;
+      return {
+        ...rec,
+        totalPiecesSold: totalPieces,
+        boxEquivalentConsumed: boxEq,
+      };
+    });
+  }, [filteredOrders, inventory]);
+
+  const boxLooseTotals = useMemo(() => {
+    return boxLooseReportData.reduce(
+      (acc, r) => ({
+        totalBoxes: acc.totalBoxes + r.boxSalesCount,
+        totalLoose: acc.totalLoose + r.looseSalesCount,
+        totalPieces: acc.totalPieces + r.totalPiecesSold,
+        totalBoxEq: Number((acc.totalBoxEq + r.boxEquivalentConsumed).toFixed(2)),
+        totalBoxRevenue: acc.totalBoxRevenue + r.boxRevenue,
+        totalLooseRevenue: acc.totalLooseRevenue + r.looseRevenue,
+        totalRevenue: acc.totalRevenue + r.totalRevenue,
+        totalProfit: acc.totalProfit + r.totalProfit,
+      }),
+      {
+        totalBoxes: 0,
+        totalLoose: 0,
+        totalPieces: 0,
+        totalBoxEq: 0,
+        totalBoxRevenue: 0,
+        totalLooseRevenue: 0,
+        totalRevenue: 0,
+        totalProfit: 0,
+      }
+    );
+  }, [boxLooseReportData]);
+
+  const handleExportBoxLooseCSV = () => {
+    let csv = `RICHIE RICH PAN HOUSE - BOX & LOOSE PRODUCT SALES & CONSUMPTION REPORT\n`;
+    csv += `Audit Month,${selectedMonth}\n`;
+    csv += `Store Outlet Filter,${selectedStoreId === 'all' ? 'All Stores & Outlets' : selectedStoreId}\n`;
+    csv += `Generated Timestamp,${new Date().toISOString()}\n`;
+    csv += `Conversion Rule,1 Box = X Pieces | Total Pieces = (Full Boxes * Pieces/Box) + Loose Pieces\n\n`;
+
+    csv += `SUMMARY TOTALS\n`;
+    csv += `Metric,Value\n`;
+    csv += `Total Box Sales,${boxLooseTotals.totalBoxes} Boxes\n`;
+    csv += `Total Loose Pieces Sold,${boxLooseTotals.totalLoose} Pieces\n`;
+    csv += `Total Pieces Sold Equivalent,${boxLooseTotals.totalPieces} Pieces\n`;
+    csv += `Total Box Equivalent Consumed,${boxLooseTotals.totalBoxEq} Boxes\n`;
+    csv += `Box Revenue,${CURRENCY}${boxLooseTotals.totalBoxRevenue.toFixed(2)}\n`;
+    csv += `Loose Pieces Revenue,${CURRENCY}${boxLooseTotals.totalLooseRevenue.toFixed(2)}\n`;
+    csv += `Total Box & Loose Revenue,${CURRENCY}${boxLooseTotals.totalRevenue.toFixed(2)}\n\n`;
+
+    csv += `DETAILED PRODUCT BREAKDOWN MATRIX\n`;
+    csv += `Product Name,SKU,Category,Pieces Per Box,Box Sales (Boxes),Loose Pieces Sold (Pcs),Total Pieces Sold,Box Equivalent Consumed,Box Price (${CURRENCY}),Loose Price (${CURRENCY}),Box Revenue (${CURRENCY}),Loose Revenue (${CURRENCY}),Total Revenue (${CURRENCY}),Profit (${CURRENCY})\n`;
+
+    boxLooseReportData.forEach((row) => {
+      csv += `"${row.name.replace(/"/g, '""')}","${row.sku}","${row.category}",${row.piecesPerBox},${row.boxSalesCount},${row.looseSalesCount},${row.totalPiecesSold},${row.boxEquivalentConsumed},${row.boxPrice},${row.loosePrice},${row.boxRevenue.toFixed(2)},${row.looseRevenue.toFixed(2)},${row.totalRevenue.toFixed(2)},${row.totalProfit.toFixed(2)}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Richie_Rich_Box_Loose_Sales_Report_${selectedStoreId}_${selectedMonth.replace(' ', '_')}.csv`;
     a.click();
   };
 
@@ -391,6 +563,17 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
         >
           <Layers className="w-3.5 h-3.5 text-blue-600" />
           <span>Product SKU Economics</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('box_loose')}
+          className={`px-4 py-2 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'box_loose'
+              ? 'bg-white text-slate-900 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Boxes className="w-3.5 h-3.5 text-purple-600" />
+          <span>Box & Loose Sales & Consumption</span>
         </button>
       </div>
 
@@ -654,6 +837,221 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
                       </td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BOX & LOOSE SALES & CONSUMPTION VIEW (Requirement 12) */}
+      {activeTab === 'box_loose' && (
+        <div className="space-y-6">
+          {/* Header & Export Action */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-5 rounded-xl shadow-xs">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center font-bold border border-purple-200">
+                  <Boxes className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base">Box & Loose Product Sales & Consumption</h3>
+                  <p className="text-xs text-slate-500">
+                    Detailed tracking of Full Boxes sold, Loose Pieces sold, Equivalent Boxes consumed, and Total Pieces.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleExportBoxLooseCSV}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
+              title="Download Box & Loose Sales Report CSV"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Export Box & Loose CSV</span>
+            </button>
+          </div>
+
+          {/* 5 Core Metric Cards as per Requirement 12 */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+            {/* 1. Box Sales */}
+            <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
+              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
+                📦 Box Sales
+              </span>
+              <div className="text-2xl font-black text-indigo-900 mt-1">
+                {boxLooseTotals.totalBoxes}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">Complete sealed boxes sold</p>
+            </div>
+
+            {/* 2. Loose Pieces Sold */}
+            <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
+              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
+                🥢 Loose Pieces Sold
+              </span>
+              <div className="text-2xl font-black text-amber-900 mt-1">
+                {boxLooseTotals.totalLoose}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">Individual units sold at POS</p>
+            </div>
+
+            {/* 3. Total Pieces Sold */}
+            <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
+              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
+                🔢 Total Pieces Sold
+              </span>
+              <div className="text-2xl font-black text-slate-900 mt-1">
+                {boxLooseTotals.totalPieces}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">(Boxes × Pcs/Box) + Loose</p>
+            </div>
+
+            {/* 4. Box Equivalent Consumed */}
+            <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs bg-linear-to-br from-purple-50/50 to-white">
+              <span className="text-[10px] font-extrabold text-purple-700 uppercase tracking-wider block">
+                📊 Box Eq. Consumed
+              </span>
+              <div className="text-2xl font-black text-purple-950 mt-1">
+                {boxLooseTotals.totalBoxEq} <span className="text-xs font-bold text-purple-600">Boxes</span>
+              </div>
+              <p className="text-[11px] text-purple-700 mt-0.5">Total Pieces / Pcs Per Box</p>
+            </div>
+
+            {/* 5. Total Revenue */}
+            <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs sm:col-span-2 lg:col-span-1">
+              <span className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider block">
+                💰 Total Revenue
+              </span>
+              <div className="text-2xl font-black text-emerald-900 mt-1">
+                {CURRENCY}{boxLooseTotals.totalRevenue.toFixed(2)}
+              </div>
+              <p className="text-[11px] text-emerald-700 mt-0.5">
+                Box: {CURRENCY}{boxLooseTotals.totalBoxRevenue.toFixed(0)} • Loose: {CURRENCY}{boxLooseTotals.totalLooseRevenue.toFixed(0)}
+              </p>
+            </div>
+          </div>
+
+          {/* Core Rule & Example Scenario Card matching Requirement 12 */}
+          <div className="bg-indigo-50/80 border border-indigo-200 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-md bg-indigo-700 text-white font-mono text-[10px] font-black">
+                  CONSUMPTION FORMULA
+                </span>
+                <span className="font-bold text-indigo-950">
+                  Box Equivalent Consumed = (Box Sales) + (Loose Pieces Sold / Pieces per Box)
+                </span>
+              </div>
+              <p className="text-indigo-800 text-[11px]">
+                <strong>Rule:</strong> The inventory transaction history tracks exact equivalent boxes consumed while preserving POS transaction register records as individual loose sales. Inventory never rounds loose pieces.
+              </p>
+            </div>
+            <div className="bg-white px-3 py-1.5 rounded-lg border border-indigo-200 text-[11px] text-indigo-950 font-mono shadow-2xs whitespace-nowrap">
+              Example: 5 Boxes + 17 Loose (10/box) = <strong>6.7 Boxes Equivalent</strong>
+            </div>
+          </div>
+
+          {/* Product Breakdown Table */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="font-bold text-slate-800 text-xs uppercase tracking-tight">
+                Product-by-Product Sales & Consumption Matrix
+              </h3>
+              <span className="text-xs text-slate-500 font-medium font-mono">
+                {boxLooseReportData.length} SKUs Monitored
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-600 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
+                  <tr>
+                    <th className="py-3 px-4">Product & SKU</th>
+                    <th className="py-3 px-3 text-center">Pcs / Box</th>
+                    <th className="py-3 px-3 text-center">Box Sales</th>
+                    <th className="py-3 px-3 text-center">Loose Pieces Sold</th>
+                    <th className="py-3 px-3 text-center">Total Pieces Sold</th>
+                    <th className="py-3 px-3 text-center bg-purple-50/50 text-purple-900 border-x border-purple-100">
+                      Box Eq. Consumed
+                    </th>
+                    <th className="py-3 px-3 text-right">Box Price</th>
+                    <th className="py-3 px-3 text-right">Loose Price</th>
+                    <th className="py-3 px-3 text-right">Box Revenue</th>
+                    <th className="py-3 px-3 text-right">Loose Revenue</th>
+                    <th className="py-3 px-4 text-right">Total Revenue</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {boxLooseReportData.length === 0 ? (
+                    <tr>
+                      <td colSpan={11} className="py-12 text-center text-slate-400">
+                        <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                        <p className="font-semibold text-slate-600">No Box & Loose sales recorded in this period.</p>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          Products configured with &quot;Sell as Loose Product&quot; will appear here once sold via POS.
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    boxLooseReportData.map((row) => (
+                      <tr key={row.itemId} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900">{row.name}</div>
+                          <div className="text-[10px] font-mono text-slate-400">
+                            {row.sku} • {row.category}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-center font-mono font-bold text-slate-700 bg-slate-50">
+                          {row.piecesPerBox}
+                        </td>
+                        <td className="py-3 px-3 text-center font-mono font-bold text-indigo-700">
+                          {row.boxSalesCount > 0 ? (
+                            <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100">
+                              {row.boxSalesCount} Boxes
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">0</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-center font-mono font-bold text-amber-700">
+                          {row.looseSalesCount > 0 ? (
+                            <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-100">
+                              {row.looseSalesCount} Pcs
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">0</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-center font-mono font-black text-slate-900">
+                          {row.totalPiecesSold}
+                        </td>
+                        <td className="py-3 px-3 text-center font-mono font-black text-purple-900 bg-purple-50/40 border-x border-purple-100">
+                          {row.boxEquivalentConsumed > 0 ? (
+                            <span>{row.boxEquivalentConsumed} Boxes</span>
+                          ) : (
+                            <span className="text-slate-400">0</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-slate-700">
+                          {CURRENCY}{row.boxPrice}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-slate-700">
+                          {CURRENCY}{row.loosePrice}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono font-semibold text-indigo-700">
+                          {CURRENCY}{row.boxRevenue.toFixed(2)}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono font-semibold text-amber-700">
+                          {CURRENCY}{row.looseRevenue.toFixed(2)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-black text-slate-900">
+                          {CURRENCY}{row.totalRevenue.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
