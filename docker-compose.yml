@@ -11,7 +11,7 @@ services:
     container_name: richierich
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - "80:80"
     environment:
       - NODE_ENV=production
     depends_on:
