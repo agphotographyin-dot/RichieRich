@@ -1,0 +1,178 @@
+[
+  {
+    "id": "c_rr_inventory",
+    "name": "inventory",
+    "type": "base",
+    "system": false,
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "schema": [
+      { "name": "recordId", "type": "text", "required": false, "unique": false },
+      { "name": "data", "type": "json", "required": false, "unique": false },
+      { "name": "updatedAt", "type": "text", "required": false, "unique": false }
+    ]
+  },
+  {
+    "id": "c_rr_orders",
+    "name": "orders",
+    "type": "base",
+    "system": false,
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "schema": [
+      { "name": "recordId", "type": "text", "required": false, "unique": false },
+      { "name": "data", "type": "json", "required": false, "unique": false },
+      { "name": "updatedAt", "type": "text", "required": false, "unique": false }
+    ]
+  },
+  {
+    "id": "c_rr_stores",
+    "name": "stores",
+    "type": "base",
+    "system": false,
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "schema": [
+      { "name": "recordId", "type": "text", "required": false, "unique": false },
+      { "name": "data", "type": "json", "required": false, "unique": false },
+      { "name": "updatedAt", "type": "text", "required": false, "unique": false }
+    ]
+  },
+  {
+    "id": "c_rr_customers",
+    "name": "customers",
+    "type": "base",
+    "system": false,
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "schema": [
+      { "name": "recordId", "type": "text", "required": false, "unique": false },
+      { "name": "data", "type": "json", "required": false, "unique": false },
+      { "name": "updatedAt", "type": "text", "required": false, "unique": false }
+    ]
+  },
+  {
+    "id": "c_rr_expenses",
+    "name": "store_expenses",
+    "type": "base",
+    "system": false,
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "schema": [
+      { "name": "recordId", "type": "text", "required": false, "unique": false },
+      { "name": "data", "type": "json", "required": false, "unique": false },
+      { "name": "updatedAt", "type": "text", "required": false, "unique": false }
+    ]
+  },
+  {
+    "id": "c_rr_purchase_orders",
+    "name": "purchase_orders",
+    "type": "base",
+    "system": false,
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "schema": [
+      { "name": "recordId", "type": "text", "required": false, "unique": false },
+      { "name": "data", "type": "json", "required": false, "unique": false },
+      { "name": "updatedAt", "type": "text", "required": false, "unique": false }
+    ]
+  },
+  {
+    "id": "c_rr_inward_bills",
+    "name": "inward_bills",
+    "type": "base",
+    "system": false,
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "schema": [
+      { "name": "recordId", "type": "text", "required": false, "unique": false },
+      { "name": "data", "type": "json", "required": false, "unique": false },
+      { "name": "updatedAt", "type": "text", "required": false, "unique": false }
+    ]
+  },
+  {
+    "id": "c_rr_transfers",
+    "name": "stock_transfers",
+    "type": "base",
+    "system": false,
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "schema": [
+      { "name": "recordId", "type": "text", "required": false, "unique": false },
+      { "name": "data", "type": "json", "required": false, "unique": false },
+      { "name": "updatedAt", "type": "text", "required": false, "unique": false }
+    ]
+  },
+  {
+    "id": "c_rr_indents",
+    "name": "store_indents",
+    "type": "base",
+    "system": false,
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "schema": [
+      { "name": "recordId", "type": "text", "required": false, "unique": false },
+      { "name": "data", "type": "json", "required": false, "unique": false },
+      { "name": "updatedAt", "type": "text", "required": false, "unique": false }
+    ]
+  },
+  {
+    "id": "c_rr_suppliers",
+    "name": "suppliers",
+    "type": "base",
+    "system": false,
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "schema": [
+      { "name": "recordId", "type": "text", "required": false, "unique": false },
+      { "name": "data", "type": "json", "required": false, "unique": false },
+      { "name": "updatedAt", "type": "text", "required": false, "unique": false }
+    ]
+  },
+  {
+    "id": "c_rr_system_metadata",
+    "name": "system_metadata",
+    "type": "base",
+    "system": false,
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "schema": [
+      { "name": "recordId", "type": "text", "required": false, "unique": false },
+      { "name": "data", "type": "json", "required": false, "unique": false },
+      { "name": "updatedAt", "type": "text", "required": false, "unique": false }
+    ]
+  }
+]

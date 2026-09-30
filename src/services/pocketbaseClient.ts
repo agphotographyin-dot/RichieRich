@@ -62,16 +62,14 @@ export interface PocketBaseHealthResult {
   message: string;
   testedUrl: string;
   code?: number;
+  collectionsFound?: string[];
 }
 
 export const checkPocketBaseHealth = async (customUrl?: string): Promise<PocketBaseHealthResult> => {
   const rawBase = (customUrl || getPocketBaseUrl()).replace(/\/+$/, '');
   const candidateUrls: string[] = [];
 
-  // Try exact URL first
   candidateUrls.push(rawBase);
-
-  // If missing port 8090, add it as candidate
   if (!rawBase.includes(':8090') && !rawBase.includes(':3000')) {
     candidateUrls.push(`${rawBase}:8090`);
   }
@@ -79,7 +77,7 @@ export const checkPocketBaseHealth = async (customUrl?: string): Promise<PocketB
   for (const url of candidateUrls) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
       const res = await fetch(`${url}/api/health`, {
         signal: controller.signal,
         headers: { Accept: 'application/json' },
@@ -87,13 +85,26 @@ export const checkPocketBaseHealth = async (customUrl?: string): Promise<PocketB
       clearTimeout(timeoutId);
 
       if (res.ok) {
-        const data = await res.json().catch(() => null);
+        // Also check if collections are accessible or if inventory collection exists
+        let collectionsFound: string[] = [];
+        try {
+          const invRes = await fetch(`${url}/api/collections/inventory/records?perPage=1`, {
+            headers: { Accept: 'application/json' },
+          });
+          if (invRes.ok) {
+            collectionsFound.push('inventory');
+          }
+        } catch {}
+
         return {
           success: true,
           status: 'online',
-          message: data?.message || 'PocketBase server is online and responding healthy',
+          message: collectionsFound.includes('inventory')
+            ? 'PocketBase server is online and collections are configured & ready!'
+            : 'PocketBase is running, but database collections are not created yet. Use 1-Click Auto Setup below.',
           testedUrl: url,
           code: res.status,
+          collectionsFound,
         };
       }
     } catch (err: any) {
@@ -101,7 +112,7 @@ export const checkPocketBaseHealth = async (customUrl?: string): Promise<PocketB
         return {
           success: false,
           status: 'mixed_content',
-          message: 'Browser HTTPS Mixed Content restriction in preview. Works 100% natively when running on your VPS http://187.126.115.40/ or custom domain!',
+          message: 'Browser HTTPS restriction in preview. Open app directly on your VPS http://187.126.115.40/ for full native access.',
           testedUrl: url,
         };
       }
@@ -114,4 +125,128 @@ export const checkPocketBaseHealth = async (customUrl?: string): Promise<PocketB
     message: `Could not connect to PocketBase at ${rawBase}. Ensure PocketBase container is running on port 8090.`,
     testedUrl: rawBase,
   };
+};
+
+/**
+ * 1-Click Auto Setup for PocketBase Collections:
+ * Logs in with admin credentials, creates all required collections,
+ * and sets all API rules to public ("") so POS counters can read & write seamlessly.
+ */
+export const autoProvisionPocketBaseCollections = async (
+  adminEmail: string,
+  adminPass: string,
+  customBaseUrl?: string
+): Promise<{ success: boolean; message: string; created: number; updated: number }> => {
+  const base = (customBaseUrl || getPocketBaseUrl()).replace(/\/+$/, '');
+  const targetPb = new PocketBase(base);
+  targetPb.autoCancellation(false);
+
+  try {
+    // 1. Authenticate as Admin / Superuser
+    if ((targetPb as any).admins?.authWithPassword) {
+      await (targetPb as any).admins.authWithPassword(adminEmail.trim(), adminPass.trim());
+    } else if ((targetPb as any).collection) {
+      // PocketBase v0.23+ superuser collection fallback
+      await targetPb.collection('_superusers').authWithPassword(adminEmail.trim(), adminPass.trim()).catch(async () => {
+        return await (targetPb as any).admins.authWithPassword(adminEmail.trim(), adminPass.trim());
+      });
+    }
+
+    const token = targetPb.authStore.token;
+    if (!token) {
+      throw new Error('Authentication failed. Check your admin email and password.');
+    }
+
+    // 2. Fetch existing collections
+    let existingList: any[] = [];
+    try {
+      existingList = await targetPb.collections.getFullList();
+    } catch {
+      const resp = await fetch(`${base}/api/collections?perPage=100`, {
+        headers: { Authorization: token, Accept: 'application/json' },
+      });
+      if (resp.ok) {
+        const body = await resp.json();
+        existingList = body.items || [];
+      }
+    }
+
+    const existingNames = new Set(existingList.map((c) => c.name));
+
+    const collectionsToProvision = [
+      'inventory',
+      'orders',
+      'stores',
+      'customers',
+      'store_expenses',
+      'purchase_orders',
+      'inward_bills',
+      'stock_transfers',
+      'store_indents',
+      'suppliers',
+      'system_metadata',
+    ];
+
+    let created = 0;
+    let updated = 0;
+
+    for (const name of collectionsToProvision) {
+      const payload: any = {
+        name,
+        type: 'base',
+        listRule: '',
+        viewRule: '',
+        createRule: '',
+        updateRule: '',
+        deleteRule: '',
+        schema: [
+          { name: 'recordId', type: 'text', required: false },
+          { name: 'data', type: 'json', required: false },
+          { name: 'updatedAt', type: 'text', required: false },
+        ],
+        fields: [
+          { name: 'recordId', type: 'text', required: false },
+          { name: 'data', type: 'json', required: false },
+          { name: 'updatedAt', type: 'text', required: false },
+        ],
+      };
+
+      if (!existingNames.has(name)) {
+        try {
+          await targetPb.collections.create(payload);
+          created++;
+        } catch (err: any) {
+          console.warn(`Notice creating collection ${name}:`, err?.message);
+        }
+      } else {
+        const existingCol = existingList.find((c) => c.name === name);
+        if (existingCol) {
+          try {
+            await targetPb.collections.update(existingCol.id, {
+              listRule: '',
+              viewRule: '',
+              createRule: '',
+              updateRule: '',
+              deleteRule: '',
+            });
+            updated++;
+          } catch {}
+        }
+      }
+    }
+
+    return {
+      success: true,
+      message: `Setup Complete! ${created} collections created, ${updated} existing updated with public read/write rules.`,
+      created,
+      updated,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err?.message || 'Could not authenticate or configure PocketBase.',
+      created: 0,
+      updated: 0,
+    };
+  }
 };
