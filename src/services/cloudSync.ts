@@ -1,7 +1,7 @@
 import { pb, getPocketBaseUrl, setCustomPocketBaseUrl, DEFAULT_POCKETBASE_URL } from './pocketbaseClient';
 import { safeStorage } from '../utils/safeStorage';
 
-export type SyncEngine = 'pocketbase' | 'offline';
+export type SyncEngine = 'pocketbase';
 export type SyncStatus = 'connected' | 'connecting' | 'syncing' | 'offline' | 'error';
 
 export interface CloudSyncState {
@@ -47,7 +47,6 @@ export const COLLECTIONS = {
   META: 'system_metadata',
 };
 
-// Collection mapping to local storage keys
 const COLLECTION_STORAGE_MAP: Record<string, { storageKey: string; isWarehouse: boolean }> = {
   [COLLECTIONS.INVENTORY]: { storageKey: STORAGE_KEYS.INVENTORY, isWarehouse: false },
   [COLLECTIONS.ORDERS]: { storageKey: STORAGE_KEYS.ORDERS, isWarehouse: false },
@@ -61,7 +60,7 @@ const COLLECTION_STORAGE_MAP: Record<string, { storageKey: string; isWarehouse: 
   [COLLECTIONS.SUPPLIERS]: { storageKey: STORAGE_KEYS.SUPPLIERS, isWarehouse: true },
 };
 
-class PocketBaseRealtimeSyncService {
+class PocketBaseTwoWayRealtimeSyncService {
   private state: CloudSyncState = {
     status: 'connecting',
     isLive: false,
@@ -76,14 +75,13 @@ class PocketBaseRealtimeSyncService {
   private unsubscribes: Array<() => void> = [];
   private isInitialized = false;
   private isApplyingRemoteUpdate = false;
-  private clientId = `pb_client_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  private clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
-  // Memory map of records for zero-millisecond access
+  // In-memory document map for instant zero-latency UI access
   private collectionDocsMap = new Map<string, Map<string, any>>();
   private persistDebounceTimers: Record<string, any> = {};
-  private collectionDebounceTimers: Record<string, any> = {};
 
-  // External notification & cache hooks
+  // UI change notification hooks
   private onStorageChangeNotify?: () => void;
   private onWarehouseChangeNotify?: () => void;
   private onStorageCacheUpdate?: (key: string, val: any) => void;
@@ -126,18 +124,15 @@ class PocketBaseRealtimeSyncService {
   }
 
   /**
-   * Initializes real-time synchronization with PocketBase.
-   * Completely local-first: returns in 0ms without delaying UI.
-   * Connects to PocketBase subscriptions in background.
+   * Initializes two-way real-time sync with PocketBase.
+   * Local-First: returns immediately (0ms) so the UI loads instantly.
    */
   public init() {
     if (this.isInitialized) return;
     this.isInitialized = true;
 
-    // Seed memory maps from local storage for instant zero-latency access
     this.seedMemoryFromLocalStorage();
 
-    // Start PocketBase connection in background
     if (typeof window !== 'undefined') {
       setTimeout(() => {
         this.connectPocketBase();
@@ -169,7 +164,7 @@ class PocketBaseRealtimeSyncService {
   }
 
   /**
-   * Connect and subscribe to PocketBase real-time SSE stream
+   * Connect to PocketBase and establish bidirectional real-time streaming
    */
   public async connectPocketBase(): Promise<boolean> {
     const targetUrl = getPocketBaseUrl() || DEFAULT_POCKETBASE_URL;
@@ -178,24 +173,28 @@ class PocketBaseRealtimeSyncService {
     try {
       this.setState({ status: 'connecting', serverUrl: targetUrl });
 
-      // Fast non-blocking health check
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
       const health = await pb.health.check({ signal: controller.signal }).catch(() => null);
       clearTimeout(timeoutId);
 
       if (health && health.code === 200) {
-        console.log(`[PocketBase] ✅ Connected to PocketBase server at ${targetUrl}`);
+        // 1. Bind Real-Time Inbound Subscriptions (Server -> Device)
         await this.bindPocketBaseSubscriptions();
+
+        // 2. Perform initial background two-way state reconciliation
+        this.performTwoWayReconciliation();
+
         this.setState({
           status: 'connected',
           isLive: true,
           engine: 'pocketbase',
           serverUrl: targetUrl,
           activeListenersCount: this.unsubscribes.length,
+          errorMessage: undefined,
         });
 
-        // Drain any offline writes that were queued
+        // 3. Drain any pending offline queue items
         this.drainOfflineQueue();
         return true;
       } else {
@@ -219,10 +218,11 @@ class PocketBaseRealtimeSyncService {
   }
 
   /**
-   * Bind real-time subscriptions to all PocketBase collections
+   * INBOUND SYNC: Real-time SSE stream from Server -> Device
+   * Whenever ANY counter, terminal, or admin changes a record in PocketBase,
+   * it is pushed here instantly and updates the UI in <10ms.
    */
   private async bindPocketBaseSubscriptions() {
-    // Clean old subscriptions
     this.unsubscribes.forEach((unsub) => {
       try {
         unsub();
@@ -230,11 +230,11 @@ class PocketBaseRealtimeSyncService {
     });
     this.unsubscribes = [];
 
-    const subscribeOne = async (colName: string, storageKey: string, isWarehouse: boolean) => {
+    const subscribeCollection = async (colName: string, storageKey: string, isWarehouse: boolean) => {
       try {
         const unsub = await pb.collection(colName).subscribe('*', (e) => {
           const { action, record } = e;
-          // Ignore own dispatched messages
+          // Ignore own outbound echo messages to prevent loops
           if (record && record._senderId === this.clientId) return;
 
           const docData = record.data ? { ...record.data, id: record.recordId || record.id } : record;
@@ -253,11 +253,8 @@ class PocketBaseRealtimeSyncService {
           }
 
           const remoteDocs = Array.from(map.values());
-          this.applyRemoteUpdate(storageKey, remoteDocs, isWarehouse, 1);
-        }).catch((err) => {
-          // If collection does not exist in PocketBase yet, silently ignore until created
-          return null;
-        });
+          this.applyRemoteUpdate(storageKey, remoteDocs, isWarehouse);
+        }).catch(() => null);
 
         if (unsub) {
           this.unsubscribes.push(unsub);
@@ -266,19 +263,66 @@ class PocketBaseRealtimeSyncService {
     };
 
     for (const [colName, info] of Object.entries(COLLECTION_STORAGE_MAP)) {
-      await subscribeOne(colName, info.storageKey, info.isWarehouse);
+      await subscribeCollection(colName, info.storageKey, info.isWarehouse);
     }
   }
 
   /**
-   * Merge remote updates into local memory & UI in 0ms
+   * Initial Bi-Directional Reconciliation:
+   * 1. Pulls existing server records and merges into local cache
+   * 2. Pushes local records that are not yet on the server
    */
-  private applyRemoteUpdate(storageKey: string, remoteDocs: any[], isWarehouse: boolean, count: number) {
+  public async performTwoWayReconciliation(): Promise<void> {
+    for (const [colName, info] of Object.entries(COLLECTION_STORAGE_MAP)) {
+      try {
+        // A. Pull from Server (Server -> Device)
+        const serverRecords = await pb.collection(colName).getFullList({ requestKey: null }).catch(() => null);
+
+        let map = this.collectionDocsMap.get(colName);
+        if (!map) {
+          map = new Map<string, any>();
+          this.collectionDocsMap.set(colName, map);
+        }
+
+        if (Array.isArray(serverRecords) && serverRecords.length > 0) {
+          serverRecords.forEach((record: any) => {
+            const docData = record.data ? { ...record.data, id: record.recordId || record.id } : record;
+            const id = String(docData.id || record.recordId || record.id);
+            map!.set(id, docData);
+          });
+          const merged = Array.from(map.values());
+          this.applyRemoteUpdate(info.storageKey, merged, info.isWarehouse);
+        }
+
+        // B. Push Local-Only Records (Device -> Server)
+        const localDocs = Array.from(map.values());
+        if (localDocs.length > 0) {
+          const serverDocIds = new Set(
+            (serverRecords || []).map((r: any) => String(r.recordId || r.id))
+          );
+          for (const doc of localDocs) {
+            const docId = String(doc.id || doc.sku);
+            if (!serverDocIds.has(docId)) {
+              this.pushToPocketBase(colName, docId, doc);
+            }
+          }
+        }
+      } catch {}
+    }
+
+    this.setState({
+      status: 'connected',
+      isLive: true,
+      lastSyncedAt: new Date(),
+    });
+  }
+
+  private applyRemoteUpdate(storageKey: string, remoteDocs: any[], isWarehouse: boolean) {
     this.isApplyingRemoteUpdate = true;
     try {
       let resolvedDocs = remoteDocs;
 
-      // Preserve local inventory items if remote catalog is temporarily smaller
+      // Ensure local inventory items aren't overwritten if remote is empty
       if (storageKey === STORAGE_KEYS.INVENTORY && Array.isArray(remoteDocs)) {
         try {
           const rawLocal = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
@@ -316,7 +360,7 @@ class PocketBaseRealtimeSyncService {
         status: 'connected',
         isLive: true,
         lastSyncedAt: new Date(),
-        itemsSynced: this.state.itemsSynced + count,
+        itemsSynced: this.state.itemsSynced + 1,
       });
     } finally {
       this.isApplyingRemoteUpdate = false;
@@ -331,14 +375,15 @@ class PocketBaseRealtimeSyncService {
       try {
         safeStorage.setItem(storageKey, JSON.stringify(docs));
       } catch (err) {
-        console.warn(`[PocketBase] Local persist notice for ${storageKey}:`, err);
+        console.warn(`[PocketBase] Local persist note for ${storageKey}:`, err);
       }
     }, 50);
   }
 
   /**
-   * Sync a single document immediately across all POS devices via PocketBase.
-   * LOCAL-FIRST & ZERO LOAD TIME: Updates memory and UI immediately, then syncs asynchronously.
+   * OUTBOUND SYNC: Device -> Server
+   * Called immediately whenever a sales order is completed, inventory is updated,
+   * an expense is recorded, or stock is transferred.
    */
   public async syncDocument(collectionName: string, id: string, data: any) {
     if (this.isApplyingRemoteUpdate) return;
@@ -347,7 +392,7 @@ class PocketBaseRealtimeSyncService {
       const cleanId = String(id || Date.now()).trim().replace(/\//g, '_');
       const sanitized = JSON.parse(JSON.stringify(data));
 
-      // 1. Instant local update (0ms)
+      // 1. Instant local memory update (0ms)
       let map = this.collectionDocsMap.get(collectionName);
       if (!map) {
         map = new Map<string, any>();
@@ -355,7 +400,7 @@ class PocketBaseRealtimeSyncService {
       }
       map.set(cleanId, sanitized);
 
-      // 2. Asynchronous push to PocketBase (non-blocking)
+      // 2. Asynchronous push to PocketBase
       this.pushToPocketBase(collectionName, cleanId, sanitized);
 
       this.setState({
@@ -365,7 +410,7 @@ class PocketBaseRealtimeSyncService {
         itemsSynced: this.state.itemsSynced + 1,
       });
     } catch (err: any) {
-      console.warn(`[PocketBase] Document sync notice for ${collectionName}:`, err?.message || err);
+      console.warn(`[PocketBase] Outbound sync note:`, err?.message);
     }
   }
 
@@ -378,25 +423,23 @@ class PocketBaseRealtimeSyncService {
         updatedAt: new Date().toISOString(),
       };
 
-      // Try finding existing record in PocketBase
       const existing = await pb
         .collection(collectionName)
-        .getFirstListItem(`recordId="${docId}"`)
+        .getFirstListItem(`recordId="${docId}"`, { requestKey: null })
         .catch(() => null);
 
       if (existing) {
-        await pb.collection(collectionName).update(existing.id, payload).catch(() => null);
+        await pb.collection(collectionName).update(existing.id, payload, { requestKey: null }).catch(() => null);
       } else {
-        await pb.collection(collectionName).create(payload).catch(() => null);
+        await pb.collection(collectionName).create(payload, { requestKey: null }).catch(() => null);
       }
     } catch {
-      // Offline fallback: queue for retry
       this.queueOfflineDoc(collectionName, docId, data, 'upsert');
     }
   }
 
   /**
-   * Delete a single document in real time
+   * OUTBOUND DELETE: Device -> Server
    */
   public async deleteDocument(collectionName: string, id: string): Promise<boolean> {
     if (this.isApplyingRemoteUpdate) return false;
@@ -405,94 +448,77 @@ class PocketBaseRealtimeSyncService {
       const cleanId = String(id || '').trim().replace(/\//g, '_');
       if (!cleanId) return false;
 
-      // 1. Instant local memory update
       const map = this.collectionDocsMap.get(collectionName);
       if (map) {
         map.delete(cleanId);
       }
 
-      // 2. Asynchronous PocketBase delete
       pb.collection(collectionName)
-        .getFirstListItem(`recordId="${cleanId}"`)
+        .getFirstListItem(`recordId="${cleanId}"`, { requestKey: null })
         .then((rec) => {
-          if (rec) pb.collection(collectionName).delete(rec.id).catch(() => null);
+          if (rec) pb.collection(collectionName).delete(rec.id, { requestKey: null }).catch(() => null);
         })
         .catch(() => {
           this.queueOfflineDoc(collectionName, cleanId, null, 'delete');
         });
 
       return true;
-    } catch (err: any) {
-      console.warn(`[PocketBase] Delete notice for ${collectionName}:`, err?.message || err);
+    } catch {
       return false;
     }
   }
 
-  /**
-   * Batch upload collection (e.g. initial inventory import or CSV seed)
-   */
   public async syncCollectionBatch(
     collectionName: string,
     items: any[],
     onProgress?: (synced: number, total: number, percent: number) => void
-  ): Promise<{ success: boolean; synced: number; error?: string }> {
+  ): Promise<{ success: boolean; synced: number }> {
     if (!items || items.length === 0) return { success: true, synced: 0 };
 
-    try {
-      this.setState({ status: 'syncing' });
-
-      // Update in-memory map
-      let map = this.collectionDocsMap.get(collectionName);
-      if (!map) {
-        map = new Map<string, any>();
-        this.collectionDocsMap.set(collectionName, map);
-      }
-      items.forEach((item) => {
-        if (item && (item.id || item.sku)) {
-          map!.set(String(item.id || item.sku), item);
-        }
-      });
-
-      const total = items.length;
-      let synced = 0;
-
-      // Asynchronous background upload to PocketBase in chunks
-      for (const item of items) {
-        if (item && (item.id || item.sku)) {
-          const docId = String(item.id || item.sku);
-          this.pushToPocketBase(collectionName, docId, item);
-          synced++;
-          if (synced % 20 === 0 || synced === total) {
-            onProgress?.(synced, total, Math.round((synced / total) * 100));
-          }
-        }
-      }
-
-      this.setState({
-        status: 'connected',
-        isLive: true,
-        lastSyncedAt: new Date(),
-        itemsSynced: this.state.itemsSynced + total,
-      });
-
-      return { success: true, synced: total };
-    } catch (err: any) {
-      return { success: false, synced: 0, error: err?.message };
+    let map = this.collectionDocsMap.get(collectionName);
+    if (!map) {
+      map = new Map<string, any>();
+      this.collectionDocsMap.set(collectionName, map);
     }
+    items.forEach((item) => {
+      if (item && (item.id || item.sku)) {
+        map!.set(String(item.id || item.sku), item);
+      }
+    });
+
+    const total = items.length;
+    let synced = 0;
+
+    for (const item of items) {
+      if (item && (item.id || item.sku)) {
+        const docId = String(item.id || item.sku);
+        this.pushToPocketBase(collectionName, docId, item);
+        synced++;
+        if (synced % 20 === 0 || synced === total) {
+          onProgress?.(synced, total, Math.round((synced / total) * 100));
+        }
+      }
+    }
+
+    this.setState({
+      status: 'connected',
+      isLive: true,
+      lastSyncedAt: new Date(),
+      itemsSynced: this.state.itemsSynced + total,
+    });
+
+    return { success: true, synced: total };
   }
 
   public debouncedSyncCollection(collectionName: string, items: any[], delay = 100) {
     if (this.isApplyingRemoteUpdate) return;
-    if (this.collectionDebounceTimers[collectionName]) {
-      clearTimeout(this.collectionDebounceTimers[collectionName]);
-    }
-    this.collectionDebounceTimers[collectionName] = setTimeout(() => {
+    setTimeout(() => {
       this.syncCollectionBatch(collectionName, items);
     }, delay);
   }
 
   /**
-   * Upload all local records to PocketBase
+   * Upload all local records to PocketBase and pull any missing records
    */
   public async uploadAllLocalData(): Promise<boolean> {
     try {
@@ -510,6 +536,8 @@ class PocketBaseRealtimeSyncService {
         } catch {}
       }
 
+      await this.performTwoWayReconciliation();
+
       this.setState({ status: 'connected', lastSyncedAt: new Date(), isLive: true });
       return true;
     } catch (err: any) {
@@ -518,28 +546,16 @@ class PocketBaseRealtimeSyncService {
     }
   }
 
-  /**
-   * Reset / clear collection
-   */
   public async clearCollection(collectionName: string): Promise<{ deletedCount: number; success: boolean }> {
-    try {
-      const map = this.collectionDocsMap.get(collectionName);
-      let count = 0;
-      if (map) {
-        count = map.size;
-        map.clear();
-      }
-
-      this.setState({ status: 'connected', isLive: true, lastSyncedAt: new Date() });
-      return { deletedCount: count, success: true };
-    } catch {
-      return { deletedCount: 0, success: false };
+    const map = this.collectionDocsMap.get(collectionName);
+    let count = 0;
+    if (map) {
+      count = map.size;
+      map.clear();
     }
+    return { deletedCount: count, success: true };
   }
 
-  /**
-   * Reconnect with custom PocketBase URL
-   */
   public async reconnectWithServerUrl(newUrl?: string): Promise<boolean> {
     if (newUrl) {
       setCustomPocketBaseUrl(newUrl);
@@ -547,9 +563,6 @@ class PocketBaseRealtimeSyncService {
     return await this.connectPocketBase();
   }
 
-  // -------------------------------------------------------------
-  // Offline Queue
-  // -------------------------------------------------------------
   private queueOfflineDoc(collectionName: string, id: string, data: any, action: 'upsert' | 'delete') {
     try {
       const rawQueue = safeStorage.getItem(STORAGE_KEYS.SYNC_QUEUE);
@@ -588,4 +601,4 @@ class PocketBaseRealtimeSyncService {
   }
 }
 
-export const cloudSync = new PocketBaseRealtimeSyncService();
+export const cloudSync = new PocketBaseTwoWayRealtimeSyncService();

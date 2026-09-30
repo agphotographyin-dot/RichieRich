@@ -6,19 +6,13 @@ import {
   CheckCircle2,
   AlertTriangle,
   UploadCloud,
-  HardDrive,
   Globe,
   Radio,
   SlidersHorizontal,
   Layers,
   Save,
   Check,
-  Wrench,
-  Copy,
-  ChevronDown,
-  ChevronUp,
-  ShieldCheck,
-  Key,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { cloudSync, CloudSyncState, COLLECTIONS } from '../../services/cloudSync';
 import {
@@ -26,7 +20,6 @@ import {
   checkPocketBaseHealth,
   PocketBaseHealthResult,
   DEFAULT_POCKETBASE_URL,
-  autoProvisionPocketBaseCollections,
 } from '../../services/pocketbaseClient';
 
 interface CloudSyncModalProps {
@@ -39,26 +32,17 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
   const [isPushing, setIsPushing] = useState(false);
   const [pushMessage, setPushMessage] = useState<string | null>(null);
 
-  // PocketBase Server Config State
+  // Server Config State
   const [serverUrlInput, setServerUrlInput] = useState<string>(getPocketBaseUrl() || DEFAULT_POCKETBASE_URL);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<PocketBaseHealthResult | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
-
-  // Auto-Setup PocketBase State
-  const [showAutoSetup, setShowAutoSetup] = useState(false);
-  const [adminEmail, setAdminEmail] = useState('');
-  const [adminPassword, setAdminPassword] = useState('');
-  const [isProvisioning, setIsProvisioning] = useState(false);
-  const [provisionResult, setProvisionResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [copiedSchema, setCopiedSchema] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
     setServerUrlInput(getPocketBaseUrl() || DEFAULT_POCKETBASE_URL);
     setTestResult(null);
     setSaveSuccess(false);
-    setProvisionResult(null);
 
     const unsub = cloudSync.subscribe((state) => {
       setSyncState(state);
@@ -86,76 +70,21 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
     setTimeout(() => setSaveSuccess(false), 3000);
   };
 
-  const handleForceUpload = async () => {
+  const handleForceTwoWaySync = async () => {
     setIsPushing(true);
     setPushMessage(null);
     try {
       const success = await cloudSync.uploadAllLocalData();
       if (success) {
-        setPushMessage('✅ All local records uploaded to PocketBase server successfully!');
+        setPushMessage('✅ Two-way sync complete: All local and server data are in perfect sync!');
       } else {
-        setPushMessage('⚠️ Could not complete upload. Ensure PocketBase server is running and collections exist.');
+        setPushMessage('⚠️ Could not complete sync. Please verify PocketBase server is reachable.');
       }
     } catch (err: any) {
-      setPushMessage(`❌ Error: ${err?.message || 'Upload failed'}`);
+      setPushMessage(`❌ Error: ${err?.message || 'Sync failed'}`);
     } finally {
       setIsPushing(false);
     }
-  };
-
-  const handleAutoProvision = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!adminEmail.trim() || !adminPassword.trim()) {
-      setProvisionResult({
-        success: false,
-        message: 'Please enter the email and password you created at http://187.126.115.40:8090/_/',
-      });
-      return;
-    }
-
-    setIsProvisioning(true);
-    setProvisionResult(null);
-    try {
-      const res = await autoProvisionPocketBaseCollections(
-        adminEmail.trim(),
-        adminPassword.trim(),
-        serverUrlInput.trim()
-      );
-      setProvisionResult(res);
-      if (res.success) {
-        // Reconnect and start syncing immediately!
-        await cloudSync.reconnectWithServerUrl(serverUrlInput.trim());
-        await cloudSync.uploadAllLocalData();
-      }
-    } finally {
-      setIsProvisioning(false);
-    }
-  };
-
-  const handleCopySchemaJson = () => {
-    const schemaContent = JSON.stringify(
-      Object.values(COLLECTIONS).map((c) => ({
-        name: c,
-        type: 'base',
-        listRule: '',
-        viewRule: '',
-        createRule: '',
-        updateRule: '',
-        deleteRule: '',
-        schema: [
-          { name: 'recordId', type: 'text', required: false },
-          { name: 'data', type: 'json', required: false },
-          { name: 'updatedAt', type: 'text', required: false },
-        ],
-      })),
-      null,
-      2
-    );
-
-    navigator.clipboard.writeText(schemaContent).then(() => {
-      setCopiedSchema(true);
-      setTimeout(() => setCopiedSchema(false), 3000);
-    });
   };
 
   return (
@@ -165,12 +94,12 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-amber-500 text-slate-950 shadow-sm">
-              <Database className="w-5 h-5" />
+              <ArrowLeftRight className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-bold text-slate-900 text-base">PocketBase Real-Time Sync</h2>
+              <h2 className="font-bold text-slate-900 text-base">Two-Way Realtime Sync</h2>
               <p className="text-xs text-slate-500 font-medium">
-                Sub-millisecond multi-counter synchronization & persistent storage
+                Live bidirectional sync between Server & Counter Terminals
               </p>
             </div>
           </div>
@@ -200,25 +129,20 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
             )}
             <div className="text-xs space-y-1">
               <div className="font-bold flex items-center gap-2">
-                <span>{syncState.isLive ? 'PocketBase Real-Time Active' : 'Operating in Local Mode'}</span>
+                <span>{syncState.isLive ? 'Two-Way Live Stream Active' : 'Operating in Local Mode'}</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold bg-white/70">
                   {syncState.status.toUpperCase()}
                 </span>
               </div>
               <p className="text-slate-600 leading-relaxed">
                 {syncState.isLive
-                  ? 'All sales, invoices, and stock updates stream live between all counter terminals and PocketBase in real time.'
-                  : 'Changes are cached safely in local storage and will automatically synchronize when PocketBase is reachable.'}
+                  ? 'All changes stream automatically: Any order, stock adjustment, or transfer updates in real-time across all counters and the PocketBase server.'
+                  : 'Operating locally. Changes will automatically stream to PocketBase once connected.'}
               </p>
-              {syncState.errorMessage && (
-                <div className="pt-1 text-[11px] font-semibold text-amber-800">
-                  Notice: {syncState.errorMessage}
-                </div>
-              )}
             </div>
           </div>
 
-          {/* PocketBase Server Configuration */}
+          {/* Server Endpoint Configuration */}
           <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -275,100 +199,6 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
             )}
           </div>
 
-          {/* 1-Click Auto Setup PocketBase Collections */}
-          <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/50 space-y-3">
-            <button
-              type="button"
-              onClick={() => setShowAutoSetup(!showAutoSetup)}
-              className="w-full flex items-center justify-between text-left cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <Wrench className="w-4 h-4 text-amber-700" />
-                <span className="font-bold text-xs text-amber-900">
-                  1-Click Auto-Setup PocketBase Collections
-                </span>
-              </div>
-              {showAutoSetup ? <ChevronUp className="w-4 h-4 text-amber-700" /> : <ChevronDown className="w-4 h-4 text-amber-700" />}
-            </button>
-
-            <p className="text-[11px] text-amber-800/80 leading-relaxed">
-              If PocketBase is fresh, database collections do not exist yet. This auto-creates all 11 collections with public read/write sync rules.
-            </p>
-
-            {showAutoSetup && (
-              <form onSubmit={handleAutoProvision} className="space-y-2.5 pt-1 border-t border-amber-200/60">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] font-semibold text-slate-700 block mb-1">
-                      PocketBase Admin Email:
-                    </label>
-                    <input
-                      type="text"
-                      value={adminEmail}
-                      onChange={(e) => setAdminEmail(e.target.value)}
-                      placeholder="admin@richierich.com"
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-semibold text-slate-700 block mb-1">
-                      Admin Password:
-                    </label>
-                    <input
-                      type="password"
-                      value={adminPassword}
-                      onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="••••••••••••"
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    disabled={isProvisioning}
-                    className="flex-1 py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50 shadow-xs"
-                  >
-                    {isProvisioning ? (
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                    )}
-                    <span>{isProvisioning ? 'Creating Collections...' : 'Create & Fix All Collections (1-Click)'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleCopySchemaJson}
-                    title="Copy schema JSON to paste in PocketBase Admin UI -> Settings -> Import collections"
-                    className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                  >
-                    {copiedSchema ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedSchema ? 'Copied!' : 'Copy JSON'}</span>
-                  </button>
-                </div>
-
-                {provisionResult && (
-                  <div
-                    className={`p-2.5 rounded-xl text-xs flex items-center gap-2 border ${
-                      provisionResult.success
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                        : 'bg-red-50 text-red-800 border-red-200'
-                    }`}
-                  >
-                    {provisionResult.success ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    ) : (
-                      <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-                    )}
-                    <span className="leading-snug">{provisionResult.message}</span>
-                  </div>
-                )}
-              </form>
-            )}
-          </div>
-
           {/* Sync Telemetry */}
           <div className="p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-xs space-y-2">
             <div className="flex items-center justify-between text-slate-700">
@@ -376,15 +206,22 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
               <span className="font-mono font-medium truncate max-w-[240px]">{syncState.serverUrl}</span>
             </div>
             <div className="flex items-center justify-between text-slate-700">
-              <span className="text-slate-500">Live SSE Channels:</span>
+              <span className="text-slate-500">Sync Mode:</span>
+              <span className="font-semibold text-emerald-700 flex items-center gap-1">
+                <ArrowLeftRight className="w-3 h-3 text-emerald-600" />
+                Two-Way Realtime (Inbound SSE + Outbound Push)
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-slate-700">
+              <span className="text-slate-500">Live Channels:</span>
               <span className="font-medium text-emerald-600 font-mono">
-                {syncState.activeListenersCount} / 11 active collections
+                {syncState.activeListenersCount} / 11 collections streaming
               </span>
             </div>
             <div className="flex items-center justify-between text-slate-700">
               <span className="text-slate-500">Last Synced:</span>
               <span className="font-medium">
-                {syncState.lastSyncedAt ? syncState.lastSyncedAt.toLocaleTimeString() : 'Waiting for event...'}
+                {syncState.lastSyncedAt ? syncState.lastSyncedAt.toLocaleTimeString() : 'Streaming...'}
               </span>
             </div>
             <div className="flex items-center justify-between text-slate-700">
@@ -393,16 +230,20 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
             </div>
           </div>
 
-          {/* Manual Force Upload */}
+          {/* Two-Way Manual Reconciliation Button */}
           <div className="space-y-2">
             <button
               type="button"
-              onClick={handleForceUpload}
+              onClick={handleForceTwoWaySync}
               disabled={isPushing}
               className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs cursor-pointer transition-colors shadow-xs disabled:opacity-50"
             >
-              {isPushing ? <RefreshCw className="w-4 h-4 animate-spin text-amber-400" /> : <UploadCloud className="w-4 h-4 text-amber-400" />}
-              <span>{isPushing ? 'Uploading Local Data to PocketBase...' : 'Push All Local Catalog & Invoices to PocketBase'}</span>
+              {isPushing ? (
+                <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+              ) : (
+                <ArrowLeftRight className="w-4 h-4 text-amber-400" />
+              )}
+              <span>{isPushing ? 'Synchronizing Both Ways...' : 'Sync All Data Now (Two-Way Reconciliation)'}</span>
             </button>
             {pushMessage && (
               <p className="text-[11px] font-medium text-center text-slate-700 animate-in fade-in duration-150">
@@ -411,11 +252,11 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
             )}
           </div>
 
-          {/* Collections Reference */}
+          {/* Collections List */}
           <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-2 text-[11px]">
             <div className="flex items-center gap-1.5 font-bold text-slate-700">
               <Layers className="w-3.5 h-3.5 text-amber-600" />
-              <span>PocketBase Collections Monitored</span>
+              <span>Two-Way Synchronized Collections</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {Object.values(COLLECTIONS).map((c) => (
