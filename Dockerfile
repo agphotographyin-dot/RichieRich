@@ -24,7 +24,7 @@ ARG VITE_POCKETBASE_URL=""
 ENV VITE_POCKETBASE_URL=$VITE_POCKETBASE_URL
 
 # Build production assets (Vite build + postbuild SPA fallback generator)
-RUN npx vite build && node scripts/postbuild.js
+RUN npm run build
 
 # Stage 2: Production Nginx web server
 FROM nginx:alpine
