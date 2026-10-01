@@ -30,70 +30,56 @@ FROM nginx:alpine
 RUN rm -rf /etc/nginx/conf.d/default.conf
 
 # Generate custom nginx configuration for SPA routing, gzip compression, and PocketBase proxy
-RUN cat << 'EOF' > /etc/nginx/conf.d/default.conf
-server {
-    listen 80;
-    listen [::]:80;
-    server_name _;
-
-    root /usr/share/nginx/html;
-    index index.html index.htm;
-
-    # Gzip Compression for fast delivery
-    gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_proxied expired no-cache no-store private auth;
-    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml application/javascript application/json image/svg+xml;
-    gzip_disable "MSIE [1-6]\.";
-
-    # Reverse proxy PocketBase API and Real-Time SSE subscriptions
-    location /api/ {
-        proxy_pass http://pocketbase:8090/api/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 86400s;
-        proxy_send_timeout 86400s;
-        proxy_buffering off;
-        proxy_cache off;
-    }
-
-    # Reverse proxy PocketBase Admin Dashboard
-    location /_/ {
-        proxy_pass http://pocketbase:8090/_/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # Cache static assets (JS, CSS, images, fonts)
-    location ~* \.(?:ico|css|js|gif|jpe?g|png|woff2?|eot|ttf|svg|webp|avif)$ {
-        expires 6M;
-        access_log off;
-        add_header Cache-Control "public, max-age=15552000, immutable";
-        try_files $uri =404;
-    }
-
-    # SPA Routing: Fall back to index.html for client-side routing (/pos, /admin, /warehouse, etc.)
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-}
-EOF
+RUN printf '%s\n' \
+'server {' \
+'    listen 80;' \
+'    listen [::]:80;' \
+'    server_name _;' \
+'    root /usr/share/nginx/html;' \
+'    index index.html index.htm;' \
+'    gzip on;' \
+'    gzip_vary on;' \
+'    gzip_min_length 1024;' \
+'    gzip_proxied expired no-cache no-store private auth;' \
+'    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml application/javascript application/json image/svg+xml;' \
+'    gzip_disable "MSIE [1-6]\.";' \
+'    location /api/ {' \
+'        proxy_pass http://pocketbase:8090/api/;' \
+'        proxy_http_version 1.1;' \
+'        proxy_set_header Upgrade $http_upgrade;' \
+'        proxy_set_header Connection "upgrade";' \
+'        proxy_set_header Host $host;' \
+'        proxy_set_header X-Real-IP $remote_addr;' \
+'        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
+'        proxy_set_header X-Forwarded-Proto $scheme;' \
+'        proxy_read_timeout 86400s;' \
+'        proxy_send_timeout 86400s;' \
+'        proxy_buffering off;' \
+'        proxy_cache off;' \
+'    }' \
+'    location /_/ {' \
+'        proxy_pass http://pocketbase:8090/_/;' \
+'        proxy_http_version 1.1;' \
+'        proxy_set_header Upgrade $http_upgrade;' \
+'        proxy_set_header Connection "upgrade";' \
+'        proxy_set_header Host $host;' \
+'        proxy_set_header X-Real-IP $remote_addr;' \
+'        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
+'        proxy_set_header X-Forwarded-Proto $scheme;' \
+'    }' \
+'    location ~* \.(?:ico|css|js|gif|jpe?g|png|woff2?|eot|ttf|svg|webp|avif)$ {' \
+'        expires 6M;' \
+'        access_log off;' \
+'        add_header Cache-Control "public, max-age=15552000, immutable";' \
+'        try_files $uri =404;' \
+'    }' \
+'    location / {' \
+'        try_files $uri $uri/ /index.html;' \
+'    }' \
+'    add_header X-Frame-Options "SAMEORIGIN" always;' \
+'    add_header X-Content-Type-Options "nosniff" always;' \
+'    add_header Referrer-Policy "strict-origin-when-cross-origin" always;' \
+'}' > /etc/nginx/conf.d/default.conf
 
 # Copy built assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
