@@ -56,6 +56,24 @@ interface POSActiveTerminalProps extends POSTerminalProps {
   onSwitchCounter?: () => void;
 }
 
+/**
+ * Checks if a product/SKU is registered for sale as a loose product
+ */
+export const isLooseProduct = (item: InventoryItem): boolean => {
+  return Boolean(
+    item.sellAsLoose ||
+    (item.looseBarcode && item.looseBarcode.trim().length > 0) ||
+    (item.loosePrice !== undefined && item.loosePrice !== null) ||
+    item.loosePriceType === 'fixed' ||
+    item.loosePriceType === 'variable' ||
+    (item.piecesPerBox && item.piecesPerBox > 1 && item.sellAsLoose !== false) ||
+    item.unit?.toLowerCase() === 'loose' ||
+    item.unit?.toLowerCase() === 'loose piece' ||
+    item.unit?.toLowerCase() === 'piece' ||
+    item.tags?.some((t) => t.toLowerCase() === 'loose' || t.toLowerCase() === 'loose product')
+  );
+};
+
 const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
   inventory,
   categories,
@@ -68,6 +86,11 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+
+  // Loose products count for the POS-only category tab
+  const looseProductsCount = useMemo(() => {
+    return inventory.filter((item) => item.status !== 'inactive' && isLooseProduct(item)).length;
+  }, [inventory]);
 
   // Variable price modal state
   const [variablePriceModal, setVariablePriceModal] = useState<{
@@ -441,11 +464,21 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
   // Filter products (active only)
   const filteredProducts = inventory.filter((item) => {
     if (item.status === 'inactive') return false;
-    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+
+    let matchesCategory = false;
+    if (selectedCategory === 'all') {
+      matchesCategory = true;
+    } else if (selectedCategory === 'loose_products') {
+      matchesCategory = isLooseProduct(item);
+    } else {
+      matchesCategory = item.category === selectedCategory;
+    }
+
     const matchesSearch =
       item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.barcode.includes(searchTerm) ||
+      (item.looseBarcode && item.looseBarcode.includes(searchTerm)) ||
       (item.brand && item.brand.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesCategory && matchesSearch;
   });
@@ -787,6 +820,31 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
               >
                 All Products
               </button>
+
+              {/* POS-Only Category: Loose Products */}
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('loose_products')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                  selectedCategory === 'loose_products'
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-xs ring-2 ring-amber-400/50'
+                    : 'bg-amber-50/80 text-amber-900 hover:bg-amber-100 border border-amber-200 font-bold'
+                }`}
+                title="POS Category: Products registered to sell as loose pieces"
+              >
+                <Layers className="w-3.5 h-3.5 text-amber-700" />
+                <span>Loose Products</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    selectedCategory === 'loose_products'
+                      ? 'bg-slate-950 text-amber-400'
+                      : 'bg-amber-200/80 text-amber-900'
+                  }`}
+                >
+                  {looseProductsCount}
+                </span>
+              </button>
+
               {categories.map((cat) => (
                 <button
                   key={cat.id}
@@ -817,12 +875,18 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
               const isLow = !isOut && (isBoxLoose ? fullBoxes <= (item.lowStockThreshold || 5) : storeStock <= item.lowStockThreshold);
 
               const loosePiecePrice = item.loosePrice !== undefined ? item.loosePrice : Math.round((item.sellingPrice / piecesPerBox) * 100) / 100;
+              const isInLooseCategory = selectedCategory === 'loose_products';
 
               return (
                 <div
                   key={item.id ? `${item.id}-${idx}` : `pos-item-${idx}`}
                   onClick={() => {
                     if (isOut) return;
+                    if (isInLooseCategory) {
+                      // POS: keep only Sell as loose if add from loose product
+                      if (totalPieces > 0) addToCart(item, undefined, 'loose');
+                      return;
+                    }
                     if (isBoxLoose) {
                       if (fullBoxes > 0) addToCart(item, undefined, 'box');
                       else if (totalPieces > 0) addToCart(item, undefined, 'loose');
@@ -833,6 +897,8 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                   className={`bg-white border rounded-2xl p-3 flex flex-col justify-between transition-all group select-none relative ${
                     isOut
                       ? 'opacity-60 border-red-200 bg-red-50/20 cursor-not-allowed'
+                      : isInLooseCategory
+                      ? 'border-amber-300 ring-1 ring-amber-400/40 bg-amber-50/15 hover:border-amber-500 hover:shadow-md cursor-pointer'
                       : 'border-slate-200 hover:border-amber-400 hover:shadow-md cursor-pointer'
                   }`}
                 >
@@ -858,16 +924,20 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                             ? 'bg-red-600 text-white shadow-xs'
                             : isLow
                             ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : isInLooseCategory
+                            ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
                             : 'bg-slate-900/80 text-white backdrop-blur-xs'
                         }`}
                       >
-                        {isBoxLoose
+                        {isInLooseCategory
+                          ? `${totalPieces} Loose Pcs`
+                          : isBoxLoose
                           ? `${fullBoxes} Box + ${loosePieces} Loose`
                           : `${storeStock} ${item.unit}`}
                       </span>
 
                       {/* Box & Loose indicator badge on photo */}
-                      {item.sellAsLoose && (
+                      {item.sellAsLoose && !isInLooseCategory && (
                         <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-indigo-900/90 text-indigo-100 text-[9px] font-extrabold backdrop-blur-xs border border-indigo-400/40">
                           1 Box = {piecesPerBox} Pcs
                         </span>
@@ -884,11 +954,16 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                           {item.brand}
                         </span>
                       )}
-                      {item.sellAsLoose && (
+                      {isInLooseCategory ? (
+                        <span className="px-1.5 py-0.2 bg-amber-100 text-amber-900 text-[9px] font-black rounded-sm border border-amber-300 flex items-center gap-0.5">
+                          <Layers className="w-2.5 h-2.5 text-amber-700" />
+                          Loose Sale Only
+                        </span>
+                      ) : item.sellAsLoose ? (
                         <span className="px-1.5 py-0.2 bg-purple-50 text-purple-700 text-[9px] font-bold rounded-sm border border-purple-200">
                           Box + Loose
                         </span>
-                      )}
+                      ) : null}
                       {item.priceType === 'variable' && (
                         <span className="px-1.5 py-0.2 bg-amber-100 text-amber-900 text-[9px] font-bold rounded-sm border border-amber-300 flex items-center gap-0.5">
                           <SlidersHorizontal className="w-2.5 h-2.5" />
@@ -909,7 +984,47 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
 
                   {/* Pricing and Action Buttons */}
                   <div className="mt-3 pt-2 border-t border-slate-100">
-                    {item.sellAsLoose ? (
+                    {isInLooseCategory ? (
+                      /* When adding from Loose Products category: Keep ONLY "Sell as loose" */
+                      <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-amber-800 font-bold flex items-center gap-1">
+                            <Layers className="w-3 h-3 text-amber-600" />
+                            Loose Price:
+                          </span>
+                          {item.loosePriceType === 'variable' ? (
+                            <span className="text-xs font-bold text-amber-700 flex items-center gap-1">
+                              <Edit3 className="w-3 h-3" />
+                              Custom Price
+                            </span>
+                          ) : (
+                            <span className="text-sm font-black text-slate-900">
+                              {CURRENCY}{loosePiecePrice.toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={totalPieces <= 0}
+                          onClick={() => addToCart(item, undefined, 'loose')}
+                          className={`w-full py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                            totalPieces <= 0
+                              ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                              : 'bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-400 shadow-2xs'
+                          }`}
+                          title={`Add 1 Loose Piece (${CURRENCY}${loosePiecePrice})`}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>
+                            {totalPieces <= 0
+                              ? 'Out of Stock'
+                              : item.loosePriceType === 'variable'
+                              ? 'Sell as Loose (Enter Price)'
+                              : `Sell as Loose (${CURRENCY}${loosePiecePrice.toFixed(2)})`}
+                          </span>
+                        </button>
+                      </div>
+                    ) : item.sellAsLoose ? (
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="text-slate-500 font-medium">Box: <strong>{CURRENCY}{item.sellingPrice}</strong></span>
@@ -971,6 +1086,22 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                 </div>
               );
             })}
+
+            {filteredProducts.length === 0 && (
+              <div className="col-span-full py-16 text-center bg-white rounded-2xl border border-dashed border-slate-200 p-8 space-y-2">
+                <Layers className="w-8 h-8 text-slate-300 mx-auto" />
+                <h4 className="text-sm font-bold text-slate-700">
+                  {selectedCategory === 'loose_products'
+                    ? 'No Loose Products Found'
+                    : 'No Products Found'}
+                </h4>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  {selectedCategory === 'loose_products'
+                    ? 'No products in this branch are currently registered to sell as loose pieces. Enable "Sell as Loose Product" when adding products in the catalog.'
+                    : 'Try changing your search term or selecting another category.'}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1058,7 +1189,14 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                     className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between gap-2"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="font-bold text-xs text-slate-800 truncate">{ci.name}</p>
+                      <div className="flex items-center gap-1.5 truncate">
+                        <p className="font-bold text-xs text-slate-800 truncate">{ci.name}</p>
+                        {ci.saleType === 'loose' && (
+                          <span className="shrink-0 px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 font-extrabold text-[8px] border border-amber-300">
+                            Loose
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
                         <button
                           type="button"

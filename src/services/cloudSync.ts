@@ -19,6 +19,8 @@ export interface CloudSyncState {
   itemsSynced: number;
   errorMessage?: string;
   activeListenersCount: number;
+  autoFetchIntervalSeconds: number;
+  nextAutoFetchAt: Date | null;
 }
 
 type SyncListener = (state: CloudSyncState) => void;
@@ -75,6 +77,8 @@ class PocketBaseTwoWayRealtimeSyncService {
     lastSyncedAt: null,
     itemsSynced: 0,
     activeListenersCount: 0,
+    autoFetchIntervalSeconds: 30,
+    nextAutoFetchAt: null,
   };
 
   private listeners = new Set<SyncListener>();
@@ -82,6 +86,10 @@ class PocketBaseTwoWayRealtimeSyncService {
   private isInitialized = false;
   private isApplyingRemoteUpdate = false;
   private reconnectTimer: any = null;
+  private autoFetchIntervalSeconds = 30;
+  private autoFetchTimer: any = null;
+  private nextAutoFetchAt: Date | null = null;
+  private onVisibilityChangeHandler?: () => void;
   private clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
   // In-memory document map for instant zero-latency UI access
@@ -141,7 +149,34 @@ class PocketBaseTwoWayRealtimeSyncService {
     if (this.isInitialized) return;
     this.isInitialized = true;
 
+    // Load persisted auto-fetch interval preference (default: 30 seconds)
+    try {
+      const savedInterval = safeStorage.getItem('rr_pb_auto_fetch_sec');
+      if (savedInterval !== null) {
+        const parsed = parseInt(savedInterval, 10);
+        if (!isNaN(parsed) && parsed >= 0) {
+          this.autoFetchIntervalSeconds = parsed;
+        }
+      }
+    } catch {}
+
+    this.state.autoFetchIntervalSeconds = this.autoFetchIntervalSeconds;
+
     this.seedMemoryFromLocalStorage();
+
+    // Reconcile immediately when tab regains visibility (if idle for >10s)
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      this.onVisibilityChangeHandler = () => {
+        if (document.visibilityState === 'visible' && this.state.isLive) {
+          const now = Date.now();
+          const last = this.state.lastSyncedAt?.getTime() || 0;
+          if (now - last > 10000) {
+            this.performTwoWayReconciliation().catch(() => null);
+          }
+        }
+      };
+      document.addEventListener('visibilitychange', this.onVisibilityChangeHandler);
+    }
 
     if (typeof window !== 'undefined') {
       setTimeout(() => {
@@ -239,6 +274,9 @@ class PocketBaseTwoWayRealtimeSyncService {
 
         // 3. Drain any pending offline queue items
         this.drainOfflineQueue();
+
+        // 4. Start periodic background auto-fetch cycle (heartbeat safety-net)
+        this.startAutoFetchLoop();
         return true;
       } else {
         // Fall back to primary target URL for subsequent retry attempts
@@ -783,10 +821,76 @@ class PocketBaseTwoWayRealtimeSyncService {
     return this.unsubscribes.length;
   }
 
+  /**
+   * Sets the periodic background auto-fetch interval in seconds (0 = disabled, real-time SSE only)
+   */
+  public setAutoFetchInterval(seconds: number) {
+    this.autoFetchIntervalSeconds = Math.max(0, seconds);
+    try {
+      safeStorage.setItem('rr_pb_auto_fetch_sec', String(this.autoFetchIntervalSeconds));
+    } catch {}
+    this.startAutoFetchLoop();
+  }
+
+  /**
+   * Gets current auto-fetch interval in seconds
+   */
+  public getAutoFetchInterval(): number {
+    return this.autoFetchIntervalSeconds;
+  }
+
+  /**
+   * Starts or updates the background periodic auto-fetch timer
+   */
+  public startAutoFetchLoop() {
+    if (this.autoFetchTimer) {
+      clearInterval(this.autoFetchTimer);
+      this.autoFetchTimer = null;
+    }
+
+    if (this.autoFetchIntervalSeconds <= 0 || !this.state.isLive) {
+      this.nextAutoFetchAt = null;
+      this.setState({
+        autoFetchIntervalSeconds: this.autoFetchIntervalSeconds,
+        nextAutoFetchAt: null,
+      });
+      return;
+    }
+
+    const intervalMs = this.autoFetchIntervalSeconds * 1000;
+    this.nextAutoFetchAt = new Date(Date.now() + intervalMs);
+    this.setState({
+      autoFetchIntervalSeconds: this.autoFetchIntervalSeconds,
+      nextAutoFetchAt: this.nextAutoFetchAt,
+    });
+
+    this.autoFetchTimer = setInterval(async () => {
+      if (!this.state.isLive) return;
+      try {
+        await this.performTwoWayReconciliation();
+      } catch (err) {
+        console.warn('[PocketBase] Periodic auto-fetch note:', err);
+      } finally {
+        if (this.autoFetchIntervalSeconds > 0) {
+          this.nextAutoFetchAt = new Date(Date.now() + this.autoFetchIntervalSeconds * 1000);
+          this.setState({ nextAutoFetchAt: this.nextAutoFetchAt });
+        }
+      }
+    }, intervalMs);
+  }
+
   public destroy() {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+    if (this.autoFetchTimer) {
+      clearInterval(this.autoFetchTimer);
+      this.autoFetchTimer = null;
+    }
+    if (this.onVisibilityChangeHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.onVisibilityChangeHandler);
+      this.onVisibilityChangeHandler = undefined;
     }
     if ((pb as any)?.realtime) {
       (pb as any).realtime.onDisconnect = undefined;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   ShoppingBag,
   Sparkles,
@@ -118,15 +118,68 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({
     return item.stockQuantity;
   };
 
-  // Filter items
-  const onlineItems = inventory.filter((item) => item.isAvailableForOnline !== false);
-  const filteredItems = onlineItems.filter((item) => {
-    const matchesCat = selectedCategory === 'all' || item.category === selectedCategory;
-    const matchesSearch =
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesCat && matchesSearch;
-  });
+  // 1. Memoize available online items
+  const onlineItems = useMemo(
+    () => inventory.filter((item) => item.isAvailableForOnline !== false),
+    [inventory]
+  );
+
+  // 2. Memoize filtered item list based on category and search term
+  const filteredItems = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return onlineItems.filter((item) => {
+      const matchesCat = selectedCategory === 'all' || item.category === selectedCategory;
+      if (!matchesCat) return false;
+      if (!term) return true;
+      return (
+        item.name.toLowerCase().includes(term) ||
+        (item.description && item.description.toLowerCase().includes(term)) ||
+        (item.sku && item.sku.toLowerCase().includes(term)) ||
+        (item.tags && item.tags.some((t) => t.toLowerCase().includes(term)))
+      );
+    });
+  }, [onlineItems, selectedCategory, searchTerm]);
+
+  // 3. Virtualized progressive windowing for large inventory lists
+  const INITIAL_PAGE_SIZE = 24;
+  const [visibleLimit, setVisibleLimit] = useState<number>(INITIAL_PAGE_SIZE);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Reset pagination window when category or search query changes
+  useEffect(() => {
+    setVisibleLimit(INITIAL_PAGE_SIZE);
+  }, [selectedCategory, searchTerm]);
+
+  // Virtualized progressive slice of items currently rendered in DOM
+  const displayedItems = useMemo(
+    () => filteredItems.slice(0, visibleLimit),
+    [filteredItems, visibleLimit]
+  );
+
+  const hasMoreItems = visibleLimit < filteredItems.length;
+
+  const loadMoreItems = useCallback(() => {
+    setVisibleLimit((prev) => Math.min(prev + INITIAL_PAGE_SIZE, filteredItems.length));
+  }, [filteredItems.length]);
+
+  // IntersectionObserver for seamless infinite virtualized scrolling
+  useEffect(() => {
+    if (!hasMoreItems) return;
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMoreItems();
+        }
+      },
+      { rootMargin: '300px' }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreItems, loadMoreItems]);
 
   const handleOpenCustomization = (item: InventoryItem) => {
     const stock = getBranchStock(item);
@@ -583,79 +636,129 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({
             />
           </div>
 
-          {/* Products Menu Grid */}
+          {/* Products Menu Grid with Virtualized Windowing */}
+          <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+            <span>
+              Showing <strong className="text-slate-800">{displayedItems.length}</strong> of{' '}
+              <strong className="text-slate-800">{filteredItems.length}</strong> creations
+            </span>
+            {hasMoreItems && (
+              <span className="text-[11px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md font-medium border border-amber-200">
+                Scroll down to load more
+              </span>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredItems.map((item) => {
-              const branchStock = getBranchStock(item);
-              const isOut = branchStock <= 0;
-
-              return (
-                <div
-                  key={item.id}
-                  className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-4 flex flex-col justify-between transition-all group shadow-xs hover:shadow-md"
+            {filteredItems.length === 0 ? (
+              <div className="col-span-full bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-xs">
+                <Leaf className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <h4 className="font-bold text-slate-800 text-sm">No creations found</h4>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                  No items match &quot;{searchTerm}&quot; in this category. Try adjusting your search query or reset filters.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategory('all');
+                    setSearchTerm('');
+                  }}
+                  className="mt-4 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
                 >
-                  <div>
-                    <div className="relative aspect-16/10 rounded-xl overflow-hidden mb-3 bg-slate-100 border border-slate-200">
-                      <img
-                        src={item.imageUrl || 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&auto=format&fit=crop&q=80'}
-                        alt={item.name}
-                        referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                      {item.tags && item.tags.length > 0 && (
-                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-white/95 text-slate-800 text-[10px] font-bold tracking-wide uppercase shadow-xs border border-slate-200">
-                          {item.tags[0]}
-                        </span>
-                      )}
+                  Reset All Filters
+                </button>
+              </div>
+            ) : (
+              displayedItems.map((item) => {
+                const branchStock = getBranchStock(item);
+                const isOut = branchStock <= 0;
 
-                      {/* Outlet specific stock indicator */}
-                      <span className={`absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold shadow-xs ${
-                        isOut ? 'bg-red-600 text-white' : 'bg-slate-900/80 text-white backdrop-blur-xs'
-                      }`}>
-                        {isOut ? `Sold Out at ${activeStore.shortName}` : `${branchStock} left in stock`}
-                      </span>
-                    </div>
-
-                    <div className="flex items-start justify-between gap-2">
-                      <h4 className="font-bold text-sm text-slate-900 group-hover:text-amber-700 leading-tight">
-                        {item.name}
-                      </h4>
-                      <span className="font-black text-slate-900 text-sm shrink-0">
-                        {CURRENCY}{item.sellingPrice.toFixed(2)}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
-                      {item.description}
-                    </p>
-
-                    {item.ingredients && item.ingredients.length > 0 && (
-                      <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
-                        {item.ingredients.slice(0, 3).map((ing, i) => (
-                          <span key={i} className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200 font-medium">
-                            {ing}
+                return (
+                  <div
+                    key={item.id}
+                    className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-4 flex flex-col justify-between transition-all group shadow-xs hover:shadow-md"
+                  >
+                    <div>
+                      <div className="relative aspect-16/10 rounded-xl overflow-hidden mb-3 bg-slate-100 border border-slate-200">
+                        <img
+                          src={item.imageUrl || 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&auto=format&fit=crop&q=80'}
+                          alt={item.name}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                        {item.tags && item.tags.length > 0 && (
+                          <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-white/95 text-slate-800 text-[10px] font-bold tracking-wide uppercase shadow-xs border border-slate-200">
+                            {item.tags[0]}
                           </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                        )}
 
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-[11px] text-slate-400">
-                      {isOut ? 'Out of Stock' : 'Prepared Fresh 24x7'}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={isOut}
-                      onClick={() => handleOpenCustomization(item)}
-                      className="px-3.5 py-2 bg-[#1E293B] hover:bg-slate-900 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-amber-400" /> Customize & Add
-                    </button>
+                        {/* Outlet specific stock indicator */}
+                        <span className={`absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold shadow-xs ${
+                          isOut ? 'bg-red-600 text-white' : 'bg-slate-900/80 text-white backdrop-blur-xs'
+                        }`}>
+                          {isOut ? `Sold Out at ${activeStore.shortName}` : `${branchStock} left in stock`}
+                        </span>
+                      </div>
+
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="font-bold text-sm text-slate-900 group-hover:text-amber-700 leading-tight">
+                          {item.name}
+                        </h4>
+                        <span className="font-black text-slate-900 text-sm shrink-0">
+                          {CURRENCY}{item.sellingPrice.toFixed(2)}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
+                        {item.description}
+                      </p>
+
+                      {item.ingredients && item.ingredients.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
+                          {item.ingredients.slice(0, 3).map((ing, i) => (
+                            <span key={i} className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200 font-medium">
+                              {ing}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400">
+                        {isOut ? 'Out of Stock' : 'Prepared Fresh 24x7'}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={isOut}
+                        onClick={() => handleOpenCustomization(item)}
+                        className="px-3.5 py-2 bg-[#1E293B] hover:bg-slate-900 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-amber-400" /> Customize & Add
+                      </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
+
+            {/* Virtualized Sentinel & Progressive Load More Trigger */}
+            {hasMoreItems && (
+              <div className="col-span-full py-6 text-center space-y-3">
+                <div ref={sentinelRef} className="h-2 w-full" />
+                <button
+                  type="button"
+                  onClick={loadMoreItems}
+                  className="px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl shadow-xs inline-flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Load More Creations</span>
+                  <span className="text-slate-400 font-normal">
+                    ({displayedItems.length} of {filteredItems.length})
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -55,7 +55,11 @@ export const CloudSyncBadge: React.FC = () => {
       <button
         type="button"
         onClick={() => setIsModalOpen(true)}
-        title={`Database Sync: ${syncState.status.toUpperCase()} (Click to inspect or force sync)`}
+        title={`PocketBase Live Sync • ${
+          syncState.autoFetchIntervalSeconds > 0
+            ? `Auto-fetch every ${syncState.autoFetchIntervalSeconds}s`
+            : 'Instant Realtime Push'
+        } • Last Synced: ${syncState.lastSyncedAt ? syncState.lastSyncedAt.toLocaleTimeString() : 'Connecting...'}`}
         className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/80 transition-all cursor-pointer shadow-xs"
       >
         <Server className="w-3.5 h-3.5 text-amber-400" />

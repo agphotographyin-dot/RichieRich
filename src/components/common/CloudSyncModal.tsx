@@ -17,6 +17,8 @@ import {
   Wrench,
   KeyRound,
   Mail,
+  Clock,
+  Timer,
 } from 'lucide-react';
 import { cloudSync, CloudSyncState, COLLECTIONS } from '../../services/cloudSync';
 import {
@@ -48,6 +50,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
   const [adminPassword, setAdminPassword] = useState('');
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [provisionMessage, setProvisionMessage] = useState<{ success: boolean; text: string } | null>(null);
+  const [secondsUntilNextFetch, setSecondsUntilNextFetch] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -58,7 +61,21 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
     const unsub = cloudSync.subscribe((state) => {
       setSyncState(state);
     });
-    return unsub;
+
+    const timer = setInterval(() => {
+      const state = cloudSync.getState();
+      if (state.nextAutoFetchAt) {
+        const diff = Math.max(0, Math.ceil((state.nextAutoFetchAt.getTime() - Date.now()) / 1000));
+        setSecondsUntilNextFetch(diff);
+      } else {
+        setSecondsUntilNextFetch(null);
+      }
+    }, 1000);
+
+    return () => {
+      unsub();
+      clearInterval(timer);
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -318,6 +335,69 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
             </div>
           </div>
 
+          {/* Auto-Fetch Timing & Interval Config */}
+          <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-600" />
+                <h3 className="font-bold text-xs text-slate-800">PocketBase Auto-Fetch Timing</h3>
+              </div>
+              <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                Continuous
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2.5 rounded-xl bg-white border border-slate-200 space-y-1">
+                <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">SSE Push Latency</span>
+                <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                  <span className="text-emerald-500">⚡</span>
+                  <span>&lt; 50 ms</span>
+                </div>
+                <p className="text-[10px] text-slate-500">Instant EventSource push on any sales/stock change</p>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-white border border-slate-200 space-y-1">
+                <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Background Cycle</span>
+                <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                  <Timer className="w-4 h-4 text-amber-600" />
+                  <span>
+                    {syncState.autoFetchIntervalSeconds > 0
+                      ? `Every ${syncState.autoFetchIntervalSeconds}s`
+                      : 'SSE Only'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  {syncState.autoFetchIntervalSeconds > 0 && secondsUntilNextFetch !== null
+                    ? `Next auto-fetch in ${secondsUntilNextFetch}s`
+                    : 'Real-time event driven'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <label htmlFor="auto-fetch-select" className="text-[11px] text-slate-600 font-medium">
+                Auto-Fetch Interval:
+              </label>
+              <select
+                id="auto-fetch-select"
+                value={syncState.autoFetchIntervalSeconds}
+                onChange={(e) => {
+                  const sec = Number(e.target.value);
+                  cloudSync.setAutoFetchInterval(sec);
+                }}
+                className="px-2.5 py-1 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800 font-medium cursor-pointer"
+              >
+                <option value={15}>Every 15 Seconds (Rapid POS)</option>
+                <option value={30}>Every 30 Seconds (Recommended)</option>
+                <option value={60}>Every 60 Seconds (1 Minute)</option>
+                <option value={120}>Every 120 Seconds (2 Minutes)</option>
+                <option value={0}>Real-Time SSE Only (Instant Push)</option>
+              </select>
+            </div>
+          </div>
+
           {/* Sync Telemetry */}
           <div className="p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-xs space-y-2">
             <div className="flex items-center justify-between text-slate-700">
@@ -338,11 +418,19 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
               </span>
             </div>
             <div className="flex items-center justify-between text-slate-700">
-              <span className="text-slate-500">Last Synced:</span>
-              <span className="font-medium">
+              <span className="text-slate-500">Last Auto-Fetch Time:</span>
+              <span className="font-medium text-slate-900">
                 {syncState.lastSyncedAt ? syncState.lastSyncedAt.toLocaleTimeString() : 'Streaming...'}
               </span>
             </div>
+            {syncState.autoFetchIntervalSeconds > 0 && (
+              <div className="flex items-center justify-between text-slate-700">
+                <span className="text-slate-500">Next Auto-Fetch In:</span>
+                <span className="font-mono font-bold text-amber-600">
+                  {secondsUntilNextFetch !== null ? `${secondsUntilNextFetch}s` : 'Calculating...'}
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between text-slate-700">
               <span className="text-slate-500">Live Packets Synced:</span>
               <span className="font-mono font-bold text-slate-900">{syncState.itemsSynced}</span>
@@ -351,6 +439,15 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
 
           {/* Two-Way Manual Reconciliation Button */}
           <div className="space-y-2">
+            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] flex items-center gap-2">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>
+                <strong>Fully Automatic:</strong> Orders, inventory deductions, stock transfers, and expenses sync across all terminals in real-time without needing any button clicks.
+              </span>
+            </div>
             <button
               type="button"
               onClick={handleForceTwoWaySync}
@@ -362,8 +459,11 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
               ) : (
                 <ArrowLeftRight className="w-4 h-4 text-amber-400" />
               )}
-              <span>{isPushing ? 'Synchronizing Both Ways...' : 'Sync All Data Now (Two-Way Reconciliation)'}</span>
+              <span>{isPushing ? 'Synchronizing Both Ways...' : 'Force Full Database Re-Check (Optional)'}</span>
             </button>
+            <p className="text-[10px] text-slate-400 text-center">
+              Optional utility for manual re-indexing if server URL was recently changed.
+            </p>
             {pushMessage && (
               <p className="text-[11px] font-medium text-center text-slate-700 animate-in fade-in duration-150">
                 {pushMessage}
