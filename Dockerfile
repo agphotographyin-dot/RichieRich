@@ -2,16 +2,19 @@
 # Multi-stage production build for Richie Rich
 # ==========================================
 
-# Stage 1: Build stage
-FROM node:20-alpine AS builder
+# Stage 1: Build stage (using Debian slim with glibc for native esbuild/tailwind compatibility)
+FROM node:20-slim AS builder
 
 WORKDIR /app
+
+# Prevent memory fragmentation and OOM on low-memory VPS
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 
 # Copy dependency specifications
 COPY package*.json ./
 
-# Install all dependencies
-RUN npm ci || npm install
+# Install all dependencies with resilience for peer deps and lockfile differences
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps --no-audit --no-fund
 
 # Copy application source code
 COPY . .
