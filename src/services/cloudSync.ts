@@ -87,6 +87,9 @@ class PocketBaseTwoWayRealtimeSyncService {
   // In-memory document map for instant zero-latency UI access
   private collectionDocsMap = new Map<string, Map<string, any>>();
   private persistDebounceTimers: Record<string, any> = {};
+  private collectionSyncDebounceTimers: Record<string, any> = {};
+  private debouncedCommitTimers: Record<string, any> = {};
+  private lastPushedHashes = new Map<string, string>();
 
   // UI change notification hooks
   private onStorageChangeNotify?: () => void;
@@ -390,11 +393,14 @@ class PocketBaseTwoWayRealtimeSyncService {
           const serverDocIds = new Set(
             (serverRecords || []).map((r: any) => String(r.recordId || r.id))
           );
-          for (const doc of localDocs) {
+          const toPush = localDocs.filter((doc) => {
             const docId = String(doc.id || doc.sku);
-            if (!serverDocIds.has(docId)) {
-              this.pushToPocketBase(colName, docId, doc);
-            }
+            return !serverDocIds.has(docId);
+          });
+
+          if (toPush.length > 0) {
+            // Throttled concurrency push to prevent CPU spikes and SQLite database lock contention
+            await this.throttledBatchPush(colName, toPush, true);
           }
         }
       } catch {}
@@ -405,6 +411,14 @@ class PocketBaseTwoWayRealtimeSyncService {
       isLive: true,
       lastSyncedAt: new Date(),
     });
+  }
+
+  private fastItemHash(item: any): string {
+    if (!item) return '';
+    if (typeof item === 'object') {
+      return `${item.id || item.sku || ''}_${item.updatedAt || item.lastUpdated || ''}_${item.stock !== undefined ? item.stock : ''}_${item.status || ''}_${item.total || ''}_${item.paymentStatus || ''}`;
+    }
+    return String(item);
   }
 
   private applyRemoteUpdate(storageKey: string, remoteDocs: any[], isWarehouse: boolean) {
@@ -431,6 +445,7 @@ class PocketBaseTwoWayRealtimeSyncService {
         } catch {}
       }
 
+      // 1. Immediately update in-memory cache for zero-latency UI response
       if (this.onStorageCacheUpdate) {
         this.onStorageCacheUpdate(storageKey, resolvedDocs);
       }
@@ -438,39 +453,45 @@ class PocketBaseTwoWayRealtimeSyncService {
         this.onWarehouseCacheUpdate(storageKey, resolvedDocs);
       }
 
-      // Synchronously persist to local storage before notifying UI to eliminate race conditions
-      try {
-        safeStorage.setItem(storageKey, JSON.stringify(resolvedDocs));
-      } catch (err) {
-        console.warn(`[PocketBase] Local persist note for ${storageKey}:`, err);
+      // 2. Debounce writing to local storage and notifying React subscribers (150ms buffer)
+      // This eliminates DOM re-rendering freezes and heavy JSON serialization during bulk SSE streaming
+      if (this.debouncedCommitTimers[storageKey]) {
+        clearTimeout(this.debouncedCommitTimers[storageKey]);
       }
-
-      if (isWarehouse) {
-        this.onWarehouseChangeNotify?.();
-      } else {
-        this.onStorageChangeNotify?.();
-      }
-
-      // Cross-tab realtime bus broadcast to ensure all views/counters sync in zero milliseconds
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      this.debouncedCommitTimers[storageKey] = setTimeout(() => {
         try {
-          const bus = new BroadcastChannel('richie_rich_sync_bus');
-          bus.postMessage({
-            type: isWarehouse ? 'WAREHOUSE_STATE_CHANGED' : 'STATE_CHANGED',
-            key: storageKey,
-            val: resolvedDocs,
-            timestamp: Date.now(),
-          });
-          bus.close();
-        } catch {}
-      }
+          safeStorage.setItem(storageKey, JSON.stringify(resolvedDocs));
+        } catch (err) {
+          console.warn(`[PocketBase] Local persist note for ${storageKey}:`, err);
+        }
 
-      this.setState({
-        status: 'connected',
-        isLive: true,
-        lastSyncedAt: new Date(),
-        itemsSynced: this.state.itemsSynced + 1,
-      });
+        if (isWarehouse) {
+          this.onWarehouseChangeNotify?.();
+        } else {
+          this.onStorageChangeNotify?.();
+        }
+
+        // Cross-tab realtime bus broadcast
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          try {
+            const bus = new BroadcastChannel('richie_rich_sync_bus');
+            bus.postMessage({
+              type: isWarehouse ? 'WAREHOUSE_STATE_CHANGED' : 'STATE_CHANGED',
+              key: storageKey,
+              val: resolvedDocs,
+              timestamp: Date.now(),
+            });
+            bus.close();
+          } catch {}
+        }
+
+        this.setState({
+          status: 'connected',
+          isLive: true,
+          lastSyncedAt: new Date(),
+          itemsSynced: this.state.itemsSynced + 1,
+        });
+      }, 150);
     } finally {
       this.isApplyingRemoteUpdate = false;
     }
@@ -509,7 +530,7 @@ class PocketBaseTwoWayRealtimeSyncService {
       }
       map.set(cleanId, sanitized);
 
-      // 2. Asynchronous push to PocketBase
+      // 2. Asynchronous push to PocketBase with dirty tracking
       this.pushToPocketBase(collectionName, cleanId, sanitized);
 
       this.setState({
@@ -523,7 +544,15 @@ class PocketBaseTwoWayRealtimeSyncService {
     }
   }
 
-  private async pushToPocketBase(collectionName: string, docId: string, data: any) {
+  private async pushToPocketBase(collectionName: string, docId: string, data: any, knownNew = false) {
+    const key = `${collectionName}:${docId}`;
+    const hash = this.fastItemHash(data);
+
+    // Skip if unchanged (0 network calls, 0 CPU load)
+    if (!knownNew && this.lastPushedHashes.get(key) === hash) {
+      return;
+    }
+
     try {
       const payload = {
         recordId: docId,
@@ -532,18 +561,54 @@ class PocketBaseTwoWayRealtimeSyncService {
         updatedAt: new Date().toISOString(),
       };
 
-      const existing = await pb
-        .collection(collectionName)
-        .getFirstListItem(`recordId="${docId}"`, { requestKey: null })
-        .catch(() => null);
-
-      if (existing) {
-        await pb.collection(collectionName).update(existing.id, payload, { requestKey: null }).catch(() => null);
-      } else {
+      if (knownNew) {
         await pb.collection(collectionName).create(payload, { requestKey: null }).catch(() => null);
+      } else {
+        const existing = await pb
+          .collection(collectionName)
+          .getFirstListItem(`recordId="${docId}"`, { requestKey: null })
+          .catch(() => null);
+
+        if (existing) {
+          await pb.collection(collectionName).update(existing.id, payload, { requestKey: null }).catch(() => null);
+        } else {
+          await pb.collection(collectionName).create(payload, { requestKey: null }).catch(() => null);
+        }
       }
+
+      this.lastPushedHashes.set(key, hash);
     } catch {
       this.queueOfflineDoc(collectionName, docId, data, 'upsert');
+    }
+  }
+
+  private async throttledBatchPush(
+    collectionName: string,
+    items: any[],
+    knownNew = false,
+    onProgress?: (synced: number, total: number, percent: number) => void
+  ): Promise<void> {
+    const CONCURRENCY = 3;
+    const total = items.length;
+    let completed = 0;
+
+    for (let i = 0; i < items.length; i += CONCURRENCY) {
+      const slice = items.slice(i, i + CONCURRENCY);
+      await Promise.all(
+        slice.map(async (item) => {
+          const docId = String(item.id || item.sku);
+          await this.pushToPocketBase(collectionName, docId, item, knownNew);
+          completed++;
+          if (completed % 15 === 0 || completed === total) {
+            onProgress?.(completed, total, Math.round((completed / total) * 100));
+          }
+        })
+      );
+
+      // 15ms pause between concurrent slices yields the browser & Node.js event loop
+      if (i + CONCURRENCY < items.length) {
+        await new Promise((resolve) => setTimeout(resolve, 15));
+      }
     }
   }
 
@@ -561,6 +626,7 @@ class PocketBaseTwoWayRealtimeSyncService {
       if (map) {
         map.delete(cleanId);
       }
+      this.lastPushedHashes.delete(`${collectionName}:${cleanId}`);
 
       pb.collection(collectionName)
         .getFirstListItem(`recordId="${cleanId}"`, { requestKey: null })
@@ -595,33 +661,37 @@ class PocketBaseTwoWayRealtimeSyncService {
       }
     });
 
-    const total = items.length;
-    let synced = 0;
+    // Only process items that actually changed!
+    const changedItems = items.filter((item) => {
+      if (!item || (!item.id && !item.sku)) return false;
+      const docId = String(item.id || item.sku);
+      const key = `${collectionName}:${docId}`;
+      const hash = this.fastItemHash(item);
+      return this.lastPushedHashes.get(key) !== hash;
+    });
 
-    for (const item of items) {
-      if (item && (item.id || item.sku)) {
-        const docId = String(item.id || item.sku);
-        this.pushToPocketBase(collectionName, docId, item);
-        synced++;
-        if (synced % 20 === 0 || synced === total) {
-          onProgress?.(synced, total, Math.round((synced / total) * 100));
-        }
-      }
+    if (changedItems.length === 0) {
+      return { success: true, synced: 0 };
     }
+
+    await this.throttledBatchPush(collectionName, changedItems, false, onProgress);
 
     this.setState({
       status: 'connected',
       isLive: true,
       lastSyncedAt: new Date(),
-      itemsSynced: this.state.itemsSynced + total,
+      itemsSynced: this.state.itemsSynced + changedItems.length,
     });
 
-    return { success: true, synced: total };
+    return { success: true, synced: changedItems.length };
   }
 
-  public debouncedSyncCollection(collectionName: string, items: any[], delay = 100) {
+  public debouncedSyncCollection(collectionName: string, items: any[], delay = 150) {
     if (this.isApplyingRemoteUpdate) return;
-    setTimeout(() => {
+    if (this.collectionSyncDebounceTimers[collectionName]) {
+      clearTimeout(this.collectionSyncDebounceTimers[collectionName]);
+    }
+    this.collectionSyncDebounceTimers[collectionName] = setTimeout(() => {
       this.syncCollectionBatch(collectionName, items);
     }, delay);
   }
