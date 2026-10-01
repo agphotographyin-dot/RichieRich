@@ -6,8 +6,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        - VITE_POCKETBASE_URL=http://187.126.115.40:8090
     container_name: richierich
     restart: unless-stopped
     ports:
