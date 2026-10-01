@@ -3,9 +3,7 @@ services:
   # 1. Richie Rich Frontend SPA (Vite + Nginx)
   # -------------------------------------------------------------
   richierich:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/agphotographyin-dot/richierich:latest
     container_name: richierich
     restart: unless-stopped
     ports:
