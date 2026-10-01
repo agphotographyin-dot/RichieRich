@@ -166,19 +166,61 @@ export const autoProvisionPocketBaseCollections = async (
   targetPb.autoCancellation(false);
 
   try {
-    // 1. Authenticate as Admin / Superuser
-    if ((targetPb as any).admins?.authWithPassword) {
-      await (targetPb as any).admins.authWithPassword(adminEmail.trim(), adminPass.trim());
-    } else if ((targetPb as any).collection) {
-      // PocketBase v0.23+ superuser collection fallback
-      await targetPb.collection('_superusers').authWithPassword(adminEmail.trim(), adminPass.trim()).catch(async () => {
-        return await (targetPb as any).admins.authWithPassword(adminEmail.trim(), adminPass.trim());
+    // 1. Authenticate as Superuser / Admin
+    let token = '';
+    
+    // Method A: Try PocketBase v0.23+ superuser endpoint
+    try {
+      const authRes = await fetch(`${base}/api/collections/_superusers/auth-with-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ identity: adminEmail.trim(), password: adminPass.trim() }),
       });
+      if (authRes.ok) {
+        const authData = await authRes.json();
+        token = authData.token;
+        targetPb.authStore.save(token, authData.record || null);
+      }
+    } catch {}
+
+    // Method B: Try PocketBase v0.20-v0.22 admin endpoint
+    if (!token) {
+      try {
+        const authRes = await fetch(`${base}/api/admins/auth-with-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ identity: adminEmail.trim(), password: adminPass.trim() }),
+        });
+        if (authRes.ok) {
+          const authData = await authRes.json();
+          token = authData.token;
+          targetPb.authStore.save(token, authData.admin || null);
+        }
+      } catch {}
     }
 
-    const token = targetPb.authStore.token;
+    // Method C: SDK auth attempt
     if (!token) {
-      throw new Error('Authentication failed. Check your admin email and password.');
+      try {
+        if ((targetPb as any).collection) {
+          await targetPb.collection('_superusers').authWithPassword(adminEmail.trim(), adminPass.trim());
+          token = targetPb.authStore.token;
+        }
+      } catch {}
+      if (!token && (targetPb as any).admins?.authWithPassword) {
+        try {
+          await (targetPb as any).admins.authWithPassword(adminEmail.trim(), adminPass.trim());
+          token = targetPb.authStore.token;
+        } catch {}
+      }
+    }
+
+    if (!token) {
+      throw new Error(
+        'Authentication failed. Please verify your Super Admin email and password at ' +
+          base +
+          '/_/ (make sure to include /_/ at the end).'
+      );
     }
 
     // 2. Fetch existing collections

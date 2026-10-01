@@ -13,6 +13,10 @@ import {
   Save,
   Check,
   ArrowLeftRight,
+  ExternalLink,
+  Wrench,
+  KeyRound,
+  Mail,
 } from 'lucide-react';
 import { cloudSync, CloudSyncState, COLLECTIONS } from '../../services/cloudSync';
 import {
@@ -20,6 +24,7 @@ import {
   checkPocketBaseHealth,
   PocketBaseHealthResult,
   DEFAULT_POCKETBASE_URL,
+  autoProvisionPocketBaseCollections,
 } from '../../services/pocketbaseClient';
 
 interface CloudSyncModalProps {
@@ -37,6 +42,12 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<PocketBaseHealthResult | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Auto Provisioning State
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [isProvisioning, setIsProvisioning] = useState(false);
+  const [provisionMessage, setProvisionMessage] = useState<{ success: boolean; text: string } | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -84,6 +95,37 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
       setPushMessage(`❌ Error: ${err?.message || 'Sync failed'}`);
     } finally {
       setIsPushing(false);
+    }
+  };
+
+  const handleRunAutoProvision = async () => {
+    if (!adminEmail.trim() || !adminPassword.trim()) {
+      setProvisionMessage({
+        success: false,
+        text: 'Please enter your Super Admin email and password configured in PocketBase (/_/).',
+      });
+      return;
+    }
+    setIsProvisioning(true);
+    setProvisionMessage(null);
+    try {
+      const res = await autoProvisionPocketBaseCollections(
+        adminEmail.trim(),
+        adminPassword.trim(),
+        serverUrlInput.trim()
+      );
+      if (res.success) {
+        setProvisionMessage({ success: true, text: res.message });
+        const refreshedHealth = await checkPocketBaseHealth(serverUrlInput.trim());
+        setTestResult(refreshedHealth);
+        await cloudSync.reconnectWithServerUrl(serverUrlInput.trim());
+      } else {
+        setProvisionMessage({ success: false, text: res.message });
+      }
+    } catch (err: any) {
+      setProvisionMessage({ success: false, text: err?.message || 'Provisioning failed' });
+    } finally {
+      setIsProvisioning(false);
     }
   };
 
@@ -197,6 +239,83 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
                 <span className="leading-snug">{testResult.message}</span>
               </div>
             )}
+
+            {/* 1-Click Auto Setup Helper (shown when PocketBase is reachable but collections need provisioning) */}
+            <div className="pt-2 border-t border-slate-200/80 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                  <Wrench className="w-3.5 h-3.5 text-amber-600" />
+                  <span>1-Click Collections Auto-Setup</span>
+                </div>
+                <a
+                  href={`${serverUrlInput.replace(/\/+$/, '')}/_/`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] text-amber-700 hover:text-amber-800 font-medium flex items-center gap-1 hover:underline cursor-pointer"
+                >
+                  <span>Open PocketBase Admin (/_/)</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                Connects to your PocketBase server and automatically provisions all 11 database collections with public read/write permissions for POS counters.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="relative">
+                  <Mail className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                  <input
+                    type="email"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    placeholder="Admin Email (e.g. admin@rr.com)"
+                    className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800"
+                  />
+                </div>
+                <div className="relative">
+                  <KeyRound className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                  <input
+                    type="password"
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    placeholder="Admin Password"
+                    className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleRunAutoProvision}
+                disabled={isProvisioning}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs cursor-pointer transition-colors shadow-xs disabled:opacity-50"
+              >
+                {isProvisioning ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Database className="w-3.5 h-3.5" />
+                )}
+                <span>{isProvisioning ? 'Provisioning Collections...' : 'Auto-Create 11 Collections Now'}</span>
+              </button>
+
+              {provisionMessage && (
+                <div
+                  className={`p-2.5 rounded-xl text-xs flex items-center gap-2 border ${
+                    provisionMessage.success
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      : 'bg-red-50 text-red-800 border-red-200'
+                  }`}
+                >
+                  {provisionMessage.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                  )}
+                  <span className="leading-snug">{provisionMessage.text}</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Sync Telemetry */}
