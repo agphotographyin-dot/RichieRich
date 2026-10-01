@@ -21,26 +21,5 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
-    build: {
-      chunkSizeWarningLimit: 1500,
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (id.includes('node_modules/lucide-react')) {
-              return 'icons';
-            }
-            if (id.includes('node_modules/recharts')) {
-              return 'charts';
-            }
-            if (id.includes('node_modules/xlsx') || id.includes('node_modules/jspdf')) {
-              return 'export-vendor';
-            }
-            if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
-              return 'react-core';
-            }
-          },
-        },
-      },
-    },
   };
 });
