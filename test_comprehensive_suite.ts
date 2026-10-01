@@ -981,6 +981,48 @@ async function runAllTests() {
     'Central Warehouse stock was NOT touched or incremented on POS store sale (remains exactly 10)'
   );
 
+  // ==========================================
+  // MODULE 14: POCKETBASE REALTIME & SYNC BUS
+  // ==========================================
+  console.log('\n--- MODULE 14: POCKETBASE REALTIME & SYNC BUS ---');
+  
+  // 14.1 Storage Service Realtime Bus attachment
+  const busAttached = storage.attachRealtimeBus();
+  assert(typeof busAttached === 'boolean', 'PocketBaseRealtime', 'StorageService.attachRealtimeBus executes cleanly');
+  
+  // 14.2 CloudSync initialization & registration
+  const { cloudSync } = await import('./src/services/cloudSync');
+  const { getCandidatePocketBaseUrls, getPocketBaseUrl } = await import('./src/services/pocketbaseClient');
+  
+  let storageNotified = false;
+  let warehouseNotified = false;
+  cloudSync.registerNotifiers(
+    () => { storageNotified = true; },
+    () => { warehouseNotified = true; }
+  );
+
+  let cacheKeySet = '';
+  cloudSync.registerCacheUpdaters(
+    (key, val) => { cacheKeySet = key; },
+    (key, val) => {}
+  );
+  
+  assert(typeof cloudSync.init === 'function', 'PocketBaseRealtime', 'cloudSync.init is defined');
+  assert(typeof cloudSync.connectPocketBase === 'function', 'PocketBaseRealtime', 'cloudSync.connectPocketBase is defined');
+  assert(typeof cloudSync.isRealtimeConnected === 'function', 'PocketBaseRealtime', 'cloudSync.isRealtimeConnected is defined');
+  assert(typeof cloudSync.getActiveSubscriptionsCount === 'function', 'PocketBaseRealtime', 'cloudSync.getActiveSubscriptionsCount is defined');
+
+  // 14.3 Sync State verification
+  const syncState = cloudSync.getState();
+  assert(syncState.engine === 'pocketbase', 'PocketBaseRealtime', 'Sync engine configured as PocketBase', `Engine: ${syncState.engine}`);
+  assert(typeof syncState.serverUrl === 'string' && syncState.serverUrl.length > 0, 'PocketBaseRealtime', 'PocketBase server URL resolved', `URL: ${syncState.serverUrl}`);
+
+  // 14.4 Resilient URL Candidate Resolution
+  const candidates = getCandidatePocketBaseUrls();
+  assert(Array.isArray(candidates) && candidates.length > 0, 'PocketBaseRealtime', 'Candidate URLs list populated for resilient reconnection', `Count: ${candidates.length}`);
+  const primaryResolved = getPocketBaseUrl();
+  assert(typeof primaryResolved === 'string' && primaryResolved.length > 0, 'PocketBaseRealtime', 'Primary PocketBase URL generated without runtime errors');
+
   console.log('\n===============================================================');
   console.log(`ALL ${results.length} FEATURES VERIFIED AND PASSED WITH 100% SUCCESS!`);
   console.log('===============================================================\n');

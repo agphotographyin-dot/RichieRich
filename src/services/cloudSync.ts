@@ -1,4 +1,10 @@
-import { pb, getPocketBaseUrl, setCustomPocketBaseUrl, DEFAULT_POCKETBASE_URL } from './pocketbaseClient';
+import {
+  pb,
+  getPocketBaseUrl,
+  getCandidatePocketBaseUrls,
+  setCustomPocketBaseUrl,
+  DEFAULT_POCKETBASE_URL,
+} from './pocketbaseClient';
 import { safeStorage } from '../utils/safeStorage';
 
 export type SyncEngine = 'pocketbase';
@@ -75,6 +81,7 @@ class PocketBaseTwoWayRealtimeSyncService {
   private unsubscribes: Array<() => void> = [];
   private isInitialized = false;
   private isApplyingRemoteUpdate = false;
+  private reconnectTimer: any = null;
   private clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
   // In-memory document map for instant zero-latency UI access
@@ -164,21 +171,54 @@ class PocketBaseTwoWayRealtimeSyncService {
   }
 
   /**
+   * Schedules an automatic reconnection attempt if disconnected
+   */
+  private scheduleReconnect(delay = 5000) {
+    if (this.reconnectTimer || !this.isInitialized) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this.isInitialized && !this.state.isLive) {
+        this.connectPocketBase();
+      }
+    }, delay);
+  }
+
+  /**
    * Connect to PocketBase and establish bidirectional real-time streaming
    */
   public async connectPocketBase(): Promise<boolean> {
-    const targetUrl = getPocketBaseUrl() || DEFAULT_POCKETBASE_URL;
-    pb.baseUrl = targetUrl;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    const candidateUrls = getCandidatePocketBaseUrls();
+    const primaryUrl = getPocketBaseUrl() || DEFAULT_POCKETBASE_URL;
 
     try {
-      this.setState({ status: 'connecting', serverUrl: targetUrl });
+      this.setState({ status: 'connecting', serverUrl: primaryUrl });
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
-      const health = await pb.health.check({ signal: controller.signal }).catch(() => null);
-      clearTimeout(timeoutId);
+      // Find the first responding healthy PocketBase endpoint among candidates
+      let connectedUrl = '';
+      for (const candidate of candidateUrls) {
+        pb.baseUrl = candidate;
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 2500);
+          const health = await pb.health.check({ signal: controller.signal }).catch(() => null);
+          clearTimeout(timeoutId);
+          if (health && health.code === 200) {
+            connectedUrl = candidate;
+            break;
+          }
+        } catch {
+          // Continue to next candidate
+        }
+      }
 
-      if (health && health.code === 200) {
+      if (connectedUrl) {
+        pb.baseUrl = connectedUrl;
+
         // 1. Bind Real-Time Inbound Subscriptions (Server -> Device)
         await this.bindPocketBaseSubscriptions();
 
@@ -189,7 +229,7 @@ class PocketBaseTwoWayRealtimeSyncService {
           status: 'connected',
           isLive: true,
           engine: 'pocketbase',
-          serverUrl: targetUrl,
+          serverUrl: connectedUrl,
           activeListenersCount: this.unsubscribes.length,
           errorMessage: undefined,
         });
@@ -198,21 +238,25 @@ class PocketBaseTwoWayRealtimeSyncService {
         this.drainOfflineQueue();
         return true;
       } else {
+        // Fall back to primary target URL for subsequent retry attempts
+        pb.baseUrl = primaryUrl;
         this.setState({
           status: 'offline',
           isLive: false,
-          serverUrl: targetUrl,
-          errorMessage: 'PocketBase server not reachable on port 8090',
+          serverUrl: primaryUrl,
+          errorMessage: 'PocketBase server not reachable on configured port',
         });
+        this.scheduleReconnect(5000);
         return false;
       }
     } catch (err: any) {
       this.setState({
         status: 'offline',
         isLive: false,
-        serverUrl: targetUrl,
+        serverUrl: primaryUrl,
         errorMessage: err?.message || 'Connection failed',
       });
+      this.scheduleReconnect(5000);
       return false;
     }
   }
@@ -230,15 +274,58 @@ class PocketBaseTwoWayRealtimeSyncService {
     });
     this.unsubscribes = [];
 
+    // Hook onto PB_CONNECT event to verify EventSource handshake
+    try {
+      const unsubConnect = await pb.realtime.subscribe('PB_CONNECT', (e) => {
+        const activeClientId = e?.clientId || pb.realtime.clientId || this.clientId;
+        this.setState({
+          status: 'connected',
+          isLive: true,
+          errorMessage: undefined,
+        });
+      }).catch(() => null);
+
+      if (unsubConnect) {
+        this.unsubscribes.push(unsubConnect);
+      }
+    } catch {}
+
+    // Hook onto realtime onDisconnect to automatically handle connection loss
+    pb.realtime.onDisconnect = (activeSubscriptions) => {
+      console.warn('[PocketBase] Realtime EventSource disconnected. Active subs:', activeSubscriptions?.length);
+      this.setState({
+        status: 'connecting',
+        isLive: false,
+        errorMessage: 'Realtime event source connection lost. Reconnecting...',
+      });
+      this.scheduleReconnect(3000);
+    };
+
     const subscribeCollection = async (colName: string, storageKey: string, isWarehouse: boolean) => {
       try {
         const unsub = await pb.collection(colName).subscribe('*', (e) => {
           const { action, record } = e;
-          // Ignore own outbound echo messages to prevent loops
-          if (record && record._senderId === this.clientId) return;
+          if (!record) return;
 
-          const docData = record.data ? { ...record.data, id: record.recordId || record.id } : record;
-          const id = String(docData.id || record.recordId || record.id);
+          let docData = record.data;
+          if (typeof docData === 'string') {
+            try {
+              docData = JSON.parse(docData);
+            } catch {}
+          }
+          if (!docData || typeof docData !== 'object') {
+            docData = { ...record };
+          }
+
+          // Ignore own outbound echo messages to prevent loops
+          if (
+            (record._senderId && record._senderId === this.clientId) ||
+            (docData._senderId && docData._senderId === this.clientId)
+          ) {
+            return;
+          }
+
+          const id = String(docData.id || record.recordId || record.id || (docData as any).sku);
 
           let map = this.collectionDocsMap.get(colName);
           if (!map) {
@@ -254,7 +341,10 @@ class PocketBaseTwoWayRealtimeSyncService {
 
           const remoteDocs = Array.from(map.values());
           this.applyRemoteUpdate(storageKey, remoteDocs, isWarehouse);
-        }).catch(() => null);
+        }).catch((err) => {
+          console.warn(`[PocketBase] Subscribe note for collection ${colName}:`, err?.message || err);
+          return null;
+        });
 
         if (unsub) {
           this.unsubscribes.push(unsub);
@@ -348,12 +438,31 @@ class PocketBaseTwoWayRealtimeSyncService {
         this.onWarehouseCacheUpdate(storageKey, resolvedDocs);
       }
 
-      this.scheduleStoragePersist(storageKey, resolvedDocs);
+      // Synchronously persist to local storage before notifying UI to eliminate race conditions
+      try {
+        safeStorage.setItem(storageKey, JSON.stringify(resolvedDocs));
+      } catch (err) {
+        console.warn(`[PocketBase] Local persist note for ${storageKey}:`, err);
+      }
 
       if (isWarehouse) {
         this.onWarehouseChangeNotify?.();
       } else {
         this.onStorageChangeNotify?.();
+      }
+
+      // Cross-tab realtime bus broadcast to ensure all views/counters sync in zero milliseconds
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        try {
+          const bus = new BroadcastChannel('richie_rich_sync_bus');
+          bus.postMessage({
+            type: isWarehouse ? 'WAREHOUSE_STATE_CHANGED' : 'STATE_CHANGED',
+            key: storageKey,
+            val: resolvedDocs,
+            timestamp: Date.now(),
+          });
+          bus.close();
+        } catch {}
       }
 
       this.setState({
@@ -590,7 +699,28 @@ class PocketBaseTwoWayRealtimeSyncService {
     } catch {}
   }
 
+  /**
+   * Returns whether the PocketBase realtime EventSource connection is live
+   */
+  public isRealtimeConnected(): boolean {
+    return this.state.isLive && (pb as any)?.realtime?.isConnected === true;
+  }
+
+  /**
+   * Returns the count of active PocketBase collection subscriptions
+   */
+  public getActiveSubscriptionsCount(): number {
+    return this.unsubscribes.length;
+  }
+
   public destroy() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if ((pb as any)?.realtime) {
+      (pb as any).realtime.onDisconnect = undefined;
+    }
     this.unsubscribes.forEach((unsub) => {
       try {
         unsub();

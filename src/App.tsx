@@ -156,8 +156,11 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Initialize Cloud Firestore Real-Time Sync Engine
+  // Initialize PocketBase & Broadcast Real-Time Sync Engine
   useEffect(() => {
+    // Verify and ensure storage listeners are attached to the cross-tab realtime bus
+    storage.attachRealtimeBus();
+
     cloudSync.registerNotifiers(
       () => storage.notifySubscribers(),
       () => warehouseStorage.notifySubscribers()
