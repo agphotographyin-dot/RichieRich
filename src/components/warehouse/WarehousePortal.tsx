@@ -373,6 +373,10 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
       return (
         <WarehouseAuditTrailView
           auditTrail={auditTrail}
+          inventory={inventory}
+          stores={stores}
+          batches={batches}
+          transfers={transfers}
           searchQuery={searchQuery}
         />
       );

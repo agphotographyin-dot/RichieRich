@@ -41,7 +41,7 @@ import {
 } from 'lucide-react';
 import { InventoryItem, Category } from '../../../types';
 import { BatchRecord, Warehouse } from '../../../types/warehouse';
-import { CURRENCY, storage, getItemStockSummary, getCatalogStockMetrics, getBoxLooseStockSummary } from '../../../services/storage';
+import { CURRENCY, storage, getItemStockSummary, getCatalogStockMetrics, getBoxLooseStockSummary, isBoxDenominatedUnit } from '../../../services/storage';
 import { warehouseStorage } from '../../../services/warehouseStorage';
 import { pdfReportService } from '../../../services/pdfReportService';
 import { excelInventoryService } from '../../../services/excelInventoryService';
@@ -1034,18 +1034,9 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                               </button>
                             </div>
 
-                            {item.sellAsLoose || (item.piecesPerBox && item.piecesPerBox > 1) ? (
-                              <div className="flex flex-col items-center gap-0.5 text-[10px] font-mono">
-                                <div className="text-indigo-700 font-bold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 whitespace-nowrap">
-                                  {getBoxLooseStockSummary(item).fullBoxes} Boxes + {getBoxLooseStockSummary(item).loosePieces} Loose
-                                </div>
-                                <span className="text-slate-500 text-[9px]">
-                                  ({item.piecesPerBox || 10}/box = {getBoxLooseStockSummary(item).totalPieces} Total Pcs)
-                                </span>
-                              </div>
-                            ) : (
+                            <div className="flex flex-col items-center gap-0.5">
                               <div className="flex items-center gap-1.5 text-[10px] font-mono">
-                                <span className="text-slate-500" title="Live auto-fetched aggregate stock across all retail outlets">
+                                <span className="text-slate-500" title="Live aggregate stock across all retail outlets">
                                   Stores: <strong className="text-slate-700 font-bold">{storesSum}</strong>
                                 </span>
                                 <span className="text-slate-300">•</span>
@@ -1053,7 +1044,12 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                                   Total: <strong className="text-slate-950 font-black">{totalSKUStock}</strong> {item.unit}
                                 </span>
                               </div>
-                            )}
+                              {item.piecesPerBox && item.piecesPerBox > 1 && (
+                                <span className="text-[9px] text-indigo-600 font-mono font-semibold">
+                                  ({item.piecesPerBox} units / {item.unit || 'box'})
+                                </span>
+                              )}
+                            </div>
 
                             <div className="flex items-center gap-1 text-[9px]">
                               {isOut ? (
@@ -1114,7 +1110,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                 <span>Box & Loose Product Inventory Management</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Maintains <strong>1 Box = X Pieces</strong> relationship. Stock is tracked as <strong>Full Boxes + Loose Pieces = Total Pieces</strong>.
+                Maintains <strong>1 Box = X Units</strong> relationship. Stock is tracked as <strong>Full Boxes + Loose Stock = Total Units</strong>.
               </p>
             </div>
 
@@ -1173,25 +1169,25 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                   </div>
 
                   <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200/80">
-                    <span className="text-[10px] uppercase font-bold text-amber-700">Loose Pieces</span>
+                    <span className="text-[10px] uppercase font-bold text-amber-700">Loose Stock</span>
                     <div className="text-xl font-extrabold text-amber-900 mt-0.5">{sumLoose}</div>
-                    <span className="text-[10px] text-amber-600">Individual Loose Sticks/Units</span>
+                    <span className="text-[10px] text-amber-600">Individual Loose Units</span>
                   </div>
 
                   <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200/80">
-                    <span className="text-[10px] uppercase font-bold text-emerald-700">Total Pieces Equivalent</span>
+                    <span className="text-[10px] uppercase font-bold text-emerald-700">Total Stock Units</span>
                     <div className="text-xl font-extrabold text-emerald-900 mt-0.5">{sumTotalPieces}</div>
-                    <span className="text-[10px] text-emerald-600">(Full Boxes × Pcs/Box) + Loose</span>
+                    <span className="text-[10px] text-emerald-600">Total Physical Units Available</span>
                   </div>
                 </div>
 
                 <div className="bg-indigo-50/80 border border-indigo-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
                   <div className="flex items-center gap-2 text-indigo-950 font-bold">
-                    <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white font-mono text-[10px]">CORE RULE</span>
-                    <span>Total Pieces = (Full Boxes × Pieces per Box) + Loose Pieces</span>
+                    <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white font-mono text-[10px]">CORE PRINCIPLE</span>
+                    <span>Inventory Count = Number of Order/Stock Units</span>
                   </div>
                   <div className="text-[11px] text-indigo-800 font-medium">
-                    POS: Scanning <strong>Box Barcode</strong> sells 1 full box. Scanning <strong>Loose Barcode</strong> auto-unboxes and sells 1 piece.
+                    POS: Scanning <strong>Box Barcode</strong> sells 1 complete box. Scanning <strong>Loose Barcode</strong> sells 1 single loose unit.
                   </div>
                 </div>
               </div>
@@ -1205,9 +1201,9 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                 <tr>
                   <th className="py-3 px-4">Product</th>
                   <th className="py-3 px-3 text-center">Full Boxes</th>
-                  <th className="py-3 px-3 text-center">Loose Pieces</th>
-                  <th className="py-3 px-3 text-center">Pieces / Box</th>
-                  <th className="py-3 px-4 text-center">Total Pieces</th>
+                  <th className="py-3 px-3 text-center">Loose Stock</th>
+                  <th className="py-3 px-3 text-center">Units / Box</th>
+                  <th className="py-3 px-4 text-center">Total Stock (Units)</th>
                   <th className="py-3 px-3">Price (Box / Loose)</th>
                   <th className="py-3 px-3">Barcodes (Box / Loose)</th>
                   <th className="py-3 px-4 text-right">Actions</th>
@@ -1225,7 +1221,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                           <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                           <p className="font-semibold text-slate-600">No Box & Loose products configured yet.</p>
                           <p className="text-[11px] text-slate-400 mt-1">
-                            Click &quot;Add New Product&quot; to register a product with Pieces per Box and Sell as Loose enabled.
+                            Click &quot;Add New Product&quot; to register a product with Sell as Loose enabled.
                           </p>
                         </td>
                       </tr>
@@ -1309,7 +1305,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                           </span>
                         </td>
 
-                        {/* Loose Pieces */}
+                        {/* Loose Stock */}
                         <td className="py-3 px-3 text-center">
                           <span className={`px-2.5 py-1 rounded-lg font-mono font-extrabold text-sm border ${
                             loosePieces > 0 ? 'bg-amber-100 text-amber-900 border-amber-200' : 'bg-slate-100 text-slate-500 border-slate-200'
@@ -1318,21 +1314,21 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                           </span>
                         </td>
 
-                        {/* Pieces / Box */}
+                        {/* Units / Box */}
                         <td className="py-3 px-3 text-center">
                           <span className="font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs">
                             {piecesPerBox}
                           </span>
                         </td>
 
-                        {/* Total Pieces Equivalent */}
+                        {/* Total Stock Units */}
                         <td className="py-3 px-4 text-center">
                           <div className="flex flex-col items-center">
                             <span className="px-3 py-1 rounded-lg bg-emerald-100 text-emerald-900 font-mono font-black text-sm border border-emerald-300">
                               {totalPieces}
                             </span>
                             <span className="text-[10px] text-slate-500 font-mono mt-0.5">
-                              ({fullBoxes} × {piecesPerBox}) + {loosePieces}
+                              {totalPieces} {item.unit || 'units'}
                             </span>
                           </div>
                         </td>
@@ -1361,7 +1357,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                             </div>
                             {item.looseBarcode && (
                               <div className="flex items-center gap-1">
-                                <span className="px-1 py-0.2 rounded bg-amber-50 text-amber-800 font-bold border border-amber-100">Pcs</span>
+                                <span className="px-1 py-0.2 rounded bg-amber-50 text-amber-800 font-bold border border-amber-100">Unit</span>
                                 <span className="text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
                                   {item.looseBarcode}
                                 </span>
@@ -1382,7 +1378,7 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                                   ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                                   : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border-indigo-200'
                               }`}
-                              title="Manually open 1 box: -1 Box, +Pieces to Loose Pieces"
+                              title="Manually open 1 box: -1 Box, +Units to Loose Stock"
                             >
                               <span>Open 1 Box</span>
                             </button>
@@ -1425,8 +1421,27 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
 
             <div className="flex items-center gap-2">
               <button
+                onClick={() => {
+                  const res = warehouseStorage.reconcileCentralStockWithBatches();
+                  soundEffects.playSuccessChime();
+                  storage.addNotification({
+                    title: 'Central Hub & Batch Tracking Reconciled',
+                    message: `Verified and synchronized ${res.totalBatches} batches with Central Hub stock. ${res.adjustedCount} records adjusted.`,
+                    type: 'system_backup',
+                    targetRole: 'all',
+                    read: false,
+                  });
+                }}
+                className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                title="Synchronize batch allocation numbers with authoritative Central Hub inventory"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Reconcile Central Hub & Batches</span>
+              </button>
+
+              <button
                 onClick={onOpenInwardBill}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Inward New Batch (GRN)</span>
@@ -1440,11 +1455,11 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                 <tr>
                   <th className="py-3 px-3">Batch Number</th>
                   <th className="py-3 px-3">Item / SKU</th>
-                  <th className="py-3 px-3">Warehouse Hub</th>
-                  <th className="py-3 px-3">Mfg Date</th>
+                  <th className="py-3 px-3">Original GRN Inward</th>
+                  <th className="py-3 px-3 text-center">Remaining Network Stock</th>
+                  <th className="py-3 px-3 text-center">Central Hub</th>
+                  <th className="py-3 px-3 text-center">Stores Active</th>
                   <th className="py-3 px-3">Expiry Date</th>
-                  <th className="py-3 px-3">Shelf Life</th>
-                  <th className="py-3 px-3 text-center">Batch Stock</th>
                   <th className="py-3 px-3 text-right">Landed Cost</th>
                   <th className="py-3 px-3 text-right">Status</th>
                 </tr>
@@ -1457,42 +1472,84 @@ export const WarehouseInventoryView: React.FC<WarehouseInventoryViewProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  batches.map((b) => (
-                    <tr key={b.id} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-3 font-bold text-slate-900">{b.batchNumber}</td>
-                      <td className="py-2.5 px-3 font-sans">
-                        <div className="font-bold text-slate-800">{b.itemName}</div>
-                        <div className="text-[10px] text-slate-400 font-mono">SKU: {b.sku}</div>
-                      </td>
-                      <td className="py-2.5 px-3 font-sans text-slate-600">{b.warehouseName}</td>
-                      <td className="py-2.5 px-3 text-slate-500">{b.mfgDate}</td>
-                      <td className="py-2.5 px-3 text-slate-700 font-semibold">{b.expiryDate}</td>
-                      <td className="py-2.5 px-3">
-                        {b.daysToExpiry <= 0 ? (
-                          <span className="text-rose-600 font-bold">Expired</span>
-                        ) : b.daysToExpiry <= 30 ? (
-                          <span className="text-purple-600 font-bold">{b.daysToExpiry} days</span>
-                        ) : (
-                          <span className="text-slate-600">{b.daysToExpiry} days</span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 text-center font-bold text-indigo-700">
-                        {b.quantityInStock} {b.unit}
-                      </td>
-                      <td className="py-2.5 px-3 text-right">{CURRENCY}{b.unitCost}</td>
-                      <td className="py-2.5 px-3 text-right font-sans">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          b.status === 'expired'
-                            ? 'bg-rose-100 text-rose-800'
-                            : b.status === 'near_expiry'
-                            ? 'bg-purple-100 text-purple-800'
-                            : 'bg-emerald-100 text-emerald-800'
-                        }`}>
-                          {b.status.replace('_', ' ').toUpperCase()}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                  batches.map((b) => {
+                    const originalInward = b.originalQuantity ?? b.initialQuantity;
+                    const originalUnit = b.originalUnit || b.unit || 'units';
+                    const isBox = originalUnit.toLowerCase().includes('box');
+                    const ppb = b.piecesPerBox || (isBox ? 10 : 1);
+                    const basePieces = b.originalBaseQuantity || originalInward;
+                    const currentActive = b.currentBaseQuantity !== undefined ? b.currentBaseQuantity : (b.currentQuantity ?? b.quantityInStock);
+                    const centralQty = b.locationQuantities?.['central'] ?? b.locationQuantities?.['wh-central-amd'] ?? b.quantityInStock ?? 0;
+                    
+                    let storeQty = 0;
+                    if (b.locationQuantities) {
+                      Object.entries(b.locationQuantities).forEach(([loc, qty]) => {
+                        if (loc !== 'central' && loc !== 'wh-central-amd') {
+                          storeQty += Math.max(0, Math.floor(Number(qty) || 0));
+                        }
+                      });
+                    }
+
+                    return (
+                      <tr key={b.id} className="hover:bg-slate-50">
+                        <td className="py-2.5 px-3">
+                          <span className="font-bold text-slate-900 block">{b.batchNumber}</span>
+                          <span className="text-[10px] text-slate-400 font-sans">{b.purchaseBillRef || 'GRN Inward'}</span>
+                        </td>
+                        <td className="py-2.5 px-3 font-sans">
+                          <div className="font-bold text-slate-800">{b.name || b.itemName}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">SKU: {b.sku}</div>
+                        </td>
+                        <td className="py-2.5 px-3 font-sans text-xs">
+                          <div className="font-bold text-slate-900">
+                            {originalInward} {originalUnit}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            Stock: {basePieces} {originalUnit}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className={`px-2.5 py-1 rounded-lg font-mono font-extrabold text-xs border ${
+                            currentActive > 0 ? 'bg-indigo-100 text-indigo-900 border-indigo-200' : 'bg-slate-100 text-slate-400 border-slate-200'
+                          }`}>
+                            {currentActive} {b.unit || 'units'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-bold text-slate-800">
+                          {centralQty} {b.unit || 'units'}
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-bold text-emerald-700">
+                          {storeQty} {b.unit || 'units'}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-semibold text-slate-700">{b.expiryDate}</div>
+                          <div className="text-[10px]">
+                            {b.daysToExpiry <= 0 ? (
+                              <span className="text-rose-600 font-bold">Expired</span>
+                            ) : b.daysToExpiry <= 30 ? (
+                              <span className="text-purple-600 font-bold">{b.daysToExpiry} days left</span>
+                            ) : (
+                              <span className="text-slate-500">{b.daysToExpiry} days left</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-right">{CURRENCY}{b.unitCost}</td>
+                        <td className="py-2.5 px-3 text-right font-sans">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            b.status === 'expired'
+                              ? 'bg-rose-100 text-rose-800'
+                              : b.status === 'near_expiry'
+                              ? 'bg-purple-100 text-purple-800'
+                              : b.status === 'depleted'
+                              ? 'bg-slate-100 text-slate-600'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {b.status.replace('_', ' ').toUpperCase()}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

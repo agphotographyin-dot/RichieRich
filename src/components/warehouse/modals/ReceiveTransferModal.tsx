@@ -71,7 +71,11 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
         itemMap[r.itemId] = r.receivedQty;
       });
 
-      warehouseStorage.receiveTransfer(transfer.id, 'Store Manager', itemMap);
+      const ok = warehouseStorage.receiveTransfer(transfer.id, 'Store Manager', itemMap);
+      if (!ok) {
+        setError('This transfer has already been received or is no longer in transit.');
+        return;
+      }
       onSuccess();
       onClose();
     } finally {

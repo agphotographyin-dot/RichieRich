@@ -131,7 +131,7 @@ export const WarehouseSidebar: React.FC<WarehouseSidebarProps> = ({
       items: [
         {
           id: 'audit_trail',
-          label: 'View Full Audit',
+          label: 'Audit Log',
           icon: History,
         },
         {

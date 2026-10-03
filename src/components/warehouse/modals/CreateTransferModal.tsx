@@ -68,32 +68,46 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
       category: string;
       batchNumber: string;
       quantity: number;
+      transferUnit: 'boxes' | 'pieces';
+      piecesPerBox: number;
       unit: string;
       unitCost: number;
     }>
   >(() => {
     if (initialData?.items && initialData.items.length > 0) {
-      return initialData.items.map((it) => ({
-        itemId: it.itemId,
-        name: it.name,
-        sku: it.sku,
-        category: (it as any).category || 'Paan',
-        batchNumber: it.batchNumber || batches[0]?.batchNumber || 'BATCH-AMD-01',
-        quantity: it.dispatchedQty || it.requestedQty || 10,
-        unit: it.unit || 'pieces',
-        unitCost: it.unitCost || 20,
-      }));
+      return initialData.items.map((it) => {
+        const inv = inventory.find((i) => i.id === it.itemId || i.sku === it.sku);
+        const isBox = (it.transferUnit || it.unit || '').toLowerCase().includes('box') || Boolean(inv?.piecesPerBox && inv.piecesPerBox > 1);
+        const ppb = it.piecesPerBox || inv?.piecesPerBox || (isBox ? 10 : 1);
+        return {
+          itemId: it.itemId,
+          name: it.name,
+          sku: it.sku,
+          category: (it as any).category || 'Paan',
+          batchNumber: it.batchNumber || batches[0]?.batchNumber || 'BATCH-AMD-01',
+          quantity: it.dispatchedQty || it.requestedQty || 10,
+          transferUnit: isBox ? 'boxes' : 'pieces',
+          piecesPerBox: ppb,
+          unit: it.unit || (isBox ? 'boxes' : 'pieces'),
+          unitCost: it.unitCost || 20,
+        };
+      });
     }
+    const defaultInv = inventory[0];
+    const isBox = Boolean(defaultInv?.sellAsLoose || (defaultInv?.piecesPerBox && defaultInv.piecesPerBox > 1));
+    const ppb = defaultInv?.piecesPerBox || (isBox ? 10 : 1);
     return [
       {
-        itemId: inventory[0]?.id || 'item-101',
-        name: inventory[0]?.name || 'Royal Maghai Meetha Paan',
-        sku: inventory[0]?.sku || 'PAN-MAG-01',
-        category: inventory[0]?.category || 'Paan',
+        itemId: defaultInv?.id || 'item-101',
+        name: defaultInv?.name || 'Royal Maghai Meetha Paan',
+        sku: defaultInv?.sku || 'PAN-MAG-01',
+        category: defaultInv?.category || 'Paan',
         batchNumber: batches[0]?.batchNumber || 'BATCH-AMD-01',
         quantity: 20,
-        unit: inventory[0]?.unit || 'pieces',
-        unitCost: inventory[0]?.costPrice || 20,
+        transferUnit: isBox ? 'boxes' : 'pieces',
+        piecesPerBox: ppb,
+        unit: defaultInv?.unit || (isBox ? 'boxes' : 'pieces'),
+        unitCost: defaultInv?.costPrice || 20,
       },
     ];
   });
@@ -108,16 +122,23 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
         if (initialData.otpOrPin) setOtpCode(initialData.otpOrPin);
         if (initialData.items && initialData.items.length > 0) {
           setItems(
-            initialData.items.map((it) => ({
-              itemId: it.itemId,
-              name: it.name,
-              sku: it.sku,
-              category: (it as any).category || 'Paan',
-              batchNumber: it.batchNumber || batches[0]?.batchNumber || 'BATCH-AMD-01',
-              quantity: it.dispatchedQty || it.requestedQty || 10,
-              unit: it.unit || 'pieces',
-              unitCost: it.unitCost || 20,
-            }))
+            initialData.items.map((it) => {
+              const inv = inventory.find((i) => i.id === it.itemId || i.sku === it.sku);
+              const isBox = (it.transferUnit || it.unit || inv?.unit || '').toLowerCase().includes('box');
+              const ppb = it.piecesPerBox || inv?.piecesPerBox || (isBox ? 10 : 1);
+              return {
+                itemId: it.itemId,
+                name: it.name,
+                sku: it.sku,
+                category: (it as any).category || 'Paan',
+                batchNumber: it.batchNumber || batches[0]?.batchNumber || 'BATCH-AMD-01',
+                quantity: it.dispatchedQty || it.requestedQty || 10,
+                transferUnit: isBox ? 'boxes' : 'pieces',
+                piecesPerBox: ppb,
+                unit: it.unit || inv?.unit || (isBox ? 'boxes' : 'units'),
+                unitCost: it.unitCost || 20,
+              };
+            })
           );
         }
       } else {
@@ -125,7 +146,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
         setOtpCode(Math.floor(1000 + Math.random() * 9000).toString());
       }
     }
-  }, [isOpen, initialData, stores, batches]);
+  }, [isOpen, initialData, stores, batches, inventory]);
 
   if (!isOpen) return null;
 
@@ -136,8 +157,11 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
       sku: 'SKU-TRF',
       category: 'Paan',
       costPrice: 20,
-      unit: 'pieces',
+      unit: 'units',
+      piecesPerBox: 1,
     };
+    const isBox = (defaultItem.unit || '').toLowerCase().includes('box');
+    const ppb = defaultItem.piecesPerBox || 1;
     setItems([
       ...items,
       {
@@ -147,7 +171,9 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
         category: defaultItem.category,
         batchNumber: 'BATCH-AMD-01',
         quantity: 15,
-        unit: defaultItem.unit || 'pieces',
+        transferUnit: isBox ? 'boxes' : 'pieces',
+        piecesPerBox: ppb,
+        unit: defaultItem.unit || (isBox ? 'boxes' : 'units'),
         unitCost: defaultItem.costPrice || 20,
       },
     ]);
@@ -163,6 +189,8 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
     const next = [...items];
     const itemBatches = batches.filter((b) => b.itemId === (selected.itemId || selected.id) || b.sku === selected.sku);
     const bestBatch = itemBatches[0]?.batchNumber || `BATCH-${Date.now().toString().slice(-4)}`;
+    const isBox = (selected.unit || '').toLowerCase().includes('box');
+    const ppb = selected.piecesPerBox && selected.piecesPerBox > 0 ? selected.piecesPerBox : 1;
 
     next[index] = {
       ...next[index],
@@ -170,8 +198,10 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
       name: selected.name,
       sku: selected.sku || next[index].sku,
       category: selected.category || 'Paan',
+      transferUnit: isBox ? 'boxes' : 'pieces',
+      piecesPerBox: ppb,
       unitCost: selected.costPrice !== undefined ? selected.costPrice : (selected.unitCost || 20),
-      unit: selected.unit || 'pieces',
+      unit: selected.unit || (isBox ? 'boxes' : 'units'),
       batchNumber: bestBatch,
     };
     setItems(next);
@@ -183,29 +213,36 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
     setItems(next);
   };
 
-  // Real-time stock audit for items
+  // Real-time stock audit for items in stock units
   const rowAudits = items.map((row) => {
     const invItem = inventory.find(
       (i) => i.id === row.itemId || i.name.toLowerCase() === row.name.toLowerCase()
     );
-    const availableCentralStock = invItem ? invItem.stockQuantity : 0;
-    const isExceeded = transferType === 'warehouse_to_store' && row.quantity > availableCentralStock;
+    const availableCentralPieces = invItem ? Math.max(0, Math.floor(Number(invItem.stockQuantity) || 0)) : 0;
+    const isBox = row.transferUnit === 'boxes';
+    const requiredBasePieces = Number(row.quantity) || 0;
+
+    const isExceeded = transferType === 'warehouse_to_store' && requiredBasePieces > availableCentralPieces;
+    const shortagePieces = Math.max(0, requiredBasePieces - availableCentralPieces);
+
     return {
       ...row,
-      availableCentralStock,
+      requiredBasePieces,
+      availableCentralPieces,
+      availableBoxes: availableCentralPieces,
+      availableLoose: 0,
       isExceeded,
-      shortage: Math.max(0, row.quantity - availableCentralStock),
+      shortagePieces,
     };
   });
 
   const hasInsufficientStock =
     transferType === 'warehouse_to_store' && rowAudits.some((r) => r.isExceeded);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreate = (dispatchImmediately: boolean) => {
     if (isSubmitting) return;
 
-    if (hasInsufficientStock) {
+    if (dispatchImmediately && hasInsufficientStock) {
       setErrorMessage(
         'Cannot dispatch transfer: One or more items exceed available Central Warehouse stock. Please inward stock first via GRN Bill or reduce the dispatch quantity.'
       );
@@ -223,15 +260,23 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
       const toLoc = transferType === 'warehouse_to_store' ? st?.name || 'Store' : defaultWh.name;
 
       const transferItems: TransferItem[] = items.map((it) => {
+        const isBox = it.transferUnit === 'boxes';
+        const ppb = it.piecesPerBox && it.piecesPerBox > 0 ? it.piecesPerBox : (isBox ? 10 : 1);
+        const baseQty = Number(it.quantity) || 0;
+
         return {
           itemId: it.itemId,
           sku: it.sku,
           name: it.name,
+          category: it.category,
           batchNumber: it.batchNumber || 'BATCH-STD',
           requestedQty: it.quantity,
           dispatchedQty: it.quantity,
           receivedQty: 0,
-          unit: it.unit,
+          transferUnit: it.transferUnit,
+          piecesPerBox: ppb,
+          baseQuantity: baseQty,
+          unit: isBox ? 'boxes' : (it.unit || 'units'),
           unitCost: it.unitCost,
         };
       });
@@ -245,8 +290,8 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
         destinationId: transferType === 'warehouse_to_store' ? destStoreId : defaultWh.id,
         destinationName: toLoc,
         requestedDate: new Date().toISOString().split('T')[0],
-        dispatchDate: new Date().toISOString().split('T')[0],
-        status: 'dispatched_in_transit',
+        dispatchDate: dispatchImmediately ? new Date().toISOString().split('T')[0] : undefined,
+        status: dispatchImmediately ? 'dispatched_in_transit' : 'requested',
         items: transferItems,
         vehicleNumber: vehicleNo,
         carrierName,
@@ -260,11 +305,16 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
       onSuccess();
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'An error occurred during transfer dispatch.');
+      setErrorMessage(err.message || 'An error occurred during transfer creation.');
       soundEffects.playWarningChime();
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleCreate(true);
   };
 
   const selectedStoreObj = stores.find((s) => s.id === destStoreId);
@@ -435,100 +485,115 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
 
             <div className="space-y-2">
               {items.map((row, idx) => (
-                <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
-                    {/* Autocomplete Input Box */}
-                    <div className="sm:col-span-6">
-                      <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
-                        Item Name / Search Catalog & History
-                      </label>
-                      <ItemAutocompleteInput
-                        value={row.name}
-                        placeholder="Type item name..."
-                        inventory={inventory}
-                        onSelect={(sel) => handleItemSelect(idx, sel)}
-                        onChange={(val) => handleFieldChange(idx, 'name', val)}
-                        inputClassName="bg-white"
-                      />
-                    </div>
+                  <div key={idx} className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                      {/* Autocomplete Input Box */}
+                      <div className="sm:col-span-5">
+                        <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
+                          Item Name / Search Catalog & History
+                        </label>
+                        <ItemAutocompleteInput
+                          value={row.name}
+                          placeholder="Type item name..."
+                          inventory={inventory}
+                          onSelect={(sel) => handleItemSelect(idx, sel)}
+                          onChange={(val) => handleFieldChange(idx, 'name', val)}
+                          inputClassName="bg-white"
+                        />
+                      </div>
 
-                    <div className="sm:col-span-3">
-                      <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
-                        Batch Assignment
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Batch No"
-                        value={row.batchNumber}
-                        onChange={(e) => handleFieldChange(idx, 'batchNumber', e.target.value)}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-900"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-2">
-                      <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
-                        Transfer Qty
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="Qty"
-                        value={row.quantity}
-                        onChange={(e) => handleFieldChange(idx, 'quantity', parseInt(e.target.value) || 1)}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-center font-bold text-slate-900"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-1 flex items-center justify-end pt-3 sm:pt-0">
-                      {items.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(idx)}
-                          className="text-rose-500 hover:text-rose-700 p-1.5 rounded-lg hover:bg-rose-50"
+                      {/* Transfer Unit Selector */}
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
+                          Transfer Unit
+                        </label>
+                        <select
+                          value={row.transferUnit}
+                          onChange={(e) => {
+                            const val = e.target.value as 'boxes' | 'pieces';
+                            handleFieldChange(idx, 'transferUnit', val);
+                            handleFieldChange(idx, 'unit', val);
+                          }}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
                         >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                          <option value="boxes">Boxes</option>
+                          <option value="pieces">Units / Loose</option>
+                        </select>
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
+                          Qty ({row.transferUnit === 'boxes' ? 'Boxes' : 'Units'})
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="Qty"
+                          value={row.quantity}
+                          onChange={(e) => handleFieldChange(idx, 'quantity', parseInt(e.target.value) || 1)}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-center font-bold text-slate-900"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
+                          Batch Assignment
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Batch No"
+                          value={row.batchNumber}
+                          onChange={(e) => handleFieldChange(idx, 'batchNumber', e.target.value)}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-900"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-1 flex items-center justify-end pt-3 sm:pt-0">
+                        {items.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(idx)}
+                            className="text-rose-500 hover:text-rose-700 p-1.5 rounded-lg hover:bg-rose-50 cursor-pointer"
+                            title="Remove line item"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Live Unit Stock Pill */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-amber-50/80 border border-amber-200/80 rounded-lg text-xs">
+                      <div className="flex items-center gap-2">
+                        <Truck className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                        <span className="font-semibold text-amber-950">
+                          Transferring: <strong>{row.quantity} {row.transferUnit === 'boxes' ? 'Boxes' : 'Units'}</strong>
+                        </span>
+                      </div>
+
+                      {transferType === 'warehouse_to_store' && (
+                        <div className="flex items-center gap-2 font-mono">
+                          <span className="text-slate-600">
+                            Central WH Available:{' '}
+                            <strong className="text-slate-900">
+                              {rowAudits[idx]?.availableCentralPieces} {row.transferUnit === 'boxes' ? 'Boxes' : 'Units'}
+                            </strong>
+                          </span>
+                          {rowAudits[idx]?.isExceeded ? (
+                            <span className="px-2 py-0.5 rounded-full font-bold bg-rose-100 text-rose-800 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                              Short by {rowAudits[idx]?.shortagePieces} units
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1 font-sans">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                              Sufficient Stock
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
-
-                  {/* Item info pill & Central WH stock status */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500 pt-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
-                        SKU: {row.sku || 'N/A'}
-                      </span>
-                      <span className="bg-white px-2 py-0.5 rounded border border-slate-200 font-semibold">
-                        Category: {row.category || 'Paan'}
-                      </span>
-                      <span className="bg-white px-2 py-0.5 rounded border border-slate-200">
-                        Unit: {row.unit || 'pieces'}
-                      </span>
-                    </div>
-
-                    {transferType === 'warehouse_to_store' && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-600">
-                          Central WH Stock:{' '}
-                          <strong className="font-mono text-slate-900">
-                            {rowAudits[idx]?.availableCentralStock ?? 0} {row.unit}
-                          </strong>
-                        </span>
-                        {rowAudits[idx]?.isExceeded ? (
-                          <span className="px-2 py-0.5 rounded-full font-bold bg-rose-100 text-rose-800 flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
-                            Short by {rowAudits[idx]?.shortage} {row.unit}
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                            In Stock
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
               ))}
             </div>
           </div>
@@ -548,37 +613,50 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-200">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors w-full sm:w-auto"
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || hasInsufficientStock}
-              className={`px-5 py-2 font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2 ${
-                hasInsufficientStock
-                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-80'
-                  : 'bg-amber-600 hover:bg-amber-700 disabled:opacity-75 text-white cursor-pointer'
-              }`}
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>Dispatching...</span>
-                </>
-              ) : (
-                <>
-                  <Truck className="w-4 h-4" />
-                  <span>
-                    {hasInsufficientStock ? 'Cannot Dispatch (Insufficient Central Stock)' : 'Generate Gate Pass & Dispatch'}
-                  </span>
-                </>
-              )}
-            </button>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={() => handleCreate(false)}
+                disabled={isSubmitting}
+                className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+                title="Save transfer as requested. Stock is NOT deducted until dispatched."
+              >
+                Save as Pending (No Stock Change)
+              </button>
+
+              <button
+                type="submit"
+                disabled={isSubmitting || hasInsufficientStock}
+                className={`px-5 py-2 font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2 ${
+                  hasInsufficientStock
+                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-80'
+                    : 'bg-amber-600 hover:bg-amber-700 disabled:opacity-75 text-white cursor-pointer'
+                }`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Dispatching...</span>
+                  </>
+                ) : (
+                  <>
+                    <Truck className="w-4 h-4" />
+                    <span>
+                      {hasInsufficientStock ? 'Cannot Dispatch (Insufficient Central Stock)' : 'Generate Gate Pass & Dispatch'}
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </div>

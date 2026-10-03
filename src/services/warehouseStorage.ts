@@ -6,6 +6,7 @@ import {
   PurchaseOrder,
   PurchaseBill,
   BatchRecord,
+  BatchAllocation,
   StockTransfer,
   StoreStockIndent,
   StockAdjustment,
@@ -13,7 +14,7 @@ import {
   WarehouseOverviewStats,
   WarehouseSubRole,
 } from '../types/warehouse';
-import { storage, setWarehouseStorageRef } from './storage';
+import { storage, setWarehouseStorageRef, isBoxDenominatedUnit } from './storage';
 import { cloudSync } from './cloudSync';
 
 const WH_KEYS = {
@@ -369,6 +370,9 @@ try {
 } catch (e) {
   console.warn('[Warehouse] BroadcastChannel note:', e);
 }
+
+// Active in-flight operation mutex to prevent duplicate clicks and double execution
+const inFlightTransferLocks = new Set<string>();
 
 export const warehouseStorage = {
   invalidateCache(key?: string): void {
@@ -839,6 +843,10 @@ export const warehouseStorage = {
 
     // 2. Generate and store Batches with Expiry Tracking (Central Warehouse Only)
     const batches = this.getBatches();
+    const currentInventory = storage.getInventory();
+    const nowIso = new Date().toISOString();
+    const nowTs = Date.now();
+
     const newBatches: BatchRecord[] = newBill.items.map((item, idx) => {
       const daysToExpiry = Math.ceil(
         (new Date(item.expiryDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24)
@@ -846,6 +854,15 @@ export const warehouseStorage = {
       let status: BatchRecord['status'] = 'active';
       if (daysToExpiry <= 0) status = 'expired';
       else if (daysToExpiry <= 30) status = 'near_expiry';
+
+      const invItem = currentInventory.find(
+        (i) => i.id === item.itemId || (i.sku && i.sku.toLowerCase() === item.sku.toLowerCase())
+      );
+      const isBoxUnit = (item.inputUnit || item.unit || '').toLowerCase().includes('box');
+      const piecesPerBox = item.piecesPerBox || (invItem ? invItem.piecesPerBox : 1) || 1;
+      const inwardQty = Math.max(0, Math.floor(Number(item.quantity) || 0));
+      const baseInwardPieces = inwardQty;
+      item.baseQuantity = baseInwardPieces;
 
       return {
         id: `bat-${Date.now()}-${idx}`,
@@ -858,63 +875,88 @@ export const warehouseStorage = {
         warehouseName: 'Central Warehouse',
         mfgDate: item.mfgDate || newBill.billDate,
         expiryDate: item.expiryDate,
-        initialQuantity: item.quantity,
-        quantityInStock: item.quantity,
+        initialQuantity: inwardQty,
+        originalQuantity: inwardQty,
+        originalUnit: item.inputUnit || item.unit || (isBoxUnit ? 'boxes' : 'pieces'),
+        piecesPerBox,
+        originalBaseQuantity: baseInwardPieces,
+        currentBaseQuantity: baseInwardPieces,
+        currentQuantity: baseInwardPieces,
+        quantityInStock: baseInwardPieces,
+        consumedQuantity: 0,
+        consumedBaseQuantity: 0,
+        locationQuantities: {
+          central: baseInwardPieces,
+          'wh-central-amd': baseInwardPieces,
+        },
+        locationUnit: 'PIECE',
         unit: item.unit,
         unitCost: item.unitCost,
         purchaseBillRef: billNumber,
         supplierName: newBill.supplierName,
         daysToExpiry,
         status,
+        createdAt: nowIso,
+        updatedAt: nowIso,
       };
     });
     this.saveBatches([...newBatches, ...batches]);
 
-    // 3. Update Master Inventory Central Stock (Batched)
-    // NOTE: Inward GRN stock is credited strictly to Central Master Warehouse vaults.
+    // 3. Update Master Inventory Central Stock (Exact mathematical addition - NEVER double counted)
+    // NOTE: Inward GRN stock is credited strictly to Central Master Warehouse vaults in base piece units.
     // Store allocations (Gota, Bopal, Sindhu Bhavan, SG Highway) remain untouched.
-    const stockDeltas = newBill.items.map((item) => ({
-      id: item.itemId,
-      delta: item.quantity,
-      reason: `Inward Purchase Bill ${billNumber} (Supplier: ${newBill.supplierName}) [Central WH Only]`,
-    }));
-    storage.batchAdjustStock(stockDeltas);
+    const auditRecords: Array<Omit<StockMovementAudit, 'id' | 'timestamp'>> = [];
 
-    // Fulfill Box & Loose Receiving Logic: Adds full boxes (+X Boxes, +0 Loose Pieces)
-    const currentInventory = storage.getInventory();
-    let whModified = false;
-    newBill.items.forEach((item) => {
-      const invItem = currentInventory.find((i) => i.id === item.itemId);
-      if (invItem && (invItem.sellAsLoose || (invItem.piecesPerBox && invItem.piecesPerBox > 1))) {
-        invItem.fullBoxStock = (invItem.fullBoxStock !== undefined ? invItem.fullBoxStock : invItem.stockQuantity) + item.quantity;
-        if (invItem.loosePieceStock === undefined) invItem.loosePieceStock = 0;
-        invItem.stockQuantity = invItem.fullBoxStock;
-        whModified = true;
+    newBill.items.forEach((item, idx) => {
+      const invItem = currentInventory.find(
+        (i) => i.id === item.itemId || (i.sku && i.sku.toLowerCase() === item.sku.toLowerCase())
+      );
+      if (invItem) {
+        const isBoxUnit = isBoxDenominatedUnit(item.inputUnit || item.unit || invItem.unit);
+        const inwardQty = Math.max(0, Math.floor(Number(item.quantity) || 0));
+        const previousStock = Math.max(0, Math.floor(Number(invItem.stockQuantity) || 0));
+        const newStock = previousStock + inwardQty;
+        invItem.stockQuantity = newStock;
+
+        invItem.fullBoxStock = isBoxUnit ? newStock : 0;
+        invItem.full_box_stock = isBoxUnit ? newStock : 0;
+        invItem.loosePieceStock = 0;
+        invItem.loose_piece_stock = 0;
+        invItem.totalPieceEquivalent = newStock;
+        invItem.total_piece_equivalent = newStock;
+
+        (invItem as any).lastStockChange = nowTs;
+        invItem.updatedAt = nowIso;
+
+        auditRecords.push({
+          transactionId: `TXN-${Date.now().toString().slice(-5)}${idx}`,
+          referenceNumber: billNumber,
+          itemId: item.itemId,
+          sku: item.sku,
+          itemName: item.name,
+          batchNumber: item.batchNumber,
+          movementType: 'purchase_inward' as const,
+          fromLocation: `Supplier: ${newBill.supplierName}`,
+          toLocation: 'Central Warehouse (WH-AMD-01)',
+          quantity: inwardQty,
+          quantityChanged: inwardQty,
+          previousStock,
+          newStock,
+          unit: isBoxUnit ? 'boxes' : (item.unit || 'units'),
+          balanceAfter: newStock,
+          unitCost: item.unitCost,
+          totalCostImpact: item.totalCost,
+          performedBy: newBill.receivedBy || 'Warehouse Inward Officer',
+          userRole: 'Warehouse Manager' as const,
+          status: 'Completed',
+          notes: isBoxUnit
+            ? `Inward GRN stock verified: Received ${inwardQty} Boxes. Central WH Before: ${previousStock} ➔ After: ${newStock}. Invoice No: ${newBill.supplierInvoiceNo}`
+            : `Inward GRN stock verified: Received ${inwardQty} Units. Central WH Before: ${previousStock} ➔ After: ${newStock}. Invoice No: ${newBill.supplierInvoiceNo}`,
+        });
       }
     });
-    if (whModified) {
-      storage.saveInventory(currentInventory);
-    }
 
-    // Record Batched Audit Trail
-    const auditRecords = newBill.items.map((item) => ({
-      referenceNumber: billNumber,
-      itemId: item.itemId,
-      sku: item.sku,
-      itemName: item.name,
-      batchNumber: item.batchNumber,
-      movementType: 'purchase_inward' as const,
-      fromLocation: `Supplier: ${newBill.supplierName}`,
-      toLocation: 'Central Warehouse (WH-AMD-01)',
-      quantity: item.quantity,
-      unit: item.unit,
-      balanceAfter: item.quantity,
-      unitCost: item.unitCost,
-      totalCostImpact: item.totalCost,
-      performedBy: newBill.receivedBy || 'Warehouse Inward Officer',
-      userRole: 'Warehouse Manager' as const,
-      notes: `Inward GRN stock verified and placed strictly into Central Warehouse vaults (No store allocation). Invoice No: ${newBill.supplierInvoiceNo}`,
-    }));
+    storage.saveInventory(currentInventory);
     this.addAuditRecords(auditRecords);
 
     // 4. Update PO status & received quantities if linked
@@ -945,17 +987,82 @@ export const warehouseStorage = {
   },
 
   // =========================================================================
-  // BATCHES & EXPIRY TRACKING
+  // BATCHES & EXPIRY TRACKING (BATCH-BASED INVENTORY ENGINE)
   // =========================================================================
   getBatches(): BatchRecord[] {
     return getWhCached(WH_KEYS.BATCHES, () => {
       try {
         const data = safeStorage.getItem(WH_KEYS.BATCHES);
-        if (!data) {
-          this.saveBatches(INITIAL_BATCHES);
-          return INITIAL_BATCHES;
+        let list: BatchRecord[] = [];
+        if (data) {
+          list = JSON.parse(data);
         }
-        return JSON.parse(data);
+        if (!Array.isArray(list) || list.length === 0) {
+          list = INITIAL_BATCHES;
+        }
+
+        // Automatic opening batch reconciliation: Ensure all catalog inventory is represented in batches
+        const inventory = storage.getInventory();
+        let batchesModified = false;
+        const nowIso = new Date().toISOString();
+
+        inventory.forEach((item, idx) => {
+          const itemBatches = list.filter(
+            (b) => b.itemId === item.id || (b.sku && b.sku.toLowerCase() === item.sku.toLowerCase())
+          );
+          if (itemBatches.length === 0 && ((item.stockQuantity || 0) > 0 || Object.values(item.storeAllocations || {}).some((q) => q > 0))) {
+            // Create an initial opening batch for existing catalog stock
+            const centralQty = Math.max(0, Math.floor(Number(item.stockQuantity) || 0));
+            const locationQuantities: Record<string, number> = {
+              central: centralQty,
+              'wh-central-amd': centralQty,
+            };
+            if (item.storeAllocations) {
+              Object.entries(item.storeAllocations).forEach(([sId, sQty]) => {
+                locationQuantities[sId] = Math.max(0, Math.floor(Number(sQty) || 0));
+              });
+            }
+            const totalStock = Object.entries(locationQuantities).reduce(
+              (sum, [k, v]) => (k === 'wh-central-amd' ? sum : sum + v),
+              0
+            );
+
+            const openingBatch: BatchRecord = {
+              id: `bat-opening-${item.id}-${idx}`,
+              itemId: item.id,
+              sku: item.sku,
+              name: item.name,
+              category: item.category,
+              batchNumber: `BATCH-OPENING-${item.sku.slice(0, 4)}-01`,
+              warehouseId: 'wh-central-amd',
+              warehouseName: 'Central Warehouse',
+              mfgDate: nowIso.split('T')[0],
+              expiryDate: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString().split('T')[0],
+              initialQuantity: totalStock,
+              originalQuantity: totalStock,
+              currentQuantity: totalStock,
+              quantityInStock: centralQty,
+              consumedQuantity: 0,
+              locationQuantities,
+              unit: item.unit || 'pieces',
+              unitCost: item.costPrice || 50,
+              purchaseBillRef: 'OPENING-STOCK',
+              supplierName: 'Opening Balance Inventory',
+              daysToExpiry: 180,
+              status: totalStock > 0 ? 'active' : 'depleted',
+              createdAt: nowIso,
+              updatedAt: nowIso,
+            };
+            list.push(openingBatch);
+            batchesModified = true;
+          }
+        });
+
+        if (batchesModified) {
+          this.saveBatches(list);
+        }
+
+        return list;
       } catch {
         return INITIAL_BATCHES;
       }
@@ -964,25 +1071,360 @@ export const warehouseStorage = {
 
   saveBatches(list: BatchRecord[]): void {
     try {
-      // Recalculate dynamic days to expiry on save/load
+      // Recalculate dynamic days to expiry, currentQuantity, and status on save
       const now = new Date().getTime();
       const updated = list.map((b) => {
         const days = Math.ceil((new Date(b.expiryDate).getTime() - now) / (1000 * 3600 * 24));
+        const locQuantities = b.locationQuantities || {
+          central: b.quantityInStock || 0,
+          'wh-central-amd': b.quantityInStock || 0,
+        };
+
+        // Total active across real distinct locations (ignoring warehouse alias)
+        let totalActive = 0;
+        Object.entries(locQuantities).forEach(([loc, qty]) => {
+          if (loc !== 'wh-central-amd') {
+            totalActive += Math.max(0, Math.floor(Number(qty) || 0));
+          }
+        });
+
+        const centralStock = Math.max(0, Math.floor(Number(locQuantities['central'] ?? locQuantities['wh-central-amd'] ?? b.quantityInStock) || 0));
+
         let status = b.status;
-        if (b.quantityInStock <= 0) status = 'depleted';
+        if (totalActive <= 0) status = 'depleted';
         else if (days <= 0) status = 'expired';
         else if (days <= 30) status = 'near_expiry';
         else status = 'active';
 
-        return { ...b, daysToExpiry: days, status };
+        return {
+          ...b,
+          originalQuantity: b.originalQuantity ?? b.initialQuantity ?? totalActive,
+          currentQuantity: totalActive,
+          quantityInStock: centralStock,
+          locationQuantities: locQuantities,
+          daysToExpiry: days,
+          status,
+          updatedAt: new Date().toISOString(),
+        };
       });
 
       setWhCached(WH_KEYS.BATCHES, updated);
       safeStorage.setItem(WH_KEYS.BATCHES, JSON.stringify(updated));
       this.notifySubscribers();
+      cloudSync.debouncedSyncCollection('inventory_batches', updated);
     } catch (e) {
       console.error(e);
     }
+  },
+
+  // FIFO Allocation for Transfers with Auto-Batch Provisioning
+  allocateBatchesForTransfer(
+    itemId: string,
+    sourceLocationId: string,
+    requestedQty: number
+  ): { success: boolean; allocations: BatchAllocation[]; error?: string } {
+    if (requestedQty <= 0) {
+      return { success: false, allocations: [], error: 'Transfer quantity must be greater than zero.' };
+    }
+
+    const batches = this.getBatches();
+    const cleanId = String(itemId || '').trim().toLowerCase();
+    const sourceKey = (sourceLocationId === 'warehouse' || sourceLocationId === 'wh-central-amd') ? 'central' : sourceLocationId;
+
+    // Filter active matching batches with stock at source, sorted FIFO (earliest expiry / creation first)
+    let matchingBatches = batches
+      .filter((b) => {
+        const isMatch = b.itemId === itemId || (b.sku && b.sku.toLowerCase() === cleanId) || b.id === itemId;
+        const available = Math.max(0, Math.floor(Number(b.locationQuantities?.[sourceKey] ?? (sourceKey === 'central' ? b.quantityInStock : 0)) || 0));
+        return isMatch && available > 0 && b.status !== 'depleted';
+      })
+      .sort((a, b) => new Date(a.expiryDate || 0).getTime() - new Date(b.expiryDate || 0).getTime());
+
+    let totalAvailable = matchingBatches.reduce((sum, b) => {
+      return sum + Math.max(0, Math.floor(Number(b.locationQuantities?.[sourceKey] ?? (sourceKey === 'central' ? b.quantityInStock : 0)) || 0));
+    }, 0);
+
+    // If source is Central and batch stock is lower than requested, check master inventory to auto-provision standard batch
+    if (totalAvailable < requestedQty && sourceKey === 'central') {
+      const inventory = storage.getInventory();
+      const invItem = inventory.find((i) => i.id === itemId || (i.sku && i.sku.toLowerCase() === cleanId));
+      const deficit = requestedQty - totalAvailable;
+
+      if (invItem) {
+        const nowIso = new Date().toISOString();
+        const autoBatchId = `bat-${invItem.id}-${Date.now()}`;
+        const autoBatch: BatchRecord = {
+          id: autoBatchId,
+          itemId: invItem.id,
+          sku: invItem.sku,
+          name: invItem.name,
+          category: invItem.category || 'General',
+          batchNumber: `BATCH-${invItem.sku.slice(0, 4).toUpperCase()}-${Date.now().toString().slice(-4)}`,
+          warehouseId: 'wh-central-amd',
+          warehouseName: 'Central Warehouse',
+          mfgDate: nowIso.split('T')[0],
+          expiryDate: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
+          initialQuantity: Math.max(deficit, Number(invItem.stockQuantity) || deficit),
+          originalQuantity: Math.max(deficit, Number(invItem.stockQuantity) || deficit),
+          originalUnit: invItem.unit || 'units',
+          piecesPerBox: invItem.piecesPerBox || 1,
+          originalBaseQuantity: Math.max(deficit, Number(invItem.stockQuantity) || deficit),
+          currentBaseQuantity: Math.max(deficit, Number(invItem.stockQuantity) || deficit),
+          currentQuantity: Math.max(deficit, Number(invItem.stockQuantity) || deficit),
+          quantityInStock: Math.max(deficit, Number(invItem.stockQuantity) || deficit),
+          consumedQuantity: 0,
+          consumedBaseQuantity: 0,
+          locationQuantities: {
+            central: Math.max(deficit, Number(invItem.stockQuantity) || deficit),
+            'wh-central-amd': Math.max(deficit, Number(invItem.stockQuantity) || deficit),
+          },
+          locationUnit: 'UNIT',
+          unit: invItem.unit,
+          unitCost: invItem.costPrice || 20,
+          purchaseBillRef: 'CENTRAL-STOCK',
+          supplierName: 'Central Warehouse Hub',
+          daysToExpiry: 365,
+          status: 'active',
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+
+        batches.unshift(autoBatch);
+        matchingBatches.unshift(autoBatch);
+        totalAvailable += autoBatch.quantityInStock;
+      }
+    }
+
+    if (totalAvailable < requestedQty) {
+      return {
+        success: false,
+        allocations: [],
+        error: `Insufficient batch stock at source location. Available: ${totalAvailable}, Requested: ${requestedQty}`,
+      };
+    }
+
+    let remainingToAllocate = requestedQty;
+    const allocations: BatchAllocation[] = [];
+
+    for (const b of matchingBatches) {
+      if (remainingToAllocate <= 0) break;
+      if (!b.locationQuantities) b.locationQuantities = {};
+      const currentLocQty = Math.max(0, Math.floor(Number(b.locationQuantities[sourceKey] ?? (sourceKey === 'central' ? b.quantityInStock : 0)) || 0));
+      const takeQty = Math.min(remainingToAllocate, currentLocQty);
+
+      b.locationQuantities[sourceKey] = currentLocQty - takeQty;
+      if (sourceKey === 'central') {
+        b.locationQuantities['wh-central-amd'] = b.locationQuantities[sourceKey];
+        b.quantityInStock = b.locationQuantities[sourceKey];
+      }
+
+      b.currentQuantity = Math.max(0, (Number(b.currentQuantity) || 0) - takeQty);
+      b.currentBaseQuantity = b.currentQuantity;
+      b.updatedAt = new Date().toISOString();
+
+      allocations.push({
+        batchId: b.id,
+        batchNumber: b.batchNumber,
+        quantity: takeQty,
+      });
+
+      remainingToAllocate -= takeQty;
+    }
+
+    this.saveBatches(batches);
+    return { success: true, allocations };
+  },
+
+  // Confirm Inwarding of Allocated Batches at Destination
+  confirmBatchTransfer(allocations: BatchAllocation[], destinationLocationId: string): boolean {
+    if (!allocations || allocations.length === 0) return true;
+    const batches = this.getBatches();
+    const destKey = (destinationLocationId === 'warehouse' || destinationLocationId === 'wh-central-amd') ? 'central' : destinationLocationId;
+    const nowIso = new Date().toISOString();
+
+    allocations.forEach((alloc) => {
+      const b = batches.find((bat) => bat.id === alloc.batchId || bat.batchNumber === alloc.batchNumber);
+      if (b) {
+        if (!b.locationQuantities) b.locationQuantities = {};
+        const currentDest = Math.max(0, Math.floor(Number(b.locationQuantities[destKey]) || 0));
+        b.locationQuantities[destKey] = currentDest + alloc.quantity;
+        if (destKey === 'central') {
+          b.locationQuantities['wh-central-amd'] = b.locationQuantities[destKey];
+          b.quantityInStock = b.locationQuantities[destKey];
+        }
+        b.currentQuantity = Math.max(0, (Number(b.currentQuantity) || 0) + alloc.quantity);
+        b.currentBaseQuantity = b.currentQuantity;
+        b.updatedAt = nowIso;
+      }
+    });
+
+    this.saveBatches(batches);
+    return true;
+  },
+
+  // Revert / Rollback Batch Transfer on Cancellation
+  revertBatchTransfer(allocations: BatchAllocation[], sourceLocationId: string): boolean {
+    if (!allocations || allocations.length === 0) return true;
+    const batches = this.getBatches();
+    const sourceKey = (sourceLocationId === 'warehouse' || sourceLocationId === 'wh-central-amd') ? 'central' : sourceLocationId;
+    const nowIso = new Date().toISOString();
+
+    allocations.forEach((alloc) => {
+      const b = batches.find((bat) => bat.id === alloc.batchId || bat.batchNumber === alloc.batchNumber);
+      if (b) {
+        if (!b.locationQuantities) b.locationQuantities = {};
+        const currentSrc = Math.max(0, Math.floor(Number(b.locationQuantities[sourceKey]) || 0));
+        b.locationQuantities[sourceKey] = currentSrc + alloc.quantity;
+        if (sourceKey === 'central') {
+          b.locationQuantities['wh-central-amd'] = b.locationQuantities[sourceKey];
+          b.quantityInStock = b.locationQuantities[sourceKey];
+        }
+        b.currentQuantity = Math.max(0, (Number(b.currentQuantity) || 0) + alloc.quantity);
+        b.currentBaseQuantity = b.currentQuantity;
+        b.updatedAt = nowIso;
+      }
+    });
+
+    this.saveBatches(batches);
+    return true;
+  },
+
+  // Auto-Reconcile Central Hub and Store Stocks with Batch Ledger
+  reconcileCentralStockWithBatches(): { adjustedCount: number; totalBatches: number } {
+    const inventory = storage.getInventory();
+    const batches = this.getBatches();
+    let adjustedCount = 0;
+    const nowIso = new Date().toISOString();
+
+    inventory.forEach((inv) => {
+      const centralStock = Math.max(0, Math.floor(Number(inv.stockQuantity) || 0));
+      const cleanSku = (inv.sku || '').toLowerCase();
+      const itemBatches = batches.filter(
+        (b) => b.itemId === inv.id || (b.sku && b.sku.toLowerCase() === cleanSku)
+      );
+
+      const totalBatchCentral = itemBatches.reduce((sum, b) => {
+        return sum + Math.max(0, Math.floor(Number(b.locationQuantities?.['central'] ?? (b.quantityInStock || 0)) || 0));
+      }, 0);
+
+      if (totalBatchCentral !== centralStock) {
+        adjustedCount++;
+        if (itemBatches.length === 0 && centralStock > 0) {
+          const newBatchId = `bat-auto-${inv.id}-${Date.now()}`;
+          batches.unshift({
+            id: newBatchId,
+            itemId: inv.id,
+            sku: inv.sku,
+            name: inv.name,
+            category: inv.category || 'General',
+            batchNumber: `BATCH-${inv.sku.slice(0, 4).toUpperCase()}-01`,
+            warehouseId: 'wh-central-amd',
+            warehouseName: 'Central Warehouse',
+            mfgDate: nowIso.split('T')[0],
+            expiryDate: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
+            initialQuantity: centralStock,
+            originalQuantity: centralStock,
+            originalUnit: inv.unit || 'units',
+            piecesPerBox: inv.piecesPerBox || 1,
+            originalBaseQuantity: centralStock,
+            currentBaseQuantity: centralStock,
+            currentQuantity: centralStock,
+            quantityInStock: centralStock,
+            consumedQuantity: 0,
+            consumedBaseQuantity: 0,
+            locationQuantities: {
+              central: centralStock,
+              'wh-central-amd': centralStock,
+            },
+            locationUnit: 'UNIT',
+            unit: inv.unit || 'units',
+            unitCost: inv.costPrice || 20,
+            purchaseBillRef: 'CENTRAL-STOCK',
+            supplierName: 'Central Warehouse Hub',
+            daysToExpiry: 365,
+            status: 'active',
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          });
+        } else if (itemBatches.length > 0) {
+          const delta = centralStock - totalBatchCentral;
+          const target = itemBatches[0];
+          if (!target.locationQuantities) target.locationQuantities = {};
+          const curCentral = Math.max(0, Math.floor(Number(target.locationQuantities['central'] ?? target.quantityInStock ?? 0)));
+          const newCentral = Math.max(0, curCentral + delta);
+          target.locationQuantities['central'] = newCentral;
+          target.locationQuantities['wh-central-amd'] = newCentral;
+          target.quantityInStock = newCentral;
+          target.currentQuantity = Math.max(0, (Number(target.currentQuantity) || 0) + delta);
+          target.currentBaseQuantity = target.currentQuantity;
+          target.updatedAt = nowIso;
+        }
+      }
+    });
+
+    if (adjustedCount > 0) {
+      this.saveBatches(batches);
+      // Trigger backend reconciliation endpoint if available
+      try {
+        fetch('/api/batches/reconcile', { method: 'POST' }).catch(() => {});
+      } catch {
+        // Non-critical
+      }
+    }
+
+    return { adjustedCount, totalBatches: batches.length };
+  },
+
+  // POS Sale: FIFO Batch Consumption at Store
+  consumeBatchesForSale(
+    itemId: string,
+    storeId: string,
+    saleQty: number
+  ): { success: boolean; allocations: BatchAllocation[]; error?: string } {
+    if (saleQty <= 0) {
+      return { success: true, allocations: [] };
+    }
+
+    const batches = this.getBatches();
+    const cleanId = String(itemId || '').trim().toLowerCase();
+    const storeKey = storeId || 'central';
+
+    // Find active batches for product at store, sorted FIFO by expiry date
+    const storeBatches = batches
+      .filter((b) => {
+        const isMatch = b.itemId === itemId || (b.sku && b.sku.toLowerCase() === cleanId) || b.id === itemId;
+        const available = Math.max(0, Math.floor(Number(b.locationQuantities?.[storeKey] ?? (storeKey === 'central' ? b.quantityInStock : 0)) || 0));
+        return isMatch && available > 0 && b.status !== 'depleted';
+      })
+      .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+
+    let remainingToConsume = saleQty;
+    const allocations: BatchAllocation[] = [];
+
+    for (const b of storeBatches) {
+      if (remainingToConsume <= 0) break;
+      if (!b.locationQuantities) b.locationQuantities = {};
+      const currentStoreQty = Math.max(0, Math.floor(Number(b.locationQuantities[storeKey] ?? (storeKey === 'central' ? b.quantityInStock : 0)) || 0));
+      const takeQty = Math.min(remainingToConsume, currentStoreQty);
+
+      b.locationQuantities[storeKey] = currentStoreQty - takeQty;
+      if (storeKey === 'central') {
+        b.locationQuantities['wh-central-amd'] = b.locationQuantities[storeKey];
+        b.quantityInStock = b.locationQuantities[storeKey];
+      }
+
+      b.consumedQuantity = (b.consumedQuantity || 0) + takeQty;
+      allocations.push({
+        batchId: b.id,
+        batchNumber: b.batchNumber,
+        quantity: takeQty,
+      });
+
+      remainingToConsume -= takeQty;
+    }
+
+    this.saveBatches(batches);
+    return { success: true, allocations };
   },
 
   // =========================================================================
@@ -1014,6 +1456,7 @@ export const warehouseStorage = {
     }
   },
 
+  // Transfer methods with concurrency & idempotency protection
   createStockTransfer(transferData: Omit<StockTransfer, 'id' | 'transferNumber' | 'totalValuation'>): StockTransfer {
     const transfers = this.getStockTransfers();
     const transferNumber = `TR-2026-${(transfers.length + 43).toString().padStart(3, '0')}`;
@@ -1030,51 +1473,117 @@ export const warehouseStorage = {
       otpOrPin: transferData.otpOrPin || Math.floor(1000 + Math.random() * 9000).toString(),
     };
 
-    // If auto dispatched, decrement source stock & audit in a single batch
+    // If auto-dispatched directly on creation, deduct source stock atomically
     if (newTransfer.status === 'dispatched_in_transit') {
       newTransfer.dispatchDate = new Date().toISOString().split('T')[0];
-
       const inventory = storage.getInventory();
+      const nowIso = new Date().toISOString();
+      const nowTs = Date.now();
 
       if (newTransfer.type === 'warehouse_to_store') {
-        // Pre-flight validation: Central WH must have sufficient stock
+        // Pre-flight validation: Central WH must have sufficient authoritative stock for ALL items
         for (const item of newTransfer.items) {
-          const qty = item.dispatchedQty || item.requestedQty;
-          const invItem = inventory.find((i) => i.id === item.itemId);
-          const availableStock = invItem ? invItem.stockQuantity : 0;
-          if (qty > availableStock) {
+          const invItem = inventory.find(
+            (i) => i.id === item.itemId || (i.sku && i.sku.toLowerCase() === item.sku.toLowerCase())
+          );
+          const rawQty = Math.max(0, Math.floor(Number(item.dispatchedQty || item.requestedQty) || 0));
+          item.baseQuantity = rawQty;
+
+          const availableStock = invItem ? Math.max(0, Math.floor(Number(invItem.stockQuantity) || 0)) : 0;
+          if (rawQty <= 0 || rawQty > availableStock) {
             throw new Error(
-              `Cannot dispatch transfer: Item "${item.name}" requested ${qty} ${item.unit || 'units'}, but Central Warehouse has only ${availableStock} ${item.unit || 'units'} available. Please inward stock first via GRN Bill or reduce dispatch quantity.`
+              `Cannot dispatch transfer: Item "${item.name}" requested ${rawQty} ${item.unit || invItem?.unit || 'units'}, but Central Warehouse has only ${availableStock} units available. Please inward stock first or adjust transfer quantity.`
             );
           }
         }
 
-        const stockDeltas = newTransfer.items.map((item) => {
-          const qty = item.dispatchedQty || item.requestedQty;
-          return {
-            id: item.itemId,
-            delta: -qty,
-            reason: `Dispatched transfer ${transferNumber} to ${newTransfer.destinationName}`,
-          };
+        const auditRecords: Array<Omit<StockMovementAudit, 'id' | 'timestamp'>> = [];
+        newTransfer.items.forEach((item, idx) => {
+          const invItem = inventory.find(
+            (i) => i.id === item.itemId || (i.sku && i.sku.toLowerCase() === item.sku.toLowerCase())
+          );
+          if (invItem) {
+            const isBoxUnit = isBoxDenominatedUnit(item.transferUnit || item.unit || invItem.unit);
+            const rawQty = Math.max(0, Math.floor(Number(item.dispatchedQty || item.requestedQty) || 0));
+            item.baseQuantity = rawQty;
+
+            // Allocate FIFO batches from Central Warehouse
+            const allocRes = this.allocateBatchesForTransfer(invItem.id, 'central', rawQty);
+            if (allocRes.success && allocRes.allocations.length > 0) {
+              item.batchAllocations = allocRes.allocations;
+              item.batchNumber = allocRes.allocations.map((a) => a.batchNumber).join(', ');
+            }
+
+            const previousStock = Math.max(0, Math.floor(Number(invItem.stockQuantity) || 0));
+            const newWhStock = Math.max(0, previousStock - rawQty);
+            invItem.stockQuantity = newWhStock;
+            invItem.fullBoxStock = isBoxUnit ? newWhStock : 0;
+            invItem.loosePieceStock = 0;
+            invItem.totalPieceEquivalent = newWhStock;
+            invItem.total_piece_equivalent = newWhStock;
+
+            (invItem as any).lastStockChange = nowTs;
+            invItem.updatedAt = nowIso;
+
+            auditRecords.push({
+              transactionId: `TXN-${Date.now().toString().slice(-5)}${idx}`,
+              referenceNumber: transferNumber,
+              itemId: item.itemId,
+              sku: item.sku,
+              itemName: item.name,
+              batchNumber: item.batchNumber,
+              movementType: 'warehouse_transfer_out' as const,
+              fromLocation: newTransfer.sourceName,
+              toLocation: `In Transit ➔ ${newTransfer.destinationName}`,
+              quantity: -rawQty,
+              quantityChanged: -rawQty,
+              previousStock,
+              newStock: newWhStock,
+              unit: item.unit || invItem.unit || 'units',
+              balanceAfter: newWhStock,
+              unitCost: item.unitCost,
+              totalCostImpact: -rawQty * item.unitCost,
+              performedBy: newTransfer.dispatchedBy || 'Warehouse Manager',
+              userRole: 'Warehouse Manager' as const,
+              status: 'Completed',
+              notes: `Transfer dispatched: Deducted ${rawQty} ${item.unit || invItem.unit || 'units'} from Central Warehouse. Before: ${previousStock} ➔ After: ${newWhStock}. Carrier: ${newTransfer.carrierName || 'Internal'} • OTP: ${newTransfer.otpOrPin} • Batches: ${item.batchNumber || 'Auto'}`,
+            });
+          }
         });
-        storage.batchAdjustStock(stockDeltas);
+        storage.saveInventory(inventory);
+        this.addAuditRecords(auditRecords);
       } else if (newTransfer.type === 'store_to_warehouse_return') {
-        // Deduct from the source store's allocation
         let invModified = false;
         newTransfer.items.forEach((item) => {
-          const qty = item.dispatchedQty || item.requestedQty;
-          const invItem = inventory.find((i) => i.id === item.itemId);
+          const invItem = inventory.find(
+            (i) => i.id === item.itemId || (i.sku && i.sku.toLowerCase() === item.sku.toLowerCase())
+          );
           if (invItem && invItem.storeAllocations) {
-            const currentStoreStock = invItem.storeAllocations[newTransfer.sourceId] || 0;
-            invItem.storeAllocations[newTransfer.sourceId] = Math.max(0, currentStoreStock - qty);
-            if (invItem.storeBoxAllocations && invItem.storeBoxAllocations[newTransfer.sourceId]) {
-              const currentBoxes = invItem.storeBoxAllocations[newTransfer.sourceId].fullBoxes || 0;
-              invItem.storeBoxAllocations[newTransfer.sourceId].fullBoxes = Math.max(0, currentBoxes - qty);
-              const piecesPerBox = invItem.piecesPerBox || 10;
-              const loose = invItem.storeBoxAllocations[newTransfer.sourceId].loosePieces || 0;
-              invItem.storeBoxAllocations[newTransfer.sourceId].totalPieces = (invItem.storeBoxAllocations[newTransfer.sourceId].fullBoxes * piecesPerBox) + loose;
-              invItem.storeBoxAllocations[newTransfer.sourceId].total_piece_equivalent = invItem.storeBoxAllocations[newTransfer.sourceId].totalPieces;
+            const isBoxUnit = isBoxDenominatedUnit(item.transferUnit || item.unit || invItem.unit);
+            const rawQty = Math.max(0, Math.floor(Number(item.dispatchedQty || item.requestedQty) || 0));
+            item.baseQuantity = rawQty;
+
+            // Allocate FIFO batches from store
+            const allocRes = this.allocateBatchesForTransfer(invItem.id, newTransfer.sourceId, rawQty);
+            if (allocRes.success && allocRes.allocations.length > 0) {
+              item.batchAllocations = allocRes.allocations;
+              item.batchNumber = allocRes.allocations.map((a) => a.batchNumber).join(', ');
             }
+
+            const currentStoreStock = Math.max(0, Math.floor(Number(invItem.storeAllocations[newTransfer.sourceId]) || 0));
+            const newStoreStock = Math.max(0, currentStoreStock - rawQty);
+            invItem.storeAllocations[newTransfer.sourceId] = newStoreStock;
+
+            if (!invItem.storeBoxAllocations) invItem.storeBoxAllocations = {};
+            invItem.storeBoxAllocations[newTransfer.sourceId] = {
+              fullBoxes: isBoxUnit ? newStoreStock : 0,
+              loosePieces: 0,
+              totalPieces: newStoreStock,
+              total_piece_equivalent: newStoreStock,
+            };
+
+            (invItem as any).lastStockChange = nowTs;
+            invItem.updatedAt = nowIso;
             invModified = true;
           }
         });
@@ -1082,29 +1591,6 @@ export const warehouseStorage = {
           storage.saveInventory(inventory);
         }
       }
-
-      const auditRecords = newTransfer.items.map((item) => {
-        const qty = item.dispatchedQty || item.requestedQty;
-        return {
-          referenceNumber: transferNumber,
-          itemId: item.itemId,
-          sku: item.sku,
-          itemName: item.name,
-          batchNumber: item.batchNumber,
-          movementType: 'warehouse_transfer_out' as const,
-          fromLocation: newTransfer.sourceName,
-          toLocation: `In Transit ➔ ${newTransfer.destinationName}`,
-          quantity: -qty,
-          unit: item.unit,
-          balanceAfter: 0,
-          unitCost: item.unitCost,
-          totalCostImpact: -qty * item.unitCost,
-          performedBy: newTransfer.dispatchedBy || 'Warehouse Manager',
-          userRole: 'Warehouse Manager' as const,
-          notes: `Vehicle: ${newTransfer.vehicleNumber || 'Van'} • Carrier: ${newTransfer.carrierName || 'Internal'} • OTP: ${newTransfer.otpOrPin || 'N/A'}`,
-        };
-      });
-      this.addAuditRecords(auditRecords);
     }
 
     this.saveStockTransfers([newTransfer, ...transfers]);
@@ -1127,231 +1613,493 @@ export const warehouseStorage = {
     vehicleNumber: string,
     driverContact: string
   ): { success: boolean; error?: string } {
-    const transfers = this.getStockTransfers();
-    const transfer = transfers.find((t) => t.id === transferId);
-    if (!transfer) {
-      return { success: false, error: 'Transfer not found.' };
+    const lockKey = `dispatch_${transferId}`;
+    if (inFlightTransferLocks.has(lockKey)) {
+      return { success: false, error: 'Dispatch operation is already processing. Please wait.' };
     }
+    inFlightTransferLocks.add(lockKey);
 
-    if (transfer.status === 'dispatched_in_transit' || transfer.status === 'completed') {
-      return { success: false, error: 'Transfer has already been dispatched or completed.' };
-    }
-
-    const inventory = storage.getInventory();
-
-    // If warehouse to store, check Central Warehouse stock availability first
-    if (transfer.type === 'warehouse_to_store') {
-      for (const item of transfer.items) {
-        const qty = item.dispatchedQty || item.requestedQty;
-        const invItem = inventory.find((i) => i.id === item.itemId);
-        const availableStock = invItem ? invItem.stockQuantity : 0;
-        if (qty > availableStock) {
-          return {
-            success: false,
-            error: `Cannot dispatch transfer: Item "${item.name}" needs ${qty} ${item.unit || 'units'}, but Central Warehouse only has ${availableStock} ${item.unit || 'units'} available. Please inward stock first via GRN Bill or adjust dispatch quantity.`,
-          };
-        }
-      }
-
-      // Deduct stock from source warehouse in a single batch
-      const stockDeltas = transfer.items.map((item) => {
-        const qty = item.dispatchedQty || item.requestedQty;
-        return {
-          id: item.itemId,
-          delta: -qty,
-          reason: `Dispatched transfer ${transfer.transferNumber} to ${transfer.destinationName}`,
-        };
-      });
-      storage.batchAdjustStock(stockDeltas);
-    } else if (transfer.type === 'store_to_warehouse_return') {
-      let invModified = false;
-      transfer.items.forEach((item) => {
-        const qty = item.dispatchedQty || item.requestedQty;
-        const invItem = inventory.find((i) => i.id === item.itemId);
-        if (invItem && invItem.storeAllocations) {
-          const currentStoreStock = invItem.storeAllocations[transfer.sourceId] || 0;
-          invItem.storeAllocations[transfer.sourceId] = Math.max(0, currentStoreStock - qty);
-          if (invItem.storeBoxAllocations && invItem.storeBoxAllocations[transfer.sourceId]) {
-            const currentBoxes = invItem.storeBoxAllocations[transfer.sourceId].fullBoxes || 0;
-            invItem.storeBoxAllocations[transfer.sourceId].fullBoxes = Math.max(0, currentBoxes - qty);
-            const piecesPerBox = invItem.piecesPerBox || 10;
-            const loose = invItem.storeBoxAllocations[transfer.sourceId].loosePieces || 0;
-            invItem.storeBoxAllocations[transfer.sourceId].totalPieces = (invItem.storeBoxAllocations[transfer.sourceId].fullBoxes * piecesPerBox) + loose;
-            invItem.storeBoxAllocations[transfer.sourceId].total_piece_equivalent = invItem.storeBoxAllocations[transfer.sourceId].totalPieces;
-          }
-          invModified = true;
-        }
-      });
-      if (invModified) {
-        storage.saveInventory(inventory);
-      }
-    }
-
-    transfer.status = 'dispatched_in_transit';
-    transfer.dispatchDate = new Date().toISOString().split('T')[0];
-    transfer.carrierName = carrierName;
-    transfer.vehicleNumber = vehicleNumber;
-    transfer.driverContact = driverContact;
-    if (!transfer.otpOrPin) {
-      transfer.otpOrPin = Math.floor(1000 + Math.random() * 9000).toString();
-    }
-
-    const auditRecords = transfer.items.map((item) => {
-      const qty = item.dispatchedQty || item.requestedQty;
-      return {
-        referenceNumber: transfer.transferNumber,
-        itemId: item.itemId,
-        sku: item.sku,
-        itemName: item.name,
-        batchNumber: item.batchNumber,
-        movementType: 'warehouse_transfer_out' as const,
-        fromLocation: transfer.sourceName,
-        toLocation: `In Transit ➔ ${transfer.destinationName}`,
-        quantity: -qty,
-        unit: item.unit,
-        balanceAfter: 0,
-        unitCost: item.unitCost,
-        totalCostImpact: -qty * item.unitCost,
-        performedBy: transfer.dispatchedBy || 'Warehouse Manager',
-        userRole: 'Warehouse Manager' as const,
-        notes: `Dispatched in transit with tracking OTP: ${transfer.otpOrPin} • Vehicle: ${vehicleNumber} • Carrier: ${carrierName}`,
-      };
-    });
-    this.addAuditRecords(auditRecords);
-
-    this.saveStockTransfers(transfers);
-
-    // If an associated store indent exists, mark it as in transit
     try {
-      const indents = this.getStoreIndents();
-      const linkedIndent = indents.find(
-        (ind) =>
-          ind.storeId === transfer.destinationId &&
-          (ind.status === 'converted_to_transfer' || ind.status === 'approved')
-      );
-      if (linkedIndent) {
-        linkedIndent.status = 'converted_to_transfer';
-        this.saveStoreIndents(indents);
+      const transfers = this.getStockTransfers();
+      const transfer = transfers.find((t) => t.id === transferId);
+      if (!transfer) {
+        return { success: false, error: 'Transfer not found.' };
       }
-    } catch {
-      // Non-critical
-    }
 
-    return { success: true };
+      // Idempotency: Never deduct or dispatch an already dispatched/completed transfer
+      if (transfer.status === 'dispatched_in_transit' || transfer.status === 'completed' || transfer.status === 'partially_received') {
+        return { success: false, error: 'Transfer has already been dispatched or completed.' };
+      }
+
+      const inventory = storage.getInventory();
+      const nowIso = new Date().toISOString();
+      const nowTs = Date.now();
+
+      // If warehouse to store, check Central Warehouse stock availability first
+      if (transfer.type === 'warehouse_to_store') {
+        for (const item of transfer.items) {
+          const invItem = inventory.find(
+            (i) => i.id === item.itemId || (i.sku && i.sku.toLowerCase() === item.sku.toLowerCase())
+          );
+          const rawQty = Math.max(0, Math.floor(Number(item.dispatchedQty || item.requestedQty) || 0));
+          item.baseQuantity = rawQty;
+
+          const availableStock = invItem ? Math.max(0, Math.floor(Number(invItem.stockQuantity) || 0)) : 0;
+          if (rawQty <= 0 || rawQty > availableStock) {
+            return {
+              success: false,
+              error: `Cannot dispatch transfer: Item "${item.name}" needs ${rawQty} ${item.unit || invItem?.unit || 'units'}, but Central Warehouse only has ${availableStock} available. Please inward stock first or adjust transfer quantity.`,
+            };
+          }
+        }
+
+        // Deduct exact unit quantity from source Central Warehouse
+        const auditRecords: Array<Omit<StockMovementAudit, 'id' | 'timestamp'>> = [];
+        transfer.items.forEach((item, idx) => {
+          const invItem = inventory.find(
+            (i) => i.id === item.itemId || (i.sku && i.sku.toLowerCase() === item.sku.toLowerCase())
+          );
+          if (invItem) {
+            const isBoxUnit = isBoxDenominatedUnit(item.transferUnit || item.unit || invItem.unit);
+            const rawQty = Math.max(0, Math.floor(Number(item.dispatchedQty || item.requestedQty) || 0));
+            item.baseQuantity = rawQty;
+
+            // Allocate FIFO batches from Central Warehouse
+            const allocRes = this.allocateBatchesForTransfer(invItem.id, 'central', rawQty);
+            if (allocRes.success && allocRes.allocations.length > 0) {
+              item.batchAllocations = allocRes.allocations;
+              item.batchNumber = allocRes.allocations.map((a) => a.batchNumber).join(', ');
+            }
+
+            const previousStock = Math.max(0, Math.floor(Number(invItem.stockQuantity) || 0));
+            const newWhStock = Math.max(0, previousStock - rawQty);
+            invItem.stockQuantity = newWhStock;
+            invItem.fullBoxStock = isBoxUnit ? newWhStock : 0;
+            invItem.loosePieceStock = 0;
+            invItem.totalPieceEquivalent = newWhStock;
+            invItem.total_piece_equivalent = newWhStock;
+
+            (invItem as any).lastStockChange = nowTs;
+            invItem.updatedAt = nowIso;
+
+            auditRecords.push({
+              transactionId: `TXN-${Date.now().toString().slice(-5)}${idx}`,
+              referenceNumber: transfer.transferNumber,
+              itemId: item.itemId,
+              sku: item.sku,
+              itemName: item.name,
+              batchNumber: item.batchNumber,
+              movementType: 'warehouse_transfer_out' as const,
+              fromLocation: transfer.sourceName,
+              toLocation: `In Transit ➔ ${transfer.destinationName}`,
+              quantity: -rawQty,
+              quantityChanged: -rawQty,
+              previousStock,
+              newStock: newWhStock,
+              unit: item.unit || invItem.unit || 'units',
+              balanceAfter: newWhStock,
+              unitCost: item.unitCost,
+              totalCostImpact: -rawQty * item.unitCost,
+              performedBy: transfer.dispatchedBy || 'Warehouse Manager',
+              userRole: 'Warehouse Manager' as const,
+              status: 'Completed',
+              notes: `Dispatched in transit with tracking OTP: ${transfer.otpOrPin} • Vehicle: ${vehicleNumber} • Carrier: ${carrierName}. Warehouse Before: ${previousStock} ➔ After: ${newWhStock}. Batches: ${item.batchNumber || 'Auto'}`,
+            });
+          }
+        });
+
+        storage.saveInventory(inventory);
+        this.addAuditRecords(auditRecords);
+      } else if (transfer.type === 'store_to_warehouse_return') {
+        let invModified = false;
+        transfer.items.forEach((item) => {
+          const invItem = inventory.find(
+            (i) => i.id === item.itemId || (i.sku && i.sku.toLowerCase() === item.sku.toLowerCase())
+          );
+          if (invItem && invItem.storeAllocations) {
+            const isBoxUnit = isBoxDenominatedUnit(item.transferUnit || item.unit || invItem.unit);
+            const rawQty = Math.max(0, Math.floor(Number(item.dispatchedQty || item.requestedQty) || 0));
+            item.baseQuantity = rawQty;
+
+            // Allocate FIFO batches from store
+            const allocRes = this.allocateBatchesForTransfer(invItem.id, transfer.sourceId, rawQty);
+            if (allocRes.success && allocRes.allocations.length > 0) {
+              item.batchAllocations = allocRes.allocations;
+              item.batchNumber = allocRes.allocations.map((a) => a.batchNumber).join(', ');
+            }
+
+            const currentStoreStock = Math.max(0, Math.floor(Number(invItem.storeAllocations[transfer.sourceId]) || 0));
+            const newStoreStock = Math.max(0, currentStoreStock - rawQty);
+            invItem.storeAllocations[transfer.sourceId] = newStoreStock;
+
+            if (!invItem.storeBoxAllocations) invItem.storeBoxAllocations = {};
+            invItem.storeBoxAllocations[transfer.sourceId] = {
+              fullBoxes: isBoxUnit ? newStoreStock : 0,
+              loosePieces: 0,
+              totalPieces: newStoreStock,
+              total_piece_equivalent: newStoreStock,
+            };
+
+            (invItem as any).lastStockChange = nowTs;
+            invItem.updatedAt = nowIso;
+            invModified = true;
+          }
+        });
+        if (invModified) {
+          storage.saveInventory(inventory);
+        }
+      }
+
+      transfer.status = 'dispatched_in_transit';
+      transfer.dispatchDate = new Date().toISOString().split('T')[0];
+      transfer.carrierName = carrierName;
+      transfer.vehicleNumber = vehicleNumber;
+      transfer.driverContact = driverContact;
+      if (!transfer.otpOrPin) {
+        transfer.otpOrPin = Math.floor(1000 + Math.random() * 9000).toString();
+      }
+
+      this.saveStockTransfers(transfers);
+
+      // If an associated store indent exists, mark it as in transit
+      try {
+        const indents = this.getStoreIndents();
+        const linkedIndent = indents.find(
+          (ind) =>
+            ind.storeId === transfer.destinationId &&
+            (ind.status === 'converted_to_transfer' || ind.status === 'approved')
+        );
+        if (linkedIndent) {
+          linkedIndent.status = 'converted_to_transfer';
+          this.saveStoreIndents(indents);
+        }
+      } catch {
+        // Non-critical
+      }
+
+      return { success: true };
+    } finally {
+      inFlightTransferLocks.delete(lockKey);
+    }
   },
 
   receiveTransfer(transferId: string, receivedBy: string, itemReceivedMap: Record<string, number>): boolean {
-    const transfers = this.getStockTransfers();
-    const transfer = transfers.find((t) => t.id === transferId);
-    if (!transfer) return false;
+    const lockKey = `receive_${transferId}`;
+    if (inFlightTransferLocks.has(lockKey)) {
+      console.warn(`[WarehouseStorage] Receive already in progress for transfer: ${transferId}`);
+      return false;
+    }
+    inFlightTransferLocks.add(lockKey);
 
-    transfer.receivedDate = new Date().toISOString().split('T')[0];
-    transfer.receivedBy = receivedBy;
+    try {
+      const transfers = this.getStockTransfers();
+      const transfer = transfers.find((t) => t.id === transferId);
+      if (!transfer) return false;
 
-    const inventory = storage.getInventory();
-    let inventoryModified = false;
-    let hasPartial = false;
-    const auditRecords: Array<Omit<StockMovementAudit, 'id' | 'timestamp'>> = [];
-
-    transfer.items.forEach((item) => {
-      const receivedQty = itemReceivedMap[item.itemId] !== undefined ? itemReceivedMap[item.itemId] : item.dispatchedQty;
-      item.receivedQty = receivedQty;
-      if (receivedQty < item.dispatchedQty) {
-        item.damagedQty = item.dispatchedQty - receivedQty;
-        hasPartial = true;
+      // CRITICAL IDEMPOTENCY CHECK: Never allow an already received or completed transfer to add stock twice!
+      if (transfer.status === 'completed' || transfer.status === 'partially_received') {
+        console.warn(`[WarehouseStorage] Transfer ${transfer.transferNumber} has already been received. Skipping duplicate execution.`);
+        return false;
       }
 
-      // Add stock to store allocations in storage
-      const invItem = inventory.find((i) => i.id === item.itemId);
-      if (invItem) {
-        const piecesPerBox = invItem.piecesPerBox || 10;
-        if (transfer.type === 'store_to_warehouse_return') {
-          // Returning to Central Warehouse
-          invItem.stockQuantity = (invItem.stockQuantity || 0) + receivedQty;
-          if (invItem.sellAsLoose || (invItem.piecesPerBox && invItem.piecesPerBox > 1) || invItem.fullBoxStock !== undefined) {
-            invItem.fullBoxStock = (invItem.fullBoxStock !== undefined ? invItem.fullBoxStock : (invItem.stockQuantity - receivedQty)) + receivedQty;
-            invItem.full_box_stock = invItem.fullBoxStock;
-            invItem.stockQuantity = invItem.fullBoxStock;
-            invItem.totalPieceEquivalent = (invItem.fullBoxStock * piecesPerBox) + (invItem.loosePieceStock || 0);
-            invItem.total_piece_equivalent = invItem.totalPieceEquivalent;
-          }
-          inventoryModified = true;
-        } else {
-          // Inwarding at destination Store
-          if (!invItem.storeAllocations) invItem.storeAllocations = {};
-          const destStoreKey = transfer.destinationId;
-          const currentStoreAlloc = invItem.storeAllocations[destStoreKey] || 0;
-          invItem.storeAllocations[destStoreKey] = currentStoreAlloc + receivedQty;
+      if (transfer.status !== 'dispatched_in_transit') {
+        console.warn(`[WarehouseStorage] Transfer ${transfer.transferNumber} is not in transit (current status: ${transfer.status}).`);
+        return false;
+      }
 
-          // Box & Loose Replenishment / Receiving logic:
-          // Store receives full boxes, 0 loose pieces added. Does not convert into loose pieces until sold!
-          if (invItem.sellAsLoose || (invItem.piecesPerBox && invItem.piecesPerBox > 1)) {
+      transfer.receivedDate = new Date().toISOString().split('T')[0];
+      transfer.receivedBy = receivedBy;
+
+      const inventory = storage.getInventory();
+      let inventoryModified = false;
+      let hasPartial = false;
+      const nowIso = new Date().toISOString();
+      const nowTs = Date.now();
+      const auditRecords: Array<Omit<StockMovementAudit, 'id' | 'timestamp'>> = [];
+
+      transfer.items.forEach((item, idx) => {
+        const receivedQty = itemReceivedMap[item.itemId] !== undefined ? itemReceivedMap[item.itemId] : item.dispatchedQty;
+        item.receivedQty = receivedQty;
+        if (receivedQty < item.dispatchedQty) {
+          item.damagedQty = item.dispatchedQty - receivedQty;
+          hasPartial = true;
+        }
+
+        const invItem = inventory.find(
+          (i) => i.id === item.itemId || (i.sku && i.sku.toLowerCase() === item.sku.toLowerCase())
+        );
+        if (invItem) {
+          const isBoxUnit = isBoxDenominatedUnit(item.transferUnit || item.unit || invItem.unit);
+          const receivedUnits = Math.max(0, Math.floor(receivedQty));
+
+          if (transfer.type === 'store_to_warehouse_return') {
+            // Confirm batch return at Central Warehouse
+            this.confirmBatchTransfer(item.batchAllocations || [], 'central');
+
+            // Returning to Central Warehouse (Exact addition)
+            const previousStock = Math.max(0, Math.floor(Number(invItem.stockQuantity) || 0));
+            const newWhStock = previousStock + receivedUnits;
+            invItem.stockQuantity = newWhStock;
+            invItem.fullBoxStock = isBoxUnit ? newWhStock : 0;
+            invItem.loosePieceStock = 0;
+            invItem.totalPieceEquivalent = newWhStock;
+            invItem.total_piece_equivalent = newWhStock;
+
+            (invItem as any).lastStockChange = nowTs;
+            invItem.updatedAt = nowIso;
+            inventoryModified = true;
+
+            auditRecords.push({
+              transactionId: `TXN-${Date.now().toString().slice(-5)}${idx}`,
+              referenceNumber: transfer.transferNumber,
+              itemId: item.itemId,
+              sku: item.sku,
+              itemName: item.name,
+              batchNumber: item.batchNumber,
+              movementType: 'store_return_in' as const,
+              fromLocation: transfer.sourceName,
+              toLocation: 'Central Warehouse (WH-AMD-01)',
+              quantity: receivedUnits,
+              quantityChanged: receivedUnits,
+              previousStock,
+              newStock: newWhStock,
+              unit: item.unit || invItem.unit || 'units',
+              balanceAfter: newWhStock,
+              unitCost: item.unitCost,
+              totalCostImpact: receivedUnits * item.unitCost,
+              performedBy: receivedBy,
+              userRole: 'Store Manager',
+              status: 'Completed',
+              notes: `Store return verified: Returned ${receivedUnits} ${item.unit || invItem.unit || 'units'} to Central Warehouse. Before: ${previousStock} ➔ After: ${newWhStock}. Batches: ${item.batchNumber || 'Auto'}`,
+            });
+          } else {
+            // Inwarding at destination Store (Exact addition)
+            if (!invItem.storeAllocations) invItem.storeAllocations = {};
+            const destStoreKey = transfer.destinationId;
+
+            // Confirm batch receipt at destination store
+            this.confirmBatchTransfer(item.batchAllocations || [], destStoreKey);
+
+            const previousStoreStock = Math.max(0, Math.floor(Number(invItem.storeAllocations[destStoreKey]) || 0));
+            const newStoreStock = previousStoreStock + receivedUnits;
+            invItem.storeAllocations[destStoreKey] = newStoreStock;
+
             if (!invItem.storeBoxAllocations) invItem.storeBoxAllocations = {};
-            if (!invItem.storeBoxAllocations[destStoreKey]) {
-              invItem.storeBoxAllocations[destStoreKey] = { fullBoxes: currentStoreAlloc, loosePieces: 0 };
-            }
-            invItem.storeBoxAllocations[destStoreKey].fullBoxes += receivedQty;
-            invItem.storeBoxAllocations[destStoreKey].totalPieces = (invItem.storeBoxAllocations[destStoreKey].fullBoxes * piecesPerBox) + (invItem.storeBoxAllocations[destStoreKey].loosePieces || 0);
-            invItem.storeBoxAllocations[destStoreKey].total_piece_equivalent = invItem.storeBoxAllocations[destStoreKey].totalPieces;
+            invItem.storeBoxAllocations[destStoreKey] = {
+              fullBoxes: isBoxUnit ? newStoreStock : 0,
+              loosePieces: 0,
+              totalPieces: newStoreStock,
+              total_piece_equivalent: newStoreStock,
+            };
+
+            (invItem as any).lastStockChange = nowTs;
+            invItem.updatedAt = nowIso;
+            inventoryModified = true;
+
+            auditRecords.push({
+              transactionId: `TXN-${Date.now().toString().slice(-5)}${idx}`,
+              referenceNumber: transfer.transferNumber,
+              itemId: item.itemId,
+              sku: item.sku,
+              itemName: item.name,
+              batchNumber: item.batchNumber,
+              movementType: 'store_transfer_in' as const,
+              fromLocation: 'In Transit',
+              toLocation: transfer.destinationName,
+              quantity: receivedUnits,
+              quantityChanged: receivedUnits,
+              previousStock: previousStoreStock,
+              newStock: newStoreStock,
+              unit: item.unit || invItem.unit || 'units',
+              balanceAfter: newStoreStock,
+              unitCost: item.unitCost,
+              totalCostImpact: receivedUnits * item.unitCost,
+              performedBy: receivedBy,
+              userRole: 'Store Manager',
+              status: 'Completed',
+              notes: `Stock safely received at ${transfer.destinationName}: Added ${receivedUnits} ${item.unit || invItem.unit || 'units'}. Store Stock Before: ${previousStoreStock} ➔ After: ${newStoreStock}. Batches: ${item.batchNumber || 'Auto'}`,
+            });
           }
-          inventoryModified = true;
+        }
+      });
+
+      this.addAuditRecords(auditRecords);
+
+      if (inventoryModified) {
+        storage.saveInventory(inventory);
+      }
+
+      transfer.status = hasPartial ? 'partially_received' : 'completed';
+      this.saveStockTransfers(transfers);
+
+      // If an associated store indent exists, mark it as completed
+      try {
+        const indents = this.getStoreIndents();
+        const linkedIndent = indents.find(
+          (ind) =>
+            ind.storeId === transfer.destinationId &&
+            (ind.status === 'converted_to_transfer' || ind.status === 'approved')
+        );
+        if (linkedIndent) {
+          linkedIndent.status = 'completed';
+          this.saveStoreIndents(indents);
+        }
+      } catch {
+        // Non-critical
+      }
+
+      storage.addNotification({
+        title: `Stock Inward Completed at ${transfer.destinationName}`,
+        message: `Transfer ${transfer.transferNumber} received by ${receivedBy} (${transfer.status.toUpperCase()}). Stock successfully allocated to store inventory.`,
+        type: 'order_update',
+        targetRole: 'admin',
+        read: false,
+      });
+
+      return true;
+    } finally {
+      inFlightTransferLocks.delete(lockKey);
+    }
+  },
+
+  // Cancel stock transfer with atomic inventory restoration if in-transit
+  cancelStockTransfer(
+    transferId: string,
+    cancelledBy: string = 'Warehouse Manager',
+    reason: string = 'Transfer Cancelled'
+  ): { success: boolean; error?: string } {
+    const lockKey = `cancel_${transferId}`;
+    if (inFlightTransferLocks.has(lockKey)) {
+      return { success: false, error: 'Cancellation operation is already in progress. Please wait.' };
+    }
+    inFlightTransferLocks.add(lockKey);
+
+    try {
+      const transfers = this.getStockTransfers();
+      const transfer = transfers.find((t) => t.id === transferId);
+      if (!transfer) {
+        return { success: false, error: 'Transfer not found.' };
+      }
+
+      if (transfer.status === 'cancelled') {
+        return { success: false, error: 'Transfer is already cancelled.' };
+      }
+
+      if (transfer.status === 'completed' || transfer.status === 'partially_received') {
+        return {
+          success: false,
+          error: 'Cannot cancel a transfer that has already been received at the destination store.',
+        };
+      }
+
+      // If it was dispatched in transit, atomically restore stock back to the source location
+      if (transfer.status === 'dispatched_in_transit') {
+        const inventory = storage.getInventory();
+        const nowIso = new Date().toISOString();
+        const nowTs = Date.now();
+        const auditRecords: Array<Omit<StockMovementAudit, 'id' | 'timestamp'>> = [];
+
+        if (transfer.type === 'warehouse_to_store') {
+          // Restore stock back to Central Warehouse
+          transfer.items.forEach((item, idx) => {
+            // Revert batch allocations to Central Warehouse
+            this.revertBatchTransfer(item.batchAllocations || [], 'central');
+
+            const invItem = inventory.find(
+              (i) => i.id === item.itemId || (i.sku && i.sku.toLowerCase() === item.sku.toLowerCase())
+            );
+            if (invItem) {
+              const isBoxUnit = isBoxDenominatedUnit(item.transferUnit || item.unit || invItem.unit);
+              const rawQty = Math.max(0, Math.floor(Number(item.dispatchedQty || item.requestedQty) || 0));
+
+              const previousStock = Math.max(0, Math.floor(Number(invItem.stockQuantity) || 0));
+              const newStock = previousStock + rawQty;
+              invItem.stockQuantity = newStock;
+              invItem.fullBoxStock = isBoxUnit ? newStock : 0;
+              invItem.loosePieceStock = 0;
+              invItem.totalPieceEquivalent = newStock;
+              invItem.total_piece_equivalent = newStock;
+              (invItem as any).lastStockChange = nowTs;
+              invItem.updatedAt = nowIso;
+
+              auditRecords.push({
+                transactionId: `TXN-${Date.now().toString().slice(-5)}${idx}`,
+                referenceNumber: transfer.transferNumber,
+                itemId: item.itemId,
+                sku: item.sku,
+                itemName: item.name,
+                batchNumber: item.batchNumber,
+                movementType: 'physical_adjustment' as const,
+                fromLocation: 'Cancelled In-Transit Rollback',
+                toLocation: transfer.sourceName,
+                quantity: rawQty,
+                quantityChanged: rawQty,
+                previousStock,
+                newStock,
+                unit: item.unit || invItem.unit || 'units',
+                balanceAfter: newStock,
+                unitCost: item.unitCost,
+                totalCostImpact: rawQty * item.unitCost,
+                performedBy: cancelledBy,
+                userRole: 'Warehouse Manager' as const,
+                status: 'Completed',
+                notes: `Transfer Cancelled: Restored ${rawQty} ${item.unit || invItem.unit || 'units'} back to Central Warehouse (${transfer.transferNumber}). Reason: ${reason}.`,
+              });
+            }
+          });
+          storage.saveInventory(inventory);
+          this.addAuditRecords(auditRecords);
+        } else if (transfer.type === 'store_to_warehouse_return') {
+          // Restore stock back to source store
+          let invModified = false;
+          transfer.items.forEach((item) => {
+            const invItem = inventory.find(
+              (i) => i.id === item.itemId || (i.sku && i.sku.toLowerCase() === item.sku.toLowerCase())
+            );
+            if (invItem && invItem.storeAllocations) {
+              const isBoxUnit = isBoxDenominatedUnit(item.transferUnit || item.unit || invItem.unit);
+              const rawQty = Math.max(0, Math.floor(Number(item.dispatchedQty || item.requestedQty) || 0));
+
+              const currentStoreStock = Math.max(0, Math.floor(Number(invItem.storeAllocations[transfer.sourceId]) || 0));
+              const newStoreStock = currentStoreStock + rawQty;
+              invItem.storeAllocations[transfer.sourceId] = newStoreStock;
+
+              if (!invItem.storeBoxAllocations) invItem.storeBoxAllocations = {};
+              invItem.storeBoxAllocations[transfer.sourceId] = {
+                fullBoxes: isBoxUnit ? newStoreStock : 0,
+                loosePieces: 0,
+                totalPieces: newStoreStock,
+                total_piece_equivalent: newStoreStock,
+              };
+
+              (invItem as any).lastStockChange = nowTs;
+              invItem.updatedAt = nowIso;
+              invModified = true;
+            }
+          });
+          if (invModified) {
+            storage.saveInventory(inventory);
+          }
         }
       }
 
-      auditRecords.push({
-        referenceNumber: transfer.transferNumber,
-        itemId: item.itemId,
-        sku: item.sku,
-        itemName: item.name,
-        batchNumber: item.batchNumber,
-        movementType: transfer.type === 'store_to_warehouse_return' ? 'store_return_in' : 'store_transfer_in',
-        fromLocation: 'In Transit',
-        toLocation: transfer.destinationName,
-        quantity: receivedQty,
-        unit: item.unit,
-        balanceAfter: receivedQty,
-        unitCost: item.unitCost,
-        totalCostImpact: receivedQty * item.unitCost,
-        performedBy: receivedBy,
-        userRole: 'Store Manager',
-        notes: `Stock safely received. Received Qty: ${receivedQty}/${item.dispatchedQty} ${item.unit}.`,
+      // Update transfer status
+      transfer.status = 'cancelled';
+      transfer.notes = (transfer.notes ? transfer.notes + ' • ' : '') + `Cancelled: ${reason}`;
+      this.saveStockTransfers(transfers);
+
+      storage.addNotification({
+        title: `Transfer Cancelled: ${transfer.transferNumber}`,
+        message: `Transfer ${transfer.transferNumber} cancelled by ${cancelledBy}. Stock state restored.`,
+        type: 'order_update',
+        targetRole: 'admin',
+        read: false,
       });
-    });
 
-    this.addAuditRecords(auditRecords);
-
-    if (inventoryModified) {
-      storage.saveInventory(inventory);
+      return { success: true };
+    } finally {
+      inFlightTransferLocks.delete(lockKey);
     }
-
-    transfer.status = hasPartial ? 'partially_received' : 'completed';
-    this.saveStockTransfers(transfers);
-
-    // If an associated store indent exists, mark it as completed
-    try {
-      const indents = this.getStoreIndents();
-      const linkedIndent = indents.find(
-        (ind) =>
-          ind.storeId === transfer.destinationId &&
-          (ind.status === 'converted_to_transfer' || ind.status === 'approved')
-      );
-      if (linkedIndent) {
-        linkedIndent.status = 'completed';
-        this.saveStoreIndents(indents);
-      }
-    } catch {
-      // Non-critical
-    }
-
-    storage.addNotification({
-      title: `Stock Inward Completed at ${transfer.destinationName}`,
-      message: `Transfer ${transfer.transferNumber} received by ${receivedBy} (${transfer.status.toUpperCase()}). Stock successfully allocated to store inventory.`,
-      type: 'order_update',
-      targetRole: 'admin',
-      read: false,
-    });
-
-    return true;
   },
 
   // =========================================================================
@@ -1650,6 +2398,7 @@ export const warehouseStorage = {
       setWhCached(WH_KEYS.AUDIT_TRAIL, list);
       safeStorage.setItem(WH_KEYS.AUDIT_TRAIL, JSON.stringify(list));
       this.notifySubscribers();
+      cloudSync.debouncedSyncCollection('stock_audit_trail', list);
     } catch (e) {
       console.error(e);
     }
@@ -1659,11 +2408,25 @@ export const warehouseStorage = {
     if (!audits || audits.length === 0) return;
     const list = this.getAuditTrail();
     const now = Date.now();
-    const newRecords: StockMovementAudit[] = audits.map((audit, idx) => ({
-      ...audit,
-      id: `aud-${now}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
-      timestamp: new Date().toISOString(),
-    }));
+    const newRecords: StockMovementAudit[] = audits.map((audit, idx) => {
+      const nowStr = now.toString();
+      const randomSuffix = Math.floor(10 + Math.random() * 90);
+      const txnId = audit.transactionId || `TXN-${nowStr.slice(-5)}${idx}${randomSuffix}`;
+      const qtyChanged = audit.quantityChanged !== undefined ? audit.quantityChanged : audit.quantity;
+      const prev = audit.previousStock !== undefined ? audit.previousStock : Math.max(0, (audit.balanceAfter || 0) - qtyChanged);
+      const next = audit.newStock !== undefined ? audit.newStock : (audit.balanceAfter !== undefined ? audit.balanceAfter : (prev + qtyChanged));
+
+      return {
+        ...audit,
+        transactionId: txnId,
+        quantityChanged: qtyChanged,
+        previousStock: prev,
+        newStock: next,
+        status: audit.status || 'Completed',
+        id: `aud-${now}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+        timestamp: new Date().toISOString(),
+      };
+    });
     // Cap to latest 1000 records to prevent bloated storage
     this.saveAuditTrail([...newRecords, ...list].slice(0, 1000));
   },

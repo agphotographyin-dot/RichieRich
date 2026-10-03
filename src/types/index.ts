@@ -199,6 +199,8 @@ export interface InventoryItem {
   totalPieceEquivalent?: number;  // (fullBoxStock * piecesPerBox) + loosePieceStock
   total_piece_equivalent?: number;// Alias for totalPieceEquivalent
   storeBoxAllocations?: Record<string, { fullBoxes: number; loosePieces: number; totalPieces?: number; total_piece_equivalent?: number }>; // Per-store Box + Loose tracking
+  updatedAt?: string;
+  lastStockChange?: number;
 }
 
 export interface Customer {

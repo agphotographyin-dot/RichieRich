@@ -87,7 +87,7 @@ export const WarehouseHeader: React.FC<WarehouseHeaderProps> = ({
   const secondaryTabs: { id: WarehouseTab; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
     { id: 'store_stock', label: 'Store Stock Allocation', icon: Store },
     { id: 'adjustments', label: 'Adjustments & Scrap', icon: AlertTriangle, badge: nearExpiryCount || undefined },
-    { id: 'audit_trail', label: 'Movement Audit Trail', icon: History },
+    { id: 'audit_trail', label: 'Audit Log & Ledger', icon: History },
     { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
   ];
 

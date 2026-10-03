@@ -65,7 +65,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   // Box & Loose Product Inventory States
-  const [piecesPerBox, setPiecesPerBox] = useState<number>(10);
+  const [piecesPerBox, setPiecesPerBox] = useState<number>(1);
   const [sellAsLoose, setSellAsLoose] = useState<boolean>(false);
   const [looseBarcode, setLooseBarcode] = useState<string>('');
   const [loosePrice, setLoosePrice] = useState<number>(10);
@@ -97,7 +97,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
       setSellingPrice(70);
       setStockQuantity(25);
       setLowStockThreshold(10);
-      setUnit('boxes');
+      setUnit('Piece');
       setImageUrl('https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&auto=format&fit=crop&q=80');
       setIsTaxApplicable(true);
       setTaxRate(5);
@@ -105,8 +105,8 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
       setIsCameraScanning(false);
       setCameraError(null);
 
-      // Reset Box & Loose Product
-      setPiecesPerBox(10);
+      // Reset Box & Loose Product: default 1 unit = 1 unit until Sell Loose is enabled
+      setPiecesPerBox(1);
       setSellAsLoose(false);
       setLooseBarcode(`PCS-${randomSuffix}${Math.floor(1000 + Math.random() * 9000)}`);
       setLoosePrice(10);
@@ -206,7 +206,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
     // Box & Loose Validations
     if (sellAsLoose) {
       if (!piecesPerBox || piecesPerBox <= 0) {
-        alert('Total Pieces per Box must be greater than 0 when selling as loose product.');
+        alert('Total Units per Box must be greater than 0 when selling as loose product.');
         return;
       }
       if (!looseBarcode.trim()) {
@@ -228,7 +228,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
         return;
       }
       if (loosePriceType === 'fixed' && (!loosePrice || loosePrice <= 0)) {
-        alert('Single Piece Selling Price is required and must be greater than 0.');
+        alert('Single Unit Selling Price is required and must be greater than 0.');
         return;
       }
     }
@@ -249,6 +249,9 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
       sg_highway: { fullBoxes: 0, loosePieces: 0 },
     };
 
+    const isBoxUnit = (unit || '').toLowerCase() === 'boxes' || (unit || '').toLowerCase() === 'box';
+    const effectiveUnit = unit || 'Piece';
+
     storage.addInventoryItem({
       sku: generatedSku,
       barcode: generatedBarcode,
@@ -264,7 +267,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
       sellingPrice: priceType === 'variable' ? 0 : Number(sellingPrice) || 0,
       stockQuantity: initialStock,
       lowStockThreshold: Number(lowStockThreshold) || 5,
-      unit: unit || 'pieces',
+      unit: effectiveUnit,
       imageUrl: imageUrl || '',
       isTaxApplicable,
       taxRate: isTaxApplicable ? Number(taxRate) : 0,
@@ -273,13 +276,13 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
       tags: ['New Arrival'],
       storeAllocations,
       // Box & Loose Fields
-      piecesPerBox: piecesPerBox > 0 ? Number(piecesPerBox) : 1,
-      sellAsLoose,
+      piecesPerBox: sellAsLoose && piecesPerBox > 0 ? Number(piecesPerBox) : 1,
+      sellAsLoose: Boolean(sellAsLoose),
       boxBarcode: generatedBarcode,
       looseBarcode: sellAsLoose ? looseBarcode.trim() : undefined,
       loosePrice: sellAsLoose ? (loosePriceType === 'variable' ? 0 : Number(loosePrice) || 0) : undefined,
       loosePriceType: sellAsLoose ? loosePriceType : undefined,
-      fullBoxStock: initialStock,
+      fullBoxStock: isBoxUnit ? initialStock : 0,
       loosePieceStock: 0,
       storeBoxAllocations,
     });
@@ -400,13 +403,14 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                 onChange={(e) => setUnit(e.target.value)}
                 className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-slate-400"
               >
-                <option value="pieces">pieces</option>
+                <option value="Piece">Piece</option>
+                <option value="boxes">boxes</option>
+                <option value="packs">packs</option>
+                <option value="units">units</option>
                 <option value="jars">jars</option>
                 <option value="pouches">pouches</option>
                 <option value="bottles">bottles</option>
                 <option value="glasses">glasses</option>
-                <option value="boxes">boxes</option>
-                <option value="packs">packs</option>
                 <option value="grams">grams</option>
               </select>
             </div>
@@ -700,36 +704,56 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                 <div>
                   <h4 className="text-xs text-slate-900 font-extrabold flex items-center gap-1.5">
                     <span>Box & Loose Product Configuration</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-mono font-bold">
-                      1 Box = {piecesPerBox || 1} Pieces
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
+                      sellAsLoose
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : 'bg-indigo-100 text-indigo-800'
+                    }`}>
+                      {sellAsLoose ? `1 Box = ${piecesPerBox || 1} Units (Loose Active)` : '1 Unit = 1 Item (Standard)'}
                     </span>
                   </h4>
                   <p className="text-[11px] text-slate-600">
-                    Maintain dual Box + Loose Piece inventory with separate Barcodes and automatic box-opening conversion.
+                    Configure dual Box + Loose item inventory with separate Barcodes when selling individual loose units.
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Field 1: Total Pieces per Box & Field 2: Sell as Loose Toggle */}
+            {/* Field 1: Total Units per Box & Field 2: Sell as Loose Toggle */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-3 rounded-xl border border-indigo-100">
               <div>
-                <label className="text-xs text-slate-800 font-bold block mb-1">
-                  Total Pieces per Box *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-slate-800 font-bold">
+                    Units per Box / Pack *
+                  </label>
+                  {!sellAsLoose && (
+                    <span className="text-[10px] text-slate-400 font-medium italic">
+                      1 unit = 1 item
+                    </span>
+                  )}
+                </div>
                 <div className="relative">
                   <input
                     type="number"
                     min="1"
                     required
-                    value={piecesPerBox}
+                    disabled={!sellAsLoose}
+                    value={sellAsLoose ? piecesPerBox : 1}
                     onChange={(e) => setPiecesPerBox(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-hidden focus:border-indigo-400"
+                    className={`w-full rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                      sellAsLoose
+                        ? 'bg-slate-50 border border-indigo-300 text-slate-900 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-400'
+                        : 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed select-none'
+                    }`}
                   />
-                  <span className="absolute right-3 top-2 text-[11px] text-slate-500 font-medium">pcs / box</span>
+                  <span className={`absolute right-3 top-2 text-[11px] font-medium ${sellAsLoose ? 'text-slate-500' : 'text-slate-400'}`}>
+                    {sellAsLoose ? 'units / box' : 'unit'}
+                  </span>
                 </div>
-                <span className="text-[10px] text-slate-500 mt-1 block">
-                  Example: 10 cigarettes per box, 12 bottles per crate.
+                <span className="text-[10px] mt-1 block leading-tight text-slate-500">
+                  {sellAsLoose
+                    ? 'Enter total individual units contained inside each box / pack (e.g. 10, 20).'
+                    : 'Locked to 1 unit. Enable "Yes, Sell Loose" to specify units per box.'}
                 </span>
               </div>
 
@@ -742,6 +766,9 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                     type="button"
                     onClick={() => {
                       setSellAsLoose(true);
+                      if (piecesPerBox <= 1) {
+                        setPiecesPerBox(10);
+                      }
                       if (!looseBarcode) autoGenerateLooseBarcode();
                     }}
                     className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
@@ -756,7 +783,10 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setSellAsLoose(false)}
+                    onClick={() => {
+                      setSellAsLoose(false);
+                      setPiecesPerBox(1);
+                    }}
                     className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                       !sellAsLoose
                         ? 'bg-[#1E293B] text-white border-slate-800 shadow-xs'
@@ -768,19 +798,19 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                   </button>
                 </div>
                 <span className="text-[10px] text-slate-500 mt-1 block">
-                  {sellAsLoose ? 'Can be sold both as a complete box AND as single loose pieces.' : 'Can only be sold as a complete box.'}
+                  {sellAsLoose ? 'Can be sold both as a complete box AND as individual loose units.' : 'Till then 1 unit = 1 item (Box Only).'}
                 </span>
               </div>
             </div>
 
-            {/* When Sell as Loose = Yes: Loose Barcode & Single Piece Price Settings */}
+            {/* When Sell as Loose = Yes: Loose Barcode & Single Unit Price Settings */}
             {sellAsLoose && (
               <div className="p-3 bg-white rounded-xl border border-indigo-200 space-y-3 animate-in fade-in">
                 {/* Field 3: Loose Product Barcode */}
                 <div>
                   <div className="flex items-center justify-between">
                     <label className="text-xs text-slate-800 font-bold">
-                      Loose Product Barcode (Single Piece Scanner ID) *
+                      Loose Product Barcode (Single Unit Scanner ID) *
                     </label>
                     <button
                       type="button"
@@ -801,13 +831,13 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                     />
                   </div>
                   <p className="text-[10px] text-slate-500 mt-1">
-                    Scanning <strong>{barcode || 'Box Barcode'}</strong> sells 1 complete box. Scanning <strong>{looseBarcode || 'Loose Barcode'}</strong> sells 1 single piece.
+                    Scanning <strong>{barcode || 'Box Barcode'}</strong> sells 1 complete box. Scanning <strong>{looseBarcode || 'Loose Barcode'}</strong> sells 1 single unit.
                   </p>
 
                   {looseBarcode.trim() && (
                     <div className="pt-2 mt-2 border-t border-slate-100 flex items-center justify-between">
                       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                        Loose Piece Barcode Preview:
+                        Loose Unit Barcode Preview:
                       </span>
                       <div className="bg-slate-50 px-2 py-1 rounded-md border border-slate-200">
                         <BarcodeVisualizer value={looseBarcode.trim()} width={130} height={24} showText={true} />
@@ -816,10 +846,10 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                   )}
                 </div>
 
-                {/* Field 4: Single Piece Pricing & Model */}
+                {/* Field 4: Single Unit Pricing & Model */}
                 <div className="pt-2 border-t border-slate-100 space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs text-slate-800 font-bold">Single Piece Price Type</label>
+                    <label className="text-xs text-slate-800 font-bold">Single Unit Price Type</label>
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
@@ -849,7 +879,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                   {loosePriceType === 'fixed' ? (
                     <div>
                       <label className="text-xs text-slate-700 font-bold block mb-1">
-                        Single Piece Selling Price ({CURRENCY}) *
+                        Single Unit Selling Price ({CURRENCY}) *
                       </label>
                       <input
                         type="number"
@@ -862,12 +892,12 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-hidden focus:border-indigo-400"
                       />
                       <p className="text-[10px] text-slate-500 mt-1">
-                        Predefined selling price when customer purchases 1 single piece. (Box Price is {CURRENCY}{sellingPrice}).
+                        Predefined selling price when customer purchases 1 single loose unit. (Box Price is {CURRENCY}{sellingPrice}).
                       </p>
                     </div>
                   ) : (
                     <div className="p-2.5 rounded-lg bg-purple-50 text-purple-900 border border-purple-200 text-xs">
-                      Cashier will be prompted to enter the single-piece selling price at the POS counter when scanning the loose barcode.
+                      Cashier will be prompted to enter the single-unit selling price at the POS counter when scanning the loose barcode.
                     </div>
                   )}
                 </div>

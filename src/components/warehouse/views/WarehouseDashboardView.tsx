@@ -457,7 +457,7 @@ export const WarehouseDashboardView: React.FC<WarehouseDashboardViewProps> = ({
                     const gotaStock = alloc['gota'] || 0;
                     const sbStock = alloc['sindhubhavan'] || 0;
                     const sgStock = alloc['sg_highway'] || 0;
-                    const centralStock = Math.max(0, item.stockQuantity - (bopalStock + gotaStock + sbStock + sgStock));
+                    const centralStock = Math.max(0, Number(item.stockQuantity) || 0);
 
                     return (
                       <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">

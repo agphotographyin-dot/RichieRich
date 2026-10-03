@@ -128,6 +128,9 @@ export interface PurchaseBillItem {
   category: string;
   quantity: number;
   unit: string;
+  inputUnit?: 'boxes' | 'pieces' | string;
+  piecesPerBox?: number;
+  baseQuantity?: number; // Base physical piece count
   unitCost: number;
   taxRate: number;
   taxAmount: number;
@@ -164,6 +167,12 @@ export interface PurchaseBill {
   notes?: string;
 }
 
+export interface BatchAllocation {
+  batchId: string;
+  batchNumber: string;
+  quantity: number; // Base pieces
+}
+
 export interface BatchRecord {
   id: string;
   itemId: string;
@@ -177,13 +186,25 @@ export interface BatchRecord {
   mfgDate: string;
   expiryDate: string;
   initialQuantity: number;
+  originalQuantity?: number;
+  originalUnit?: string; // 'boxes' | 'pieces' | 'units'
+  piecesPerBox?: number;
+  originalBaseQuantity?: number; // Base physical pieces inwarded (e.g. 10 boxes * 10 = 100 pcs)
+  currentBaseQuantity?: number;  // Current base pieces remaining across network
+  consumedBaseQuantity?: number; // Consumed base pieces
+  currentQuantity?: number;
   quantityInStock: number;
+  consumedQuantity?: number;
+  locationQuantities?: Record<string, number>; // { central: 80, bopal: 20 } in base pieces
+  locationUnit?: string; // 'PIECE'
   unit: string;
   unitCost: number;
   purchaseBillRef: string;
   supplierName: string;
   daysToExpiry: number;
   status: 'active' | 'near_expiry' | 'expired' | 'depleted';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface TransferItem {
@@ -192,7 +213,11 @@ export interface TransferItem {
   name: string;
   category?: string;
   unit: string;
+  transferUnit?: 'boxes' | 'pieces' | string;
+  piecesPerBox?: number;
+  baseQuantity?: number; // Base physical pieces to transfer
   batchNumber?: string;
+  batchAllocations?: BatchAllocation[];
   requestedQty: number;
   dispatchedQty: number;
   receivedQty: number;
@@ -283,6 +308,7 @@ export interface StockAdjustment {
 
 export interface StockMovementAudit {
   id: string;
+  transactionId?: string; // Standard unique ledger ID, e.g. TXN-10025
   timestamp: string;
   referenceNumber: string;
   itemId: string;
@@ -300,12 +326,16 @@ export interface StockMovementAudit {
   fromLocation: string;
   toLocation: string;
   quantity: number;
+  quantityChanged?: number; // Exact signed change: -25 or +25
+  previousStock?: number;   // Stock level immediately before this movement
+  newStock?: number;        // Stock level immediately after this movement
   unit: string;
   balanceAfter: number;
   unitCost: number;
   totalCostImpact: number;
   performedBy: string;
   userRole: string;
+  status?: string;          // Movement status, default 'Completed'
   notes: string;
 }
 

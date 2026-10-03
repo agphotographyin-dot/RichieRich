@@ -21,6 +21,7 @@ import {
   Filter,
   Plus,
   RefreshCw,
+  History,
 } from 'lucide-react';
 import {
   Warehouse,
@@ -225,7 +226,7 @@ export const WarehouseModernDashboardView: React.FC<WarehouseModernDashboardView
       </div>
 
       {/* 3. Quick Action Launchpad Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
         <button
           type="button"
           onClick={onOpenNewPO}
@@ -284,6 +285,18 @@ export const WarehouseModernDashboardView: React.FC<WarehouseModernDashboardView
           </div>
           <div className="text-xs font-bold text-slate-900">Scrap & Adjustment</div>
           <div className="text-[10px] text-slate-500">Audit stock variance</div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigateTab('audit_trail')}
+          className="p-3 sm:p-3.5 rounded-2xl bg-white border border-slate-200/90 hover:border-indigo-500 hover:shadow-xs transition-all text-left group cursor-pointer"
+        >
+          <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center mb-1.5">
+            <History className="w-3.5 h-3.5" />
+          </div>
+          <div className="text-xs font-bold text-slate-900">Audit Log & Ledger</div>
+          <div className="text-[10px] text-slate-500">SKU transfer history</div>
         </button>
       </div>
 
@@ -352,10 +365,8 @@ export const WarehouseModernDashboardView: React.FC<WarehouseModernDashboardView
                       const gotaStock = alloc['gota'] || 0;
                       const sbStock = alloc['sindhubhavan'] || 0;
                       const sgStock = alloc['sg_highway'] || 0;
-                      const centralStock = Math.max(
-                        0,
-                        item.stockQuantity - (bopalStock + gotaStock + sbStock + sgStock)
-                      );
+                      const centralStock = Math.max(0, Number(item.stockQuantity) || 0);
+                      const totalUnits = centralStock + bopalStock + gotaStock + sbStock + sgStock;
 
                       return (
                         <tr key={item.id} className="hover:bg-slate-50 transition-colors">
@@ -363,15 +374,15 @@ export const WarehouseModernDashboardView: React.FC<WarehouseModernDashboardView
                             <div className="font-bold">{item.name}</div>
                             <div className="text-[10px] text-slate-400 font-mono">{item.sku}</div>
                           </td>
-                          <td className="py-3 px-3 text-center font-bold text-indigo-700">
+                          <td className="py-3 px-3 text-center font-bold text-indigo-700 bg-indigo-50/40">
                             {centralStock}
                           </td>
                           <td className="py-3 px-3 text-center text-slate-700">{gotaStock}</td>
                           <td className="py-3 px-3 text-center text-slate-700">{bopalStock}</td>
                           <td className="py-3 px-3 text-center text-slate-700">{sbStock}</td>
                           <td className="py-3 px-3 text-center text-slate-700">{sgStock}</td>
-                          <td className="py-3 px-3 text-center font-bold text-slate-900">
-                            {item.stockQuantity} {item.unit}
+                          <td className="py-3 px-3 text-center font-black text-slate-900 bg-slate-100/70">
+                            {totalUnits} {item.unit || 'units'}
                           </td>
                           <td className="py-3 px-4 text-right font-sans">
                             {item.stockQuantity <= item.lowStockThreshold ? (
@@ -413,10 +424,7 @@ export const WarehouseModernDashboardView: React.FC<WarehouseModernDashboardView
                   const gotaStock = alloc['gota'] || 0;
                   const sbStock = alloc['sindhubhavan'] || 0;
                   const sgStock = alloc['sg_highway'] || 0;
-                  const centralStock = Math.max(
-                    0,
-                    item.stockQuantity - (bopalStock + gotaStock + sbStock + sgStock)
-                  );
+                  const centralStock = Math.max(0, Number(item.stockQuantity) || 0);
 
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">

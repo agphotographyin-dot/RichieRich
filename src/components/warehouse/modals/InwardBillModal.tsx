@@ -74,6 +74,8 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
       sku: string;
       category: string;
       quantity: number;
+      inputUnit: 'boxes' | 'pieces';
+      piecesPerBox: number;
       unitCost: number;
       unit: string;
       batchNumber: string;
@@ -82,28 +84,40 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
     }>
   >(() => {
     if (initialPO && initialPO.items && initialPO.items.length > 0) {
-      return initialPO.items.map((it, idx) => ({
-        itemId: it.itemId,
-        name: it.name,
-        sku: it.sku,
-        category: it.category || 'Paan',
-        quantity: it.quantityOrdered, // Exact ordered units (e.g. 50 units)
-        unitCost: it.unitPrice,
-        unit: it.unit || 'pieces',
-        batchNumber: `BATCH-${it.sku ? it.sku.slice(0, 4) : 'PAN'}-${Date.now().toString().slice(-4)}`,
-        mfgDate: new Date().toISOString().split('T')[0],
-        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      }));
+      return initialPO.items.map((it, idx) => {
+        const inv = inventory.find((i) => i.id === it.itemId || i.sku === it.sku);
+        const isBox = (it.unit || '').toLowerCase().includes('box') || Boolean(inv?.piecesPerBox && inv.piecesPerBox > 1);
+        const ppb = inv?.piecesPerBox || (it as any).piecesPerBox || (isBox ? 10 : 1);
+        return {
+          itemId: it.itemId,
+          name: it.name,
+          sku: it.sku,
+          category: it.category || 'Paan',
+          quantity: it.quantityOrdered, // Exact ordered units (e.g. 50 units)
+          inputUnit: isBox ? 'boxes' : 'pieces',
+          piecesPerBox: ppb,
+          unitCost: it.unitPrice,
+          unit: it.unit || (isBox ? 'boxes' : 'pieces'),
+          batchNumber: `BATCH-${it.sku ? it.sku.slice(0, 4) : 'PAN'}-${Date.now().toString().slice(-4)}`,
+          mfgDate: new Date().toISOString().split('T')[0],
+          expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        };
+      });
     }
+    const defaultInv = inventory[0];
+    const isBox = Boolean(defaultInv?.sellAsLoose || (defaultInv?.piecesPerBox && defaultInv.piecesPerBox > 1));
+    const ppb = defaultInv?.piecesPerBox || (isBox ? 10 : 1);
     return [
       {
-        itemId: inventory[0]?.id || 'item-101',
-        name: inventory[0]?.name || 'Royal Maghai Meetha Paan',
-        sku: inventory[0]?.sku || 'PAN-MAG-01',
-        category: inventory[0]?.category || 'Paan',
+        itemId: defaultInv?.id || 'item-101',
+        name: defaultInv?.name || 'Royal Maghai Meetha Paan',
+        sku: defaultInv?.sku || 'PAN-MAG-01',
+        category: defaultInv?.category || 'Paan',
         quantity: 50,
-        unitCost: inventory[0]?.costPrice || 20,
-        unit: inventory[0]?.unit || 'pieces',
+        inputUnit: isBox ? 'boxes' : 'pieces',
+        piecesPerBox: ppb,
+        unitCost: defaultInv?.costPrice || 20,
+        unit: defaultInv?.unit || (isBox ? 'boxes' : 'pieces'),
         batchNumber: `BATCH-${Date.now().toString().slice(-4)}`,
         mfgDate: new Date().toISOString().split('T')[0],
         expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -130,18 +144,25 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
 
       if (po.items && po.items.length > 0) {
         setItems(
-          po.items.map((it, idx) => ({
-            itemId: it.itemId,
-            name: it.name,
-            sku: it.sku,
-            category: it.category || 'Paan',
-            quantity: it.quantityOrdered, // Exact ordered units
-            unitCost: it.unitPrice,
-            unit: it.unit || 'pieces',
-            batchNumber: `BATCH-${it.sku ? it.sku.slice(0, 4) : 'PAN'}-${Date.now().toString().slice(-4)}`,
-            mfgDate: new Date().toISOString().split('T')[0],
-            expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          }))
+          po.items.map((it, idx) => {
+            const inv = inventory.find((i) => i.id === it.itemId || i.sku === it.sku);
+            const isBox = (it.unit || '').toLowerCase().includes('box') || Boolean(inv?.piecesPerBox && inv.piecesPerBox > 1);
+            const ppb = inv?.piecesPerBox || (it as any).piecesPerBox || (isBox ? 10 : 1);
+            return {
+              itemId: it.itemId,
+              name: it.name,
+              sku: it.sku,
+              category: it.category || 'Paan',
+              quantity: it.quantityOrdered, // Exact ordered units
+              inputUnit: isBox ? 'boxes' : 'pieces',
+              piecesPerBox: ppb,
+              unitCost: it.unitPrice,
+              unit: it.unit || (isBox ? 'boxes' : 'pieces'),
+              batchNumber: `BATCH-${it.sku ? it.sku.slice(0, 4) : 'PAN'}-${Date.now().toString().slice(-4)}`,
+              mfgDate: new Date().toISOString().split('T')[0],
+              expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            };
+          })
         );
       }
     }
@@ -155,7 +176,10 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
       category: 'Paan',
       costPrice: 20,
       unit: 'pieces',
+      piecesPerBox: 10,
     };
+    const isBox = Boolean((defaultItem as any).sellAsLoose || (defaultItem.piecesPerBox && defaultItem.piecesPerBox > 1));
+    const ppb = defaultItem.piecesPerBox || (isBox ? 10 : 1);
     setItems([
       ...items,
       {
@@ -164,8 +188,10 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
         sku: defaultItem.sku,
         category: defaultItem.category,
         quantity: 50,
+        inputUnit: isBox ? 'boxes' : 'pieces',
+        piecesPerBox: ppb,
         unitCost: defaultItem.costPrice || 20,
-        unit: defaultItem.unit || 'pieces',
+        unit: defaultItem.unit || (isBox ? 'boxes' : 'pieces'),
         batchNumber: `BATCH-${Date.now().toString().slice(-4)}`,
         mfgDate: new Date().toISOString().split('T')[0],
         expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -181,14 +207,19 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
 
   const handleItemSelect = (index: number, selected: any) => {
     const next = [...items];
+    const isBox = Boolean(selected.sellAsLoose || (selected.piecesPerBox && selected.piecesPerBox > 1) || (selected.unit || '').toLowerCase().includes('box'));
+    const ppb = selected.piecesPerBox && selected.piecesPerBox > 0 ? selected.piecesPerBox : (isBox ? 10 : 1);
+
     next[index] = {
       ...next[index],
       itemId: selected.itemId || selected.id || next[index].itemId,
       name: selected.name,
       sku: selected.sku || next[index].sku,
       category: selected.category || 'Paan',
+      inputUnit: isBox ? 'boxes' : 'pieces',
+      piecesPerBox: ppb,
       unitCost: selected.costPrice !== undefined ? selected.costPrice : (selected.unitPrice || next[index].unitCost),
-      unit: selected.unit || 'pieces',
+      unit: selected.unit || (isBox ? 'boxes' : 'pieces'),
     };
     setItems(next);
   };
@@ -217,14 +248,21 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
         const unitCost = Number(it.unitCost) || 0;
         const totalAmount = qty * unitCost;
         const gst = includeGst ? Math.round(totalAmount * (activeTaxRate / 100)) : 0;
+        const isBox = it.inputUnit === 'boxes';
+        const ppb = it.piecesPerBox && it.piecesPerBox > 0 ? it.piecesPerBox : (isBox ? 10 : 1);
+        const basePieces = qty;
+
         return {
           itemId: it.itemId,
           sku: it.sku,
           name: it.name,
           category: it.category,
           quantity: qty,
+          unit: isBox ? 'boxes' : (it.unit || 'units'),
+          inputUnit: it.inputUnit,
+          piecesPerBox: ppb,
+          baseQuantity: basePieces,
           unitCost: unitCost,
-          unit: it.unit,
           taxRate: activeTaxRate,
           taxAmount: gst,
           totalCost: totalAmount + gst,
@@ -511,10 +549,10 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
                 );
 
                 return (
-                  <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                  <div key={idx} className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
                       {/* Autocomplete Input Box */}
-                      <div className="sm:col-span-6">
+                      <div className="sm:col-span-5">
                         <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
                           Item Name / Search Catalog & History
                         </label>
@@ -528,9 +566,28 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
                         />
                       </div>
 
+                      {/* Inward Unit Selector (Box vs Piece) */}
                       <div className="sm:col-span-2">
                         <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
-                          Inward Qty
+                          Inward Unit
+                        </label>
+                        <select
+                          value={row.inputUnit}
+                          onChange={(e) => {
+                            const val = e.target.value as 'boxes' | 'pieces';
+                            handleFieldChange(idx, 'inputUnit', val);
+                            handleFieldChange(idx, 'unit', val);
+                          }}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                          <option value="boxes">Boxes</option>
+                          <option value="pieces">Units / Loose</option>
+                        </select>
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
+                          Inward Qty ({row.inputUnit === 'boxes' ? 'Boxes' : 'Units'})
                         </label>
                         <input
                           type="number"
@@ -566,20 +623,30 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
                         )}
                       </div>
 
-                      <div className="sm:col-span-2 flex items-center justify-between sm:justify-end gap-2 pt-3 sm:pt-0">
-                        <div className="text-right font-mono text-xs font-bold text-slate-800">
-                          {CURRENCY}{((Number(row.quantity) || 0) * (Number(row.unitCost) || 0)).toLocaleString('en-IN')}
-                        </div>
-
+                      <div className="sm:col-span-1 flex items-center justify-end pt-3 sm:pt-0">
                         {items.length > 1 && (
                           <button
                             type="button"
                             onClick={() => handleRemoveItem(idx)}
-                            className="text-rose-500 hover:text-rose-700 p-1 rounded-lg hover:bg-rose-50"
+                            className="text-rose-500 hover:text-rose-700 p-1.5 rounded-lg hover:bg-rose-50 cursor-pointer"
+                            title="Remove line item"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         )}
+                      </div>
+                    </div>
+
+                    {/* Live Inward Unit Pill */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-emerald-50/80 border border-emerald-200/80 rounded-lg text-xs">
+                      <div className="flex items-center gap-2">
+                        <Package className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                        <span className="font-semibold text-emerald-950">
+                          Inwarding: <strong>{row.quantity} {row.inputUnit === 'boxes' ? 'Boxes' : 'Units'}</strong> to Central Warehouse Vault
+                        </span>
+                      </div>
+                      <div className="font-mono font-bold text-emerald-900">
+                        Line Total: {CURRENCY}{((Number(row.quantity) || 0) * (Number(row.unitCost) || 0)).toLocaleString('en-IN')}
                       </div>
                     </div>
 

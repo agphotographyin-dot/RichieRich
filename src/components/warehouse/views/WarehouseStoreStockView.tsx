@@ -1068,35 +1068,24 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
 
                           {/* Store Stock Qty */}
                           <td className="py-3 px-3 text-center">
-                            {item.sellAsLoose || (item.piecesPerBox && item.piecesPerBox > 1) ? (
-                              (() => {
-                                const bl = getBoxLooseStockSummary(item, currentStore.id);
-                                return (
-                                  <div className="flex flex-col items-center gap-0.5 font-mono">
-                                    <span className="font-extrabold text-xs text-indigo-900 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200 whitespace-nowrap">
-                                      {bl.fullBoxes} Box + {bl.loosePieces} Loose
-                                    </span>
-                                    <span className="text-[10px] text-slate-500">
-                                      ({bl.piecesPerBox}/box = {bl.totalPieces} pcs)
-                                    </span>
-                                  </div>
-                                );
-                              })()
-                            ) : (
-                              <div className="font-mono font-bold text-sm">
-                                <span
-                                  className={
-                                    isOut
-                                      ? 'text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md'
-                                      : isLow
-                                      ? 'text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md'
-                                      : 'text-slate-900'
-                                  }
-                                >
-                                  {storeQty} {item.unit}
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span
+                                className={`font-mono font-bold text-sm ${
+                                  isOut
+                                    ? 'text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md'
+                                    : isLow
+                                    ? 'text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md'
+                                    : 'text-slate-900'
+                                }`}
+                              >
+                                {storeQty} {item.unit || 'units'}
+                              </span>
+                              {item.piecesPerBox && item.piecesPerBox > 1 && (
+                                <span className="text-[9px] text-slate-500 font-mono">
+                                  ({item.piecesPerBox} pcs / {item.unit || 'box'})
                                 </span>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </td>
 
                           {/* Central Hub Stock */}
@@ -1189,7 +1178,7 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
                 </h3>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Displays exact <strong>Full Boxes</strong>, <strong>Loose Pieces</strong>, <strong>Pieces / Box</strong>, and <strong>Total Pieces Equivalent</strong>.
+                Displays exact <strong>Full Boxes</strong>, <strong>Loose Stock</strong>, <strong>Units / Box</strong>, and <strong>Total Units</strong>.
               </p>
             </div>
 
@@ -1215,15 +1204,15 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
           {/* Formula Callout Banner */}
           <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-2 text-emerald-950 font-bold">
-              <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white font-mono text-[10px]">FORMULA</span>
-              <span>Total Pieces = (Full Boxes × Pieces per Box) + Loose Pieces</span>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white font-mono text-[10px]">INVENTORY UNIT</span>
+              <span>Stock Count = Number of Order/Stock Units</span>
             </div>
             <div className="text-[11px] text-emerald-800 font-medium">
-              Replenishing adds full boxes (e.g. +5 boxes, 0 loose). POS sales automatically unbox 1 box when loose pieces are depleted.
+              Scanning box barcode sells 1 box unit. Scanning loose barcode sells 1 single loose unit.
             </div>
           </div>
 
-          {/* Table (Requirement 10: Product | Full Boxes | Loose Pieces | Pieces/Box | Total Pieces) */}
+          {/* Table */}
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -1231,13 +1220,13 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
                   <tr>
                     <th className="py-3 px-4">Product</th>
                     <th className="py-3 px-3 text-center">Full Boxes</th>
-                    <th className="py-3 px-3 text-center">Loose Pieces</th>
-                    <th className="py-3 px-3 text-center">Pieces / Box</th>
-                    <th className="py-3 px-4 text-center">Total Pieces</th>
+                    <th className="py-3 px-3 text-center">Loose Stock</th>
+                    <th className="py-3 px-3 text-center">Units / Box</th>
+                    <th className="py-3 px-4 text-center">Total Units</th>
                     <th className="py-3 px-3">Box Barcode</th>
                     <th className="py-3 px-3">Loose Barcode</th>
                     <th className="py-3 px-3 text-right">Box Price</th>
-                    <th className="py-3 px-3 text-right">Single Piece Price</th>
+                    <th className="py-3 px-3 text-right">Single Unit Price</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1282,7 +1271,7 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
                                 {bl.totalPieces}
                               </span>
                               <span className="text-[9px] text-slate-500 font-mono">
-                                ({bl.fullBoxes} × {bl.piecesPerBox}) + {bl.loosePieces}
+                                {bl.piecesPerBox > 1 ? `${bl.piecesPerBox} Units/Box` : `${bl.totalPieces} ${item.unit || 'units'}`}
                               </span>
                             </div>
                           </td>

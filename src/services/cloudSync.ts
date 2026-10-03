@@ -32,11 +32,13 @@ export const STORAGE_KEYS = {
   STORES: 'rr_panhouse_stores',
   CUSTOMERS: 'rr_panhouse_customers',
   EXPENSES: 'rr_panhouse_store_expenses',
-  PURCHASE_ORDERS: 'wh_purchase_orders',
-  INWARD_BILLS: 'wh_inward_bills',
-  TRANSFERS: 'wh_stock_transfers',
-  INDENTS: 'wh_store_indents',
-  SUPPLIERS: 'wh_suppliers',
+  PURCHASE_ORDERS: 'rr_wh_purchase_orders',
+  INWARD_BILLS: 'rr_wh_purchase_bills',
+  TRANSFERS: 'rr_wh_transfers',
+  INDENTS: 'rr_wh_indents',
+  SUPPLIERS: 'rr_wh_suppliers',
+  AUDIT_TRAIL: 'rr_wh_audit_trail',
+  BATCHES: 'rr_wh_batches',
   SYNC_QUEUE: 'rr_pocketbase_sync_queue',
 };
 
@@ -52,6 +54,8 @@ export const COLLECTIONS = {
   TRANSFERS: 'stock_transfers',
   INDENTS: 'store_indents',
   SUPPLIERS: 'suppliers',
+  AUDIT_TRAIL: 'stock_audit_trail',
+  BATCHES: 'warehouse_batches',
   META: 'system_metadata',
 };
 
@@ -66,6 +70,8 @@ const COLLECTION_STORAGE_MAP: Record<string, { storageKey: string; isWarehouse: 
   [COLLECTIONS.TRANSFERS]: { storageKey: STORAGE_KEYS.TRANSFERS, isWarehouse: true },
   [COLLECTIONS.INDENTS]: { storageKey: STORAGE_KEYS.INDENTS, isWarehouse: true },
   [COLLECTIONS.SUPPLIERS]: { storageKey: STORAGE_KEYS.SUPPLIERS, isWarehouse: true },
+  [COLLECTIONS.AUDIT_TRAIL]: { storageKey: STORAGE_KEYS.AUDIT_TRAIL, isWarehouse: true },
+  [COLLECTIONS.BATCHES]: { storageKey: STORAGE_KEYS.BATCHES, isWarehouse: true },
 };
 
 class PocketBaseTwoWayRealtimeSyncService {
@@ -161,6 +167,24 @@ class PocketBaseTwoWayRealtimeSyncService {
     } catch {}
 
     this.state.autoFetchIntervalSeconds = this.autoFetchIntervalSeconds;
+
+    // Migrate any legacy warehouse storage keys into standard rr_wh_* keys
+    try {
+      const legacyKeyMap: Record<string, string> = {
+        'wh_stock_transfers': 'rr_wh_transfers',
+        'wh_store_indents': 'rr_wh_indents',
+        'wh_purchase_orders': 'rr_wh_purchase_orders',
+        'wh_inward_bills': 'rr_wh_purchase_bills',
+        'wh_suppliers': 'rr_wh_suppliers',
+      };
+      for (const [oldKey, newKey] of Object.entries(legacyKeyMap)) {
+        const oldVal = safeStorage.getItem(oldKey);
+        const newVal = safeStorage.getItem(newKey);
+        if (oldVal && (!newVal || newVal === '[]')) {
+          safeStorage.setItem(newKey, oldVal);
+        }
+      }
+    } catch {}
 
     this.seedMemoryFromLocalStorage();
 
@@ -454,7 +478,14 @@ class PocketBaseTwoWayRealtimeSyncService {
   private fastItemHash(item: any): string {
     if (!item) return '';
     if (typeof item === 'object') {
-      return `${item.id || item.sku || ''}_${item.updatedAt || item.lastUpdated || ''}_${item.stock !== undefined ? item.stock : ''}_${item.status || ''}_${item.total || ''}_${item.paymentStatus || ''}`;
+      const stock = item.stockQuantity !== undefined ? item.stockQuantity : (item.stock !== undefined ? item.stock : '');
+      const storeAlloc = item.storeAllocations ? JSON.stringify(item.storeAllocations) : '';
+      const boxStock = item.fullBoxStock !== undefined ? item.fullBoxStock : '';
+      const looseStock = item.loosePieceStock !== undefined ? item.loosePieceStock : '';
+      const storeBoxes = item.storeBoxAllocations ? JSON.stringify(item.storeBoxAllocations) : '';
+      const transferItems = Array.isArray(item.items) ? item.items.map((i: any) => `${i.itemId}:${i.dispatchedQty || 0}:${i.receivedQty || 0}`).join(',') : '';
+      const lastMod = item.lastStockChange || item.updatedAt || item.lastUpdated || '';
+      return `${item.id || item.sku || item.transferNumber || ''}_${lastMod}_${stock}_${storeAlloc}_${boxStock}_${looseStock}_${storeBoxes}_${transferItems}_${item.status || ''}_${item.total || item.totalValuation || ''}_${item.paymentStatus || ''}`;
     }
     return String(item);
   }
@@ -464,19 +495,45 @@ class PocketBaseTwoWayRealtimeSyncService {
     try {
       let resolvedDocs = remoteDocs;
 
-      // Ensure local inventory items aren't overwritten if remote is empty
+      // Ensure local inventory items aren't overwritten by stale remote data
       if (storageKey === STORAGE_KEYS.INVENTORY && Array.isArray(remoteDocs)) {
         try {
           const rawLocal = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
           if (rawLocal) {
             const localItems: any[] = JSON.parse(rawLocal);
-            if (Array.isArray(localItems) && localItems.length > remoteDocs.length) {
-              const remoteIdSet = new Set(remoteDocs.map((r: any) => String(r.id || r.sku)));
+            if (Array.isArray(localItems)) {
+              const localMap = new Map(localItems.map((l: any) => [String(l.id || l.sku), l]));
+              resolvedDocs = remoteDocs.map((r: any) => {
+                const docId = String(r.id || r.sku);
+                const localItem = localMap.get(docId);
+                if (!localItem) return r;
+
+                const localTs = localItem.lastStockChange || (localItem.updatedAt ? new Date(localItem.updatedAt).getTime() : 0);
+                const remoteTs = r.lastStockChange || (r.updatedAt ? new Date(r.updatedAt).getTime() : 0);
+
+                // If local has newer stock mutation, preserve local stock to avoid stale overwrite
+                if (localTs > remoteTs) {
+                  return {
+                    ...r,
+                    stockQuantity: localItem.stockQuantity,
+                    storeAllocations: localItem.storeAllocations,
+                    fullBoxStock: localItem.fullBoxStock,
+                    loosePieceStock: localItem.loosePieceStock,
+                    storeBoxAllocations: localItem.storeBoxAllocations,
+                    lastStockChange: localItem.lastStockChange,
+                    updatedAt: localItem.updatedAt,
+                  };
+                }
+                return r;
+              });
+
+              // Also preserve any un-synced local items
+              const remoteIdSet = new Set(resolvedDocs.map((r: any) => String(r.id || r.sku)));
               const unSyncedLocal = localItems.filter(
                 (loc) => loc && !remoteIdSet.has(String(loc.id)) && (!loc.sku || !remoteIdSet.has(String(loc.sku)))
               );
               if (unSyncedLocal.length > 0) {
-                resolvedDocs = [...remoteDocs, ...unSyncedLocal];
+                resolvedDocs = [...resolvedDocs, ...unSyncedLocal];
               }
             }
           }

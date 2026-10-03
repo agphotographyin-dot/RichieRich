@@ -139,18 +139,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     cost: Math.round(o.totalCost),
   }));
 
-  // Category breakdown for 3 core product families
+  // Category breakdown for 3 core product families (Consistent across Central WH + Stores)
   const categoryCounts = {
     Paan: inventory.filter((i) => i.category === 'Paan').reduce((sum, i) => {
-      if (selectedStoreFilter === 'all') return sum + i.stockQuantity;
+      if (selectedStoreFilter === 'all') {
+        const storeSum = Object.values(i.storeAllocations || {}).reduce((s, q) => s + (q || 0), 0);
+        return sum + (i.stockQuantity || 0) + storeSum;
+      }
       return sum + (i.storeAllocations?.[selectedStoreFilter] || 0);
     }, 0),
     Cafe: inventory.filter((i) => i.category === 'Cafe').reduce((sum, i) => {
-      if (selectedStoreFilter === 'all') return sum + i.stockQuantity;
+      if (selectedStoreFilter === 'all') {
+        const storeSum = Object.values(i.storeAllocations || {}).reduce((s, q) => s + (q || 0), 0);
+        return sum + (i.stockQuantity || 0) + storeSum;
+      }
       return sum + (i.storeAllocations?.[selectedStoreFilter] || 0);
     }, 0),
     Essentials: inventory.filter((i) => i.category === 'Essentials').reduce((sum, i) => {
-      if (selectedStoreFilter === 'all') return sum + i.stockQuantity;
+      if (selectedStoreFilter === 'all') {
+        const storeSum = Object.values(i.storeAllocations || {}).reduce((s, q) => s + (q || 0), 0);
+        return sum + (i.stockQuantity || 0) + storeSum;
+      }
       return sum + (i.storeAllocations?.[selectedStoreFilter] || 0);
     }, 0),
   };
@@ -230,11 +239,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       storage.adjustStock(item.id, 20, 'Quick Admin Dashboard Restock');
     } else {
       const currentAlloc = item.storeAllocations || {};
-      const newAlloc = {
-        ...currentAlloc,
-        [selectedStoreFilter]: (currentAlloc[selectedStoreFilter] || 0) + 20,
-      };
-      storage.updateInventoryItem(item.id, { storeAllocations: newAlloc });
+      const currentStoreStock = currentAlloc[selectedStoreFilter] || 0;
+      warehouseStorage.adjustStoreStock(
+        item.id,
+        selectedStoreFilter,
+        currentStoreStock + 20,
+        'Quick Admin Dashboard Restock',
+        'Admin Manager'
+      );
     }
   };
 
@@ -684,13 +696,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
           <div className="text-2xl font-bold text-slate-900 font-mono">
             {(selectedStoreFilter === 'all'
-              ? inventory.reduce((sum, i) => sum + i.stockQuantity, 0)
+              ? inventory.reduce((sum, i) => {
+                  const storeSum = Object.values(i.storeAllocations || {}).reduce((s, q) => s + (q || 0), 0);
+                  return sum + (i.stockQuantity || 0) + storeSum;
+                }, 0)
               : inventory.reduce((sum, i) => sum + (i.storeAllocations?.[selectedStoreFilter] || 0), 0)
             ).toLocaleString('en-IN')}{' '}
             <span className="text-xs font-normal text-slate-500">units</span>
           </div>
           <div className="text-slate-500 text-xs mt-2 flex justify-between items-center">
-            <span>Total Valuation: {CURRENCY}{globalStats.totalInventoryValue.toLocaleString('en-IN')}</span>
+            {selectedStoreFilter === 'all' ? (
+              <span className="text-[11px] text-slate-500">
+                WH: {inventory.reduce((sum, i) => sum + (i.stockQuantity || 0), 0).toLocaleString('en-IN')} | Stores: {inventory.reduce((sum, i) => sum + Object.values(i.storeAllocations || {}).reduce((s, q) => s + (q || 0), 0), 0).toLocaleString('en-IN')}
+              </span>
+            ) : (
+              <span>Total Valuation: {CURRENCY}{globalStats.totalInventoryValue.toLocaleString('en-IN')}</span>
+            )}
           </div>
         </div>
       </div>
@@ -775,8 +796,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </thead>
                 <tbody className="text-xs">
                   {inventory.slice(0, 6).map((item) => {
+                    const storeTotal = Object.values(item.storeAllocations || {}).reduce((s, q) => s + (q || 0), 0);
                     const storeQty = selectedStoreFilter === 'all'
-                      ? item.stockQuantity
+                      ? (item.stockQuantity || 0) + storeTotal
                       : (item.storeAllocations?.[selectedStoreFilter] || 0);
 
                     const storeMinThreshold = selectedStoreFilter === 'all'
@@ -955,7 +977,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div className="text-[10px] text-amber-800 font-semibold font-mono">
                         On Hand:{' '}
                         {selectedStoreFilter === 'all'
-                          ? item.stockQuantity
+                          ? (item.stockQuantity || 0) + Object.values(item.storeAllocations || {}).reduce((s, q) => s + (q || 0), 0)
                           : (item.storeAllocations?.[selectedStoreFilter] || 0)}{' '}
                         {item.unit}
                       </div>
