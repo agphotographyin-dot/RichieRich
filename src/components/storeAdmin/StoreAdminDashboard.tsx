@@ -34,6 +34,7 @@ import {
   Phone,
   BarChart3,
   Truck,
+  Boxes,
 } from 'lucide-react';
 import {
   StoreLocation,
@@ -51,6 +52,8 @@ import { pdfReportService } from '../../services/pdfReportService';
 import { StoreStatementModal } from './StoreStatementModal';
 import { StoreIndentsView } from './StoreIndentsView';
 import { CreateStoreIndentModal } from './CreateStoreIndentModal';
+import { StoreAdjustStockModal } from './StoreAdjustStockModal';
+import { StoreManageStockModal } from './StoreManageStockModal';
 import { isToday, getLocalDateString } from '../../utils/dateUtils';
 
 interface StoreAdminDashboardProps {
@@ -152,9 +155,11 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
   const [inventoryPageSize, setInventoryPageSize] = useState<number | 'all'>(25);
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
 
-  // Store Inventory Indents State
+  // Store Inventory Indents & Adjustment State
   const [isCreateIndentOpen, setIsCreateIndentOpen] = useState(false);
   const [indentPreselectedItem, setIndentPreselectedItem] = useState<InventoryItem | null>(null);
+  const [isManageStockOpen, setIsManageStockOpen] = useState(false);
+  const [adjustStockItem, setAdjustStockItem] = useState<InventoryItem | null>(null);
 
   const currentStore = stores.find((s) => s.id === activeStoreId) || stores[0];
 
@@ -1220,7 +1225,17 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                   Store outlet inventory is synchronized with Central Warehouse dispatches and real-time POS billings.
                 </span>
               </div>
-              <div className="flex items-center gap-2.5 shrink-0">
+              <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setIsManageStockOpen(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                  title="Manage Stock, Search Existing SKU, Purchase Orders & Transfers"
+                >
+                  <Boxes className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Manage Stock</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -1229,7 +1244,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                   }}
                   className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Truck className="w-3.5 h-3.5" />
                   <span>Order Stock from Warehouse</span>
                 </button>
                 <span className="font-bold whitespace-nowrap bg-amber-200/50 px-2 py-1 rounded-lg">
@@ -1280,7 +1295,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                       <th className="py-3 px-4">Store Allocated Stock</th>
                       <th className="py-3 px-4 text-center">Central WH Stock</th>
                       <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-right">Order / Indent</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1345,22 +1360,34 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                               </span>
                             </td>
                             <td className="py-3 px-4 text-right">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setIndentPreselectedItem(item);
-                                  setIsCreateIndentOpen(true);
-                                }}
-                                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 ${
-                                  isLowStock
-                                    ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-2xs'
-                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                                }`}
-                                title={`Order ${item.name} from Central Warehouse`}
-                              >
-                                <Truck className="w-3.5 h-3.5" />
-                                <span>Indent</span>
-                              </button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setAdjustStockItem(item)}
+                                  className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                                  title={`Manually add, adjust or inward stock for ${item.name}`}
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  <span>Adjust Stock</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIndentPreselectedItem(item);
+                                    setIsCreateIndentOpen(true);
+                                  }}
+                                  className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                                    isLowStock
+                                      ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-2xs'
+                                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                  }`}
+                                  title={`Order ${item.name} from Central Warehouse`}
+                                >
+                                  <Truck className="w-3.5 h-3.5" />
+                                  <span>Indent</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1804,6 +1831,31 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
         onSuccess={() => {
           triggerRefresh();
           handleTabSelect('stock_indents');
+        }}
+      />
+
+      {/* Unified Manage Stock Modal (Search Existing SKU, Direct Purchase Orders, Transfers & Multi-location Overview) */}
+      <StoreManageStockModal
+        isOpen={isManageStockOpen}
+        onClose={() => setIsManageStockOpen(false)}
+        inventory={storeInventory}
+        currentStore={currentStore}
+        performedBy={authState.adminName || 'Store Admin'}
+        onSuccess={() => {
+          triggerRefresh();
+        }}
+      />
+
+      {/* Manually Add / Adjust Store Stock Modal (Real-time Warehouse Sync) */}
+      <StoreAdjustStockModal
+        isOpen={Boolean(adjustStockItem)}
+        onClose={() => setAdjustStockItem(null)}
+        item={adjustStockItem}
+        storeId={activeStoreId}
+        storeName={currentStore.name}
+        performedBy={authState.adminName || 'Store Admin'}
+        onSuccess={() => {
+          triggerRefresh();
         }}
       />
     </div>

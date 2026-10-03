@@ -31,6 +31,7 @@ import { CURRENCY, storage } from '../../services/storage';
 import { pdfReportService } from '../../services/pdfReportService';
 import { DocumentManifestModal } from '../common/DocumentManifestModal';
 import { DailyCollectionModal } from './DailyCollectionModal';
+import { DateRangeStatementModal } from './DateRangeStatementModal';
 import { isToday, getLocalDateString, isSameDay } from '../../utils/dateUtils';
 
 interface AdminOrdersProps {
@@ -46,8 +47,9 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
   })();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | '7days' | 'all' | 'custom'>('today');
-  const [customDate, setCustomDate] = useState<string>(todayStr);
+  const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | '7days' | 'this_month' | '30days' | 'all' | 'custom'>('today');
+  const [startDate, setStartDate] = useState<string>(todayStr);
+  const [endDate, setEndDate] = useState<string>(todayStr);
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'cash' | 'upi_qr' | 'card'>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
@@ -56,8 +58,40 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [invoiceToPrint, setInvoiceToPrint] = useState<Order | null>(null);
   const [isDailyReportOpen, setIsDailyReportOpen] = useState(false);
+  const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
 
   const stores = storage.getStores();
+
+  const handleDatePresetChange = (preset: 'today' | 'yesterday' | '7days' | 'this_month' | '30days' | 'all' | 'custom') => {
+    setDateFilter(preset);
+    const now = new Date();
+    const today = getLocalDateString(now);
+
+    if (preset === 'today') {
+      setStartDate(today);
+      setEndDate(today);
+    } else if (preset === 'yesterday') {
+      setStartDate(yesterdayStr);
+      setEndDate(yesterdayStr);
+    } else if (preset === '7days') {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      setStartDate(getLocalDateString(d));
+      setEndDate(today);
+    } else if (preset === 'this_month') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      setStartDate(getLocalDateString(firstDay));
+      setEndDate(today);
+    } else if (preset === '30days') {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      setStartDate(getLocalDateString(d));
+      setEndDate(today);
+    } else if (preset === 'all') {
+      setStartDate('2020-01-01');
+      setEndDate(today);
+    }
+  };
 
   // Extract unique salespersons from orders & store counters
   const salespersons = Array.from(
@@ -108,9 +142,9 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
   const currentAuditDate = useMemo(() => {
     if (dateFilter === 'today') return todayStr;
     if (dateFilter === 'yesterday') return yesterdayStr;
-    if (dateFilter === 'custom') return customDate;
-    return todayStr;
-  }, [dateFilter, todayStr, yesterdayStr, customDate]);
+    if (startDate === endDate) return startDate;
+    return `${startDate} to ${endDate}`;
+  }, [dateFilter, todayStr, yesterdayStr, startDate, endDate]);
 
   // Filtered Orders for the Master Ledger Table
   const filteredOrders = useMemo(() => {
@@ -123,12 +157,10 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
         matchesDate = isToday(o.createdAt);
       } else if (dateFilter === 'yesterday') {
         matchesDate = orderDateStr === yesterdayStr;
-      } else if (dateFilter === '7days') {
-        const orderTime = new Date(o.createdAt).getTime();
-        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        matchesDate = orderTime >= sevenDaysAgo;
-      } else if (dateFilter === 'custom') {
-        matchesDate = orderDateStr === customDate;
+      } else if (dateFilter === 'all') {
+        matchesDate = true;
+      } else {
+        matchesDate = orderDateStr >= startDate && orderDateStr <= endDate;
       }
 
       // Payment method matching
@@ -160,7 +192,8 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
     dateFilter,
     todayStr,
     yesterdayStr,
-    customDate,
+    startDate,
+    endDate,
     paymentFilter,
     searchTerm,
     statusFilter,
@@ -182,20 +215,31 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
   };
 
   const handleExportPDF = () => {
-    pdfReportService.exportOrdersLedgerPDF(
+    const storeObj = stores.find((s) => s.id === storeFilter);
+    const storeLabel = storeFilter === 'all' ? 'All Stores & Outlets' : (storeObj?.name || storeFilter);
+    const paymentLabel = paymentFilter === 'all' ? 'All Payments' : paymentFilter.toUpperCase();
+
+    pdfReportService.exportDateRangeStatementPDF(
       filteredOrders,
-      `Store: ${storeFilter === 'all' ? 'All' : storeFilter} | Mode: ${paymentFilter} | Status: ${statusFilter}`,
-      `Date: ${currentAuditDate}`
+      startDate,
+      endDate,
+      storeLabel,
+      paymentLabel
     );
   };
 
   const handleDownloadCSV = () => {
-    const csvContent = storage.exportDailyCollectionReportCSV(currentAuditDate, storeFilter);
+    const csvContent = storage.exportDateRangeStatementCSV(
+      startDate,
+      endDate,
+      storeFilter,
+      paymentFilter
+    );
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `sales_ledger_${currentAuditDate}.csv`);
+    link.setAttribute('download', `sales_statement_${startDate}_to_${endDate}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -221,6 +265,15 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => setIsStatementModalOpen(true)}
+            className="px-3.5 py-2 bg-gradient-to-r from-indigo-600 via-indigo-700 to-indigo-800 hover:from-indigo-700 hover:to-indigo-900 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-2 transition-all cursor-pointer"
+            title="Download Financial Statement from Date to Date"
+          >
+            <Calendar className="w-4 h-4 text-amber-300" />
+            <span>Download Statement (Date Range)</span>
+          </button>
+
           <button
             onClick={() => setIsDailyReportOpen(true)}
             className="px-3.5 py-2 bg-linear-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-2 transition-all cursor-pointer"
@@ -436,9 +489,9 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
               <span>Date:</span>
             </span>
 
-            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg">
+            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg flex-wrap">
               <button
-                onClick={() => setDateFilter('today')}
+                onClick={() => handleDatePresetChange('today')}
                 className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
                   dateFilter === 'today'
                     ? 'bg-white text-amber-900 shadow-2xs font-bold'
@@ -448,7 +501,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
                 Today
               </button>
               <button
-                onClick={() => setDateFilter('yesterday')}
+                onClick={() => handleDatePresetChange('yesterday')}
                 className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
                   dateFilter === 'yesterday'
                     ? 'bg-white text-amber-900 shadow-2xs font-bold'
@@ -458,17 +511,37 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
                 Yesterday
               </button>
               <button
-                onClick={() => setDateFilter('7days')}
+                onClick={() => handleDatePresetChange('7days')}
                 className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
                   dateFilter === '7days'
                     ? 'bg-white text-amber-900 shadow-2xs font-bold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Last 7 Days
+                7 Days
               </button>
               <button
-                onClick={() => setDateFilter('all')}
+                onClick={() => handleDatePresetChange('this_month')}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                  dateFilter === 'this_month'
+                    ? 'bg-white text-amber-900 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                This Month
+              </button>
+              <button
+                onClick={() => handleDatePresetChange('30days')}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                  dateFilter === '30days'
+                    ? 'bg-white text-amber-900 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                30 Days
+              </button>
+              <button
+                onClick={() => handleDatePresetChange('all')}
                 className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
                   dateFilter === 'all'
                     ? 'bg-white text-amber-900 shadow-2xs font-bold'
@@ -479,19 +552,30 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
               </button>
             </div>
 
-            {dateFilter === 'custom' || (
-              <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-lg">
-                <input
-                  type="date"
-                  value={customDate}
-                  onChange={(e) => {
-                    setCustomDate(e.target.value);
-                    setDateFilter('custom');
-                  }}
-                  className="text-xs text-slate-800 bg-transparent focus:outline-hidden cursor-pointer"
-                />
-              </div>
-            )}
+            {/* Date Range Inputs (From ➔ To) */}
+            <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-2 py-1 rounded-lg">
+              <span className="text-[10px] font-bold text-slate-500 uppercase">From:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setDateFilter('custom');
+                }}
+                className="text-xs text-slate-800 bg-transparent focus:outline-hidden cursor-pointer"
+              />
+              <span className="text-slate-400 text-xs">➔</span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase">To:</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setDateFilter('custom');
+                }}
+                className="text-xs text-slate-800 bg-transparent focus:outline-hidden cursor-pointer"
+              />
+            </div>
           </div>
         </div>
 
@@ -957,6 +1041,25 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
         onClose={() => setInvoiceToPrint(null)}
         documentType="retail_order"
         documentData={invoiceToPrint}
+      />
+
+      {/* Date Range Financial Sales Statement Modal */}
+      <DateRangeStatementModal
+        isOpen={isStatementModalOpen}
+        onClose={() => setIsStatementModalOpen(false)}
+        orders={orders}
+        stores={stores}
+        initialStartDate={startDate}
+        initialEndDate={endDate}
+      />
+
+      {/* Daily Collection Reconciliation Modal (Z-Report) */}
+      <DailyCollectionModal
+        isOpen={isDailyReportOpen}
+        onClose={() => setIsDailyReportOpen(false)}
+        orders={orders}
+        stores={stores}
+        initialDate={startDate}
       />
     </div>
   );

@@ -3395,6 +3395,81 @@ export class StorageService {
     return csv;
   }
 
+  exportDateRangeStatementCSV(
+    startDate: string,
+    endDate: string,
+    storeId: string = 'all',
+    paymentMethod: string = 'all'
+  ): string {
+    const orders = this.getOrders();
+    const startStr = startDate;
+    const endStr = endDate;
+
+    // Filter orders by date range, store, and payment method
+    const rangeOrders = orders.filter((o) => {
+      const orderDate = getLocalDateString(o.createdAt);
+      const inDateRange = orderDate >= startStr && orderDate <= endStr;
+      const matchesStore =
+        !storeId ||
+        storeId === 'all' ||
+        o.storeId === storeId ||
+        (o.storeName && o.storeName.toLowerCase().includes(storeId.toLowerCase()));
+      const matchesPayment = !paymentMethod || paymentMethod === 'all' || o.paymentMethod === paymentMethod;
+      return inDateRange && matchesStore && matchesPayment;
+    });
+
+    const cashOrders = rangeOrders.filter((o) => o.paymentMethod === 'cash');
+    const upiOrders = rangeOrders.filter((o) => o.paymentMethod === 'upi_qr');
+    const cardOrders = rangeOrders.filter((o) => o.paymentMethod === 'card');
+    const otherOrders = rangeOrders.filter((o) => !['cash', 'upi_qr', 'card'].includes(o.paymentMethod));
+
+    const totalSales = rangeOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+    const totalCash = cashOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+    const totalUPI = upiOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+    const totalCard = cardOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+    const totalOther = otherOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+    const totalTax = rangeOrders.reduce((sum, o) => sum + o.taxAmount, 0);
+    const totalProfit = rangeOrders.reduce((sum, o) => sum + o.totalProfit, 0);
+
+    let csv = `RICHIE RICH PAN HOUSE - MASTER ORDERS & SALES STATEMENT\n`;
+    csv += `Statement Period,${startStr} to ${endStr}\n`;
+    csv += `Store Filter,${storeId && storeId !== 'all' ? storeId.toUpperCase() : 'ALL STORES & OUTLETS'}\n`;
+    csv += `Payment Filter,${paymentMethod && paymentMethod !== 'all' ? paymentMethod.toUpperCase() : 'ALL PAYMENT MODES'}\n`;
+    csv += `Currency,${CURRENCY} (INR)\n`;
+    csv += `Total Transactions,${rangeOrders.length}\n`;
+    csv += `Generated Timestamp,${new Date().toISOString()}\n\n`;
+
+    csv += `EXECUTIVE FINANCIAL STATEMENT SUMMARY\n`;
+    csv += `Metric,Value\n`;
+    csv += `Gross Sales Revenue,${CURRENCY}${totalSales.toFixed(2)}\n`;
+    csv += `Total GST Collected,${CURRENCY}${totalTax.toFixed(2)}\n`;
+    csv += `Total Estimated Profit,${CURRENCY}${totalProfit.toFixed(2)}\n`;
+    csv += `Average Order Value,${CURRENCY}${rangeOrders.length > 0 ? (totalSales / rangeOrders.length).toFixed(2) : '0.00'}\n\n`;
+
+    csv += `PAYMENT METHOD RECONCILIATION\n`;
+    csv += `Payment Method,Total Amount (${CURRENCY}),Bills Count,Share (%)\n`;
+    csv += `CASH,${totalCash.toFixed(2)},${cashOrders.length},${totalSales > 0 ? ((totalCash / totalSales) * 100).toFixed(1) : 0}%\n`;
+    csv += `UPI / QR CODE,${totalUPI.toFixed(2)},${upiOrders.length},${totalSales > 0 ? ((totalUPI / totalSales) * 100).toFixed(1) : 0}%\n`;
+    csv += `CARD / POS SWIPE,${totalCard.toFixed(2)},${cardOrders.length},${totalSales > 0 ? ((totalCard / totalSales) * 100).toFixed(1) : 0}%\n`;
+    if (otherOrders.length > 0) {
+      csv += `LOYALTY / OTHER,${totalOther.toFixed(2)},${otherOrders.length},${totalSales > 0 ? ((totalOther / totalSales) * 100).toFixed(1) : 0}%\n`;
+    }
+    csv += `TOTAL,${totalSales.toFixed(2)},${rangeOrders.length},100.0%\n\n`;
+
+    csv += `ITEMIZED TRANSACTION LEDGER (${startStr} to ${endStr})\n`;
+    csv += `Order #,Date,Time,Outlet / Store,Counter,Cashier / Staff,Customer Name,Customer Phone,Items Summary,Qty,Subtotal,Discount,GST Tax,Grand Total,Profit,Payment Mode,Status\n`;
+
+    rangeOrders.forEach((o) => {
+      const orderDate = getLocalDateString(o.createdAt);
+      const timeStr = new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const qty = o.items.reduce((s, i) => s + i.quantity, 0);
+      const itemsSummary = o.items.map((i) => `${i.quantity}x ${i.name}`).join('; ');
+      csv += `"${o.orderNumber}","${orderDate}","${timeStr}","${(o.storeName || 'Main Store').replace(/"/g, '""')}","${o.counterName || o.counterNumber || 1}","${(o.cashierName || 'Staff').replace(/"/g, '""')}","${(o.customerName || 'Walk-in Guest').replace(/"/g, '""')}","${o.customerPhone || ''}","${itemsSummary.replace(/"/g, '""')}",${qty},${o.subtotal.toFixed(2)},${o.discountAmount.toFixed(2)},${o.taxAmount.toFixed(2)},${o.grandTotal.toFixed(2)},${o.totalProfit.toFixed(2)},"${o.paymentMethod.toUpperCase()}","${o.status}"\n`;
+    });
+
+    return csv;
+  }
+
   // =========================================================================
   // STORE ADMIN CREDENTIALS MANAGEMENT
   // =========================================================================

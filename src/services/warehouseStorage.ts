@@ -11,6 +11,7 @@ import {
   StoreStockIndent,
   StockAdjustment,
   StockMovementAudit,
+  MovementType,
   WarehouseOverviewStats,
   WarehouseSubRole,
 } from '../types/warehouse';
@@ -1761,16 +1762,19 @@ export const warehouseStorage = {
 
       this.saveStockTransfers(transfers);
 
-      // If an associated store indent exists, mark it as in transit
+      // If an associated store indent exists, mark it as dispatched (in transit)
       try {
         const indents = this.getStoreIndents();
         const linkedIndent = indents.find(
           (ind) =>
-            ind.storeId === transfer.destinationId &&
-            (ind.status === 'converted_to_transfer' || ind.status === 'approved')
+            ind.linkedTransferId === transfer.id ||
+            (ind.storeId === transfer.destinationId &&
+              (ind.status === 'converted_to_transfer' || ind.status === 'approved'))
         );
         if (linkedIndent) {
-          linkedIndent.status = 'converted_to_transfer';
+          linkedIndent.status = 'dispatched';
+          linkedIndent.linkedTransferId = transfer.id;
+          linkedIndent.dispatchDate = transfer.dispatchDate;
           this.saveStoreIndents(indents);
         }
       } catch {
@@ -1932,16 +1936,18 @@ export const warehouseStorage = {
       transfer.status = hasPartial ? 'partially_received' : 'completed';
       this.saveStockTransfers(transfers);
 
-      // If an associated store indent exists, mark it as completed
+      // If an associated store indent exists, mark it as completed or partially fulfilled
       try {
         const indents = this.getStoreIndents();
         const linkedIndent = indents.find(
           (ind) =>
-            ind.storeId === transfer.destinationId &&
-            (ind.status === 'converted_to_transfer' || ind.status === 'approved')
+            ind.linkedTransferId === transfer.id ||
+            (ind.storeId === transfer.destinationId &&
+              (ind.status === 'dispatched' || ind.status === 'converted_to_transfer' || ind.status === 'approved'))
         );
         if (linkedIndent) {
-          linkedIndent.status = 'completed';
+          linkedIndent.status = hasPartial ? 'partially_fulfilled' : 'completed';
+          linkedIndent.completedDate = transfer.receivedDate;
           this.saveStoreIndents(indents);
         }
       } catch {
@@ -2133,19 +2139,22 @@ export const warehouseStorage = {
 
   createStoreIndent(indentData: Omit<StoreStockIndent, 'id' | 'indentNumber' | 'status'>): StoreStockIndent {
     const indents = this.getStoreIndents();
-    const indentNumber = `IND-2026-${(indents.length + 25).toString().padStart(3, '0')}`;
+    const seq = (indents.length + 25).toString().padStart(3, '0');
+    const indentNumber = `IND-2026-${seq}`;
+    const poNumber = `PO-STR-2026-${seq}`;
     const newIndent: StoreStockIndent = {
       ...indentData,
       id: `ind-${Date.now()}`,
       indentNumber,
+      poNumber,
       status: 'pending',
     };
     this.saveStoreIndents([newIndent, ...indents]);
     cloudSync.syncDocument('store_indents', newIndent.id, newIndent);
 
     storage.addNotification({
-      title: `New Store Indent Request: ${indentNumber}`,
-      message: `${newIndent.storeName} requested ${newIndent.items.length} items (${newIndent.urgency.toUpperCase()})`,
+      title: `New Store Purchase Order: ${poNumber}`,
+      message: `${newIndent.storeName} raised purchase order for ${newIndent.items.length} items (${newIndent.urgency.toUpperCase()})`,
       type: 'order_update',
       targetRole: 'admin',
       read: false,
@@ -2158,9 +2167,6 @@ export const warehouseStorage = {
     const indents = this.getStoreIndents();
     const indent = indents.find((i) => i.id === indentId);
     if (!indent) return false;
-
-    indent.status = 'converted_to_transfer';
-    this.saveStoreIndents(indents);
 
     // Convert into active Stock Transfer
     const inventory = storage.getInventory();
@@ -2178,7 +2184,7 @@ export const warehouseStorage = {
       };
     });
 
-    this.createStockTransfer({
+    const newTransfer = this.createStockTransfer({
       type: 'warehouse_to_store',
       sourceType: 'warehouse',
       sourceId: indent.targetWarehouseId,
@@ -2189,8 +2195,12 @@ export const warehouseStorage = {
       requestedDate: indent.requestDate,
       status: 'approved',
       items: transferItems,
-      notes: `Generated from Indent Request ${indent.indentNumber}`,
+      notes: `Generated from Store Purchase Order ${indent.poNumber || indent.indentNumber}`,
     });
+
+    indent.status = 'approved';
+    indent.linkedTransferId = newTransfer.id;
+    this.saveStoreIndents(indents);
 
     return true;
   },
@@ -2318,55 +2328,98 @@ export const warehouseStorage = {
     return newAdj;
   },
 
-  // Direct single-store stock adjustment helper (Reconciliation/Store Count Correction)
+  // Direct single-store stock adjustment helper (Reconciliation/Store Count Correction / Direct Inward)
   adjustStoreStock(
     itemId: string,
     storeId: string,
     newQuantity: number,
     reason: string = 'Physical Store Stock Audit',
-    performedBy: string = 'Warehouse Auditor'
+    performedBy: string = 'Store Admin',
+    options?: {
+      loosePieces?: number;
+      isDeltaAdd?: boolean;
+      movementType?: MovementType;
+    }
   ): boolean {
     const inventory = storage.getInventory();
     const item = inventory.find((i) => i.id === itemId);
     if (!item) return false;
 
-    if (!item.storeAllocations) {
-      item.storeAllocations = {};
+    if (!item.storeAllocations) item.storeAllocations = {};
+    if (!item.storeBoxAllocations) item.storeBoxAllocations = {};
+
+    const ppb = Math.max(1, item.piecesPerBox && item.piecesPerBox > 1 ? item.piecesPerBox : 1);
+    const prevBoxes = Math.max(0, Number(item.storeAllocations[storeId]) || 0);
+    const prevLoose = item.storeBoxAllocations[storeId]?.loosePieces !== undefined
+      ? Math.max(0, Number(item.storeBoxAllocations[storeId]?.loosePieces) || 0)
+      : 0;
+    const prevTotalPieces = (prevBoxes * ppb) + prevLoose;
+
+    let targetBoxes = prevBoxes;
+    let targetLoose = prevLoose;
+
+    if (options?.isDeltaAdd) {
+      // Adding delta quantity
+      const addBoxes = Number(newQuantity) || 0;
+      const addLoose = Number(options?.loosePieces) || 0;
+      const newTotalPieces = Math.max(0, prevTotalPieces + (addBoxes * ppb) + addLoose);
+      targetBoxes = Math.floor(newTotalPieces / ppb);
+      targetLoose = newTotalPieces % ppb;
+    } else {
+      // Setting exact quantity
+      targetBoxes = Math.max(0, Number(newQuantity) || 0);
+      targetLoose = options?.loosePieces !== undefined ? Math.max(0, Number(options.loosePieces) || 0) : prevLoose;
     }
 
-    const previousStoreStock = item.storeAllocations[storeId] || 0;
-    const diff = newQuantity - previousStoreStock;
-    if (diff === 0) return true;
+    const newTotalPieces = (targetBoxes * ppb) + targetLoose;
+    const pieceDiff = newTotalPieces - prevTotalPieces;
+    const boxDiff = targetBoxes - prevBoxes;
 
-    item.storeAllocations[storeId] = Math.max(0, newQuantity);
+    if (pieceDiff === 0 && boxDiff === 0) return true;
+
+    item.storeAllocations[storeId] = targetBoxes;
+    item.storeBoxAllocations[storeId] = {
+      fullBoxes: targetBoxes,
+      loosePieces: targetLoose,
+      totalPieces: newTotalPieces,
+      total_piece_equivalent: newTotalPieces,
+    };
+
+    // Calculate total stock across all stores
+    const allStoreStock = Object.values(item.storeAllocations).reduce((s, v) => s + (Number(v) || 0), 0);
+    item.totalPieceEquivalent = (allStoreStock * ppb) + targetLoose;
+    item.total_piece_equivalent = item.totalPieceEquivalent;
 
     const store = storage.getStoreById(storeId);
     const storeName = store ? store.name : storeId;
     const adjRef = `ADJ-STR-${Date.now().toString().slice(-5)}`;
+
+    const movementType: MovementType = options?.movementType || (pieceDiff < 0 ? 'damage_scrap' : 'physical_adjustment');
 
     this.addAuditRecord({
       referenceNumber: adjRef,
       itemId: item.id,
       sku: item.sku,
       itemName: item.name,
-      movementType: diff < 0 ? 'damage_scrap' : 'physical_adjustment',
-      fromLocation: storeName,
-      toLocation: diff < 0 ? 'Store Count Discrepancy / Spoilage' : 'Physical Store Count Audit',
-      quantity: diff,
-      unit: item.unit,
-      balanceAfter: item.storeAllocations[storeId],
-      unitCost: item.costPrice,
-      totalCostImpact: diff * item.costPrice,
+      movementType,
+      fromLocation: pieceDiff < 0 ? storeName : 'Direct Inward / Adjustment',
+      toLocation: pieceDiff < 0 ? 'Write-off / Spoilage / Adjustment' : storeName,
+      quantity: boxDiff !== 0 ? boxDiff : pieceDiff,
+      unit: item.unit || 'units',
+      balanceAfter: targetBoxes,
+      unitCost: item.costPrice || 0,
+      totalCostImpact: boxDiff * (item.costPrice || 0),
       performedBy,
-      userRole: 'Store Manager',
-      notes: `${reason} • Store: ${storeName} • Prev: ${previousStoreStock} ➔ New: ${newQuantity} ${item.unit}`,
+      userRole: 'Store Admin',
+      notes: `${reason} • Store: ${storeName} • Prev: ${prevBoxes} Box + ${prevLoose} Loose (${prevTotalPieces} pcs) ➔ New: ${targetBoxes} Box + ${targetLoose} Loose (${newTotalPieces} pcs)`,
     });
 
     storage.saveInventory(inventory);
+    cloudSync.syncDocument('inventory', item.id, item);
 
     storage.addNotification({
-      title: `Store Stock Adjusted: ${item.name}`,
-      message: `${storeName} count updated from ${previousStoreStock} to ${newQuantity} ${item.unit} (${reason}).`,
+      title: `Store Stock Updated: ${item.name} (${storeName})`,
+      message: `${storeName} inventory updated: ${targetBoxes} ${item.unit || 'units'}${targetLoose > 0 ? ` + ${targetLoose} loose pcs` : ''} (${reason}). Real-time synchronized with Central Warehouse.`,
       type: 'order_update',
       targetRole: 'admin',
       read: false,

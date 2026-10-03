@@ -268,16 +268,29 @@ export interface StoreStockIndentItem {
 export interface StoreStockIndent {
   id: string;
   indentNumber: string;
+  poNumber?: string;
   storeId: string;
   storeName: string;
   targetWarehouseId: string;
   targetWarehouseName: string;
   urgency: 'routine' | 'urgent_low_stock' | 'emergency_event';
   requestDate: string;
-  status: 'pending' | 'approved' | 'converted_to_transfer' | 'declined';
+  status:
+    | 'pending'
+    | 'approved'
+    | 'partially_fulfilled'
+    | 'dispatched'
+    | 'completed'
+    | 'converted_to_transfer'
+    | 'declined';
   items: StoreStockIndentItem[];
   requestedBy: string;
   notes?: string;
+  linkedTransferId?: string;
+  dispatchDate?: string;
+  completedDate?: string;
+  approvedBy?: string;
+  dispatchedBy?: string;
 }
 
 export interface StockAdjustment {
@@ -306,6 +319,15 @@ export interface StockAdjustment {
   notes?: string;
 }
 
+export type MovementType =
+  | 'purchase_inward'
+  | 'warehouse_transfer_out'
+  | 'store_transfer_in'
+  | 'store_return_in'
+  | 'pos_sales_consumption'
+  | 'damage_scrap'
+  | 'physical_adjustment';
+
 export interface StockMovementAudit {
   id: string;
   transactionId?: string; // Standard unique ledger ID, e.g. TXN-10025
@@ -315,14 +337,7 @@ export interface StockMovementAudit {
   sku: string;
   itemName: string;
   batchNumber?: string;
-  movementType:
-    | 'purchase_inward'
-    | 'warehouse_transfer_out'
-    | 'store_transfer_in'
-    | 'store_return_in'
-    | 'pos_sales_consumption'
-    | 'damage_scrap'
-    | 'physical_adjustment';
+  movementType: MovementType;
   fromLocation: string;
   toLocation: string;
   quantity: number;

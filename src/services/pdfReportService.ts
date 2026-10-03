@@ -361,6 +361,127 @@ export const pdfReportService = {
   },
 
   /**
+   * 2b. DATE RANGE SALES STATEMENT PDF REPORT (FROM DATE TO DATE)
+   */
+  exportDateRangeStatementPDF(
+    orders: Order[],
+    startDate: string,
+    endDate: string,
+    storeLabel: string = 'All Outlets',
+    paymentFilter: string = 'All Payments'
+  ) {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+    let currentY = addBrandHeader(
+      doc,
+      'Official Sales & Collections Statement',
+      `Period: ${startDate} to ${endDate}  |  Outlet: ${storeLabel}  |  Mode: ${paymentFilter}  |  Total Invoices: ${orders.length}`
+    );
+
+    const totalSale = orders.reduce((s, o) => s + o.grandTotal, 0);
+    const totalProfit = orders.reduce((s, o) => s + o.totalProfit, 0);
+    const totalTax = orders.reduce((s, o) => s + o.taxAmount, 0);
+    const cashTotal = orders.filter((o) => o.paymentMethod === 'cash').reduce((s, o) => s + o.grandTotal, 0);
+    const upiTotal = orders.filter((o) => o.paymentMethod === 'upi_qr').reduce((s, o) => s + o.grandTotal, 0);
+    const cardTotal = orders.filter((o) => o.paymentMethod === 'card').reduce((s, o) => s + o.grandTotal, 0);
+    const otherTotal = orders.filter((o) => !['cash', 'upi_qr', 'card'].includes(o.paymentMethod)).reduce((s, o) => s + o.grandTotal, 0);
+
+    const cashPct = totalSale > 0 ? ((cashTotal / totalSale) * 100).toFixed(1) : '0.0';
+    const upiPct = totalSale > 0 ? ((upiTotal / totalSale) * 100).toFixed(1) : '0.0';
+    const cardPct = totalSale > 0 ? ((cardTotal / totalSale) * 100).toFixed(1) : '0.0';
+
+    // Executive Summary Box
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(203, 213, 225);
+    doc.roundedRect(14, currentY, 269, 24, 2, 2, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`STATEMENT PERIOD: ${startDate} to ${endDate}`, 18, currentY + 6);
+    doc.text(`TOTAL GROSS REVENUE: ${formatCurrency(totalSale)}`, 110, currentY + 6);
+    doc.setTextColor(16, 185, 129);
+    doc.text(`GROSS PROFIT: +${formatCurrency(totalProfit)}`, 200, currentY + 6);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(51, 65, 85);
+    doc.text(`Total Invoices: ${orders.length}`, 18, currentY + 12);
+    doc.text(`Average Ticket: ${formatCurrency(orders.length ? totalSale / orders.length : 0)}`, 60, currentY + 12);
+    doc.text(`GST Tax Collected: ${formatCurrency(totalTax)}`, 110, currentY + 12);
+    doc.text(`Fulfillment Rate: 100% (Completed)`, 200, currentY + 12);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(5, 150, 105);
+    doc.text(`CASH: ${formatCurrency(cashTotal)} (${cashPct}%)`, 18, currentY + 19);
+    doc.setTextColor(79, 70, 229);
+    doc.text(`UPI / QR: ${formatCurrency(upiTotal)} (${upiPct}%)`, 80, currentY + 19);
+    doc.setTextColor(2, 132, 199);
+    doc.text(`CARD: ${formatCurrency(cardTotal)} (${cardPct}%)`, 140, currentY + 19);
+    if (otherTotal > 0) {
+      doc.setTextColor(100, 116, 139);
+      doc.text(`OTHER / LOYALTY: ${formatCurrency(otherTotal)}`, 200, currentY + 19);
+    }
+
+    currentY += 29;
+
+    const rows = orders.map((o) => {
+      const orderDate = o.createdAt.split('T')[0];
+      const timeStr = new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const storeName = o.storeName ? o.storeName.split('-')[0].trim() : 'Gota Main';
+      const itemsStr = o.items.map((i) => `${i.quantity}x ${i.name}`).join(', ');
+      return [
+        o.orderNumber,
+        `${orderDate} ${timeStr}`,
+        o.paymentMethod.toUpperCase().replace('_', ' '),
+        storeName,
+        o.counterName || (o.counterNumber ? `Counter ${o.counterNumber}` : 'Counter 1'),
+        o.cashierName || 'Staff',
+        o.customerName || 'Walk-in',
+        itemsStr.length > 35 ? itemsStr.substring(0, 35) + '...' : itemsStr,
+        formatCurrency(o.taxAmount),
+        `+${formatCurrency(o.totalProfit)}`,
+        o.status.toUpperCase(),
+        formatCurrency(o.grandTotal),
+      ];
+    });
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Order #', 'Date & Time', 'Payment', 'Outlet', 'Counter', 'Staff', 'Customer', 'Items Summary', 'GST', 'Profit', 'Status', 'Grand Total']],
+      body: rows.length > 0 ? rows : [['No orders found in date range', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-']],
+      theme: 'striped',
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 7, textColor: [51, 65, 85] },
+      columnStyles: {
+        0: { fontStyle: 'bold' },
+        9: { textColor: [16, 185, 129] },
+        11: { fontStyle: 'bold', halign: 'right' },
+      },
+      foot: [
+        ['TOTALS', '-', '-', '-', '-', '-', '-', `${orders.length} orders`, formatCurrency(totalTax), `+${formatCurrency(totalProfit)}`, '-', formatCurrency(totalSale)],
+      ],
+      footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 7.5 },
+      margin: { left: 14, right: 14 },
+    });
+
+    // Signature Signoff block
+    const finalY = (doc as any).lastAutoTable.finalY + 12;
+    if (finalY < doc.internal.pageSize.getHeight() - 25) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Prepared By: _____________________ (Finance / Accounts)', 14, finalY);
+      doc.text('Audited By: _____________________ (Internal Auditor)', 105, finalY);
+      doc.text('Authorized Signatory: _____________________ (Director)', 195, finalY);
+    }
+
+    addPageFooters(doc);
+    doc.save(`Richie_Rich_Sales_Statement_${startDate}_to_${endDate}.pdf`);
+  },
+
+  /**
    * 3. MASTER INVENTORY & VALUATION REPORT PDF
    */
   exportInventoryValuationPDF(inventory: InventoryItem[]) {
