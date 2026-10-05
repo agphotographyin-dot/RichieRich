@@ -3,15 +3,16 @@ import {
   Warehouse,
   Supplier,
   SupplierLedgerEntry,
+  POItem,
   PurchaseOrder,
   PurchaseBill,
+  PurchaseBillItem,
   BatchRecord,
   BatchAllocation,
   StockTransfer,
   StoreStockIndent,
   StockAdjustment,
   StockMovementAudit,
-  MovementType,
   WarehouseOverviewStats,
   WarehouseSubRole,
 } from '../types/warehouse';
@@ -614,6 +615,31 @@ export const warehouseStorage = {
     return newSup;
   },
 
+  updateSupplier(id: string, updates: Partial<Supplier>): Supplier | null {
+    const suppliers = this.getSuppliers();
+    const index = suppliers.findIndex((s) => s.id === id);
+    if (index === -1) return null;
+
+    const updated: Supplier = {
+      ...suppliers[index],
+      ...updates,
+    };
+    suppliers[index] = updated;
+    this.saveSuppliers(suppliers);
+    cloudSync.syncDocument('suppliers', updated.id, updated);
+    return updated;
+  },
+
+  deleteSupplier(id: string): boolean {
+    const suppliers = this.getSuppliers();
+    const filtered = suppliers.filter((s) => s.id !== id);
+    if (filtered.length === suppliers.length) return false;
+
+    this.saveSuppliers(filtered);
+    cloudSync.deleteDocument('suppliers', id);
+    return true;
+  },
+
   recordSupplierPayment(supplierId: string, amount: number, paymentMode: 'bank_neft' | 'upi_qr' | 'cheque' | 'cash', refNo: string, notes?: string): boolean {
     const suppliers = this.getSuppliers();
     const supplier = suppliers.find((s) => s.id === supplierId);
@@ -757,6 +783,432 @@ export const warehouseStorage = {
     po.status = status;
     this.savePurchaseOrders(orders);
     return true;
+  },
+
+  // Direct Store Purchasing Order Creation (No Warehouse Approval Required)
+  createDirectStorePO(poData: {
+    supplierId: string;
+    supplierName: string;
+    supplierGstin?: string;
+    storeId: string;
+    storeName: string;
+    items: POItem[];
+    orderDate?: string;
+    expectedDeliveryDate: string;
+    paymentTerms: string;
+    freightCharge?: number;
+    notes?: string;
+    createdByName: string;
+  }): PurchaseOrder {
+    const orders = this.getPurchaseOrders();
+    const poCount = orders.length + 10240;
+    const poNumber = `PO-${poCount}`;
+
+    const subtotal = poData.items.reduce((sum, it) => sum + (it.unitPrice * it.quantityOrdered), 0);
+    const taxTotal = poData.items.reduce((sum, it) => sum + (it.taxAmount || ((it.unitPrice * it.quantityOrdered * (it.taxPercent || 0)) / 100)), 0);
+    const freight = Number(poData.freightCharge) || 0;
+    const grandTotal = Math.round((subtotal + taxTotal + freight) * 100) / 100;
+
+    const supplier = this.getSuppliers().find((s) => s.id === poData.supplierId);
+    const supplierGstin = poData.supplierGstin || supplier?.gstin || 'N/A';
+
+    const newPO: PurchaseOrder = {
+      id: `po-store-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      poNumber,
+      supplierId: poData.supplierId,
+      supplierName: poData.supplierName,
+      supplierGstin,
+      destinationWarehouseId: undefined,
+      destinationWarehouseName: undefined,
+      destinationType: 'store',
+      destinationId: poData.storeId,
+      destinationName: poData.storeName,
+      orderType: 'direct_store_po',
+      storeId: poData.storeId,
+      storeName: poData.storeName,
+      source: 'Direct Supplier Purchase',
+      orderDate: poData.orderDate || new Date().toISOString().split('T')[0],
+      expectedDeliveryDate: poData.expectedDeliveryDate,
+      status: 'sent_to_supplier',
+      items: poData.items.map((it) => ({
+        ...it,
+        quantityReceived: 0,
+      })),
+      subtotal,
+      taxTotal,
+      freightCharge: freight,
+      grandTotal,
+      createdByName: poData.createdByName || 'Store Manager',
+      paymentTerms: poData.paymentTerms || 'Net 15 Days',
+      paymentStatus: 'unpaid',
+      notes: poData.notes,
+    };
+
+    this.savePurchaseOrders([newPO, ...orders]);
+    cloudSync.syncDocument('purchase_orders', newPO.id, newPO);
+
+    // Record PO Creation in Audit Trail
+    const nowIso = new Date().toISOString();
+    const itemNamesList = newPO.items.map((it) => `${it.name} (${it.quantityOrdered} ${it.unit || 'boxes'})`).join(', ');
+    this.addAuditRecord({
+      referenceNumber: newPO.poNumber,
+      itemId: newPO.items[0]?.itemId || 'MULTI-ITEMS',
+      sku: newPO.items[0]?.sku || 'DIR-PO',
+      itemName: newPO.items.length === 1 ? newPO.items[0].name : `${newPO.items.length} Products Ordered`,
+      movementType: 'direct_store_purchase',
+      fromLocation: `Direct Store Procurement (${newPO.storeName})`,
+      toLocation: `Supplier: ${newPO.supplierName}`,
+      quantity: newPO.items.reduce((s, it) => s + it.quantityOrdered, 0),
+      quantityChanged: 0,
+      unit: newPO.items[0]?.unit || 'boxes',
+      balanceAfter: 0,
+      unitCost: newPO.items[0]?.unitPrice || 0,
+      totalCostImpact: newPO.grandTotal,
+      performedBy: newPO.createdByName,
+      userRole: 'Store Manager',
+      source: 'Direct Supplier Purchase',
+      supplierName: newPO.supplierName,
+      supplierId: newPO.supplierId,
+      purchaseOrderId: newPO.poNumber,
+      status: 'PO Raised',
+      notes: `Direct Store Purchase Order raised for ${newPO.storeName} to ${newPO.supplierName}. Total: ₹${newPO.grandTotal.toLocaleString('en-IN')}. Items: ${itemNamesList}`,
+    });
+
+    storage.addNotification({
+      title: `Direct PO Placed: ${poNumber}`,
+      message: `Store PO for ₹${newPO.grandTotal.toLocaleString('en-IN')} placed directly to ${newPO.supplierName} (${newPO.storeName})`,
+      type: 'order_update',
+      targetRole: 'admin',
+      read: false,
+    });
+
+    return newPO;
+  },
+
+  // Direct Stock Receiving / Goods Receipt from Supplier to Store
+  receiveDirectStorePO(params: {
+    poId: string;
+    storeId: string;
+    storeName: string;
+    supplierInvoiceNo: string;
+    receivedBy: string;
+    billDate?: string;
+    notes?: string;
+    items: Array<{
+      itemId: string;
+      sku: string;
+      name: string;
+      category?: string;
+      quantityReceivedNow: number;
+      damagedQty?: number;
+      batchNumber?: string;
+      mfgDate?: string;
+      expiryDate?: string;
+      unitCost: number;
+      unit?: string;
+      taxPercent?: number;
+    }>;
+  }): { success: boolean; bill?: PurchaseBill; po?: PurchaseOrder; error?: string } {
+    const lockKey = `rx_store_po_${params.poId}_${params.supplierInvoiceNo}`;
+    if (inFlightTransferLocks.has(lockKey)) {
+      return { success: false, error: 'Receiving transaction already in progress. Please wait.' };
+    }
+    inFlightTransferLocks.add(lockKey);
+
+    try {
+      const orders = this.getPurchaseOrders();
+      const po = orders.find((p) => p.id === params.poId);
+      if (!po) {
+        return { success: false, error: 'Purchase Order not found.' };
+      }
+
+      // Filter to items with positive received quantity
+      const validReceivedItems = params.items.filter((it) => (Number(it.quantityReceivedNow) || 0) > 0);
+      if (validReceivedItems.length === 0) {
+        return { success: false, error: 'Please enter a received quantity greater than 0 for at least one item.' };
+      }
+
+      const bills = this.getPurchaseBills();
+      const billNumber = `PB-STR-2026-${(bills.length + 1045).toString().padStart(4, '0')}`;
+      const nowIso = new Date().toISOString();
+      const nowTs = Date.now();
+      const todayDate = params.billDate || nowIso.split('T')[0];
+
+      // 1. Calculate Inward Bill Line Items and Totals
+      let billSubtotal = 0;
+      let billGstAmount = 0;
+
+      const currentInventory = storage.getInventory();
+      const purchaseBillItems = validReceivedItems.map((item) => {
+        const invItem = currentInventory.find(
+          (i) => i.id === item.itemId || (i.sku && i.sku.toLowerCase() === item.sku.toLowerCase())
+        );
+        const piecesPerBox = invItem?.piecesPerBox || 1;
+        const lineSubtotal = item.quantityReceivedNow * item.unitCost;
+        const taxRate = item.taxPercent !== undefined ? item.taxPercent : 5;
+        const taxAmount = Math.round((lineSubtotal * taxRate / 100) * 100) / 100;
+        const totalCost = lineSubtotal + taxAmount;
+
+        billSubtotal += lineSubtotal;
+        billGstAmount += taxAmount;
+
+        return {
+          itemId: item.itemId,
+          sku: item.sku,
+          name: item.name,
+          category: item.category || 'General',
+          quantity: item.quantityReceivedNow,
+          unit: item.unit || 'boxes',
+          inputUnit: item.unit || 'boxes',
+          piecesPerBox,
+          baseQuantity: item.quantityReceivedNow,
+          unitCost: item.unitCost,
+          taxRate,
+          taxAmount,
+          totalCost,
+          batchNumber: item.batchNumber || `BATCH-STR-${item.sku.slice(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}`,
+          mfgDate: item.mfgDate || todayDate,
+          expiryDate: item.expiryDate || new Date(Date.now() + 180 * 86400000).toISOString().split('T')[0],
+        };
+      });
+
+      const billGrandTotal = Math.round((billSubtotal + billGstAmount) * 100) / 100;
+
+      const newBill: PurchaseBill = {
+        id: `pb-store-${Date.now()}`,
+        billNumber,
+        poReferenceId: po.id,
+        poNumber: po.poNumber,
+        supplierId: po.supplierId,
+        supplierName: po.supplierName,
+        supplierInvoiceNo: params.supplierInvoiceNo || `INV-STR-${Date.now().toString().slice(-4)}`,
+        destinationType: 'store',
+        destinationId: params.storeId,
+        destinationName: params.storeName,
+        storeId: params.storeId,
+        storeName: params.storeName,
+        source: 'Direct Supplier Purchase',
+        billDate: todayDate,
+        receivedDate: todayDate,
+        items: purchaseBillItems,
+        subtotal: billSubtotal,
+        gstAmount: billGstAmount,
+        freightCharges: 0,
+        roundOff: 0,
+        grandTotal: billGrandTotal,
+        paidAmount: 0,
+        dueAmount: billGrandTotal,
+        dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+        paymentStatus: 'due',
+        grnStatus: 'verified_stocked',
+        receivedBy: params.receivedBy || 'Store Manager',
+        notes: params.notes || `Direct goods inwarded at ${params.storeName}`,
+      };
+
+      this.savePurchaseBills([newBill, ...bills]);
+      cloudSync.syncDocument('inward_bills', newBill.id, newBill);
+
+      // 2. Update Master Inventory - Increment ONLY Store Stock (Central Warehouse is NEVER touched)
+      const auditRecords: Array<Omit<StockMovementAudit, 'id' | 'timestamp'>> = [];
+
+      validReceivedItems.forEach((item, idx) => {
+        const invItem = currentInventory.find(
+          (i) => i.id === item.itemId || (i.sku && i.sku.toLowerCase() === item.sku.toLowerCase())
+        );
+
+        if (invItem) {
+          if (!invItem.storeAllocations) {
+            invItem.storeAllocations = {};
+          }
+          if (!invItem.storeBoxAllocations) {
+            invItem.storeBoxAllocations = {};
+          }
+
+          const isBoxUnit = isBoxDenominatedUnit(item.unit || invItem.unit);
+          const prevStoreStock = Math.max(0, Math.floor(Number(invItem.storeAllocations[params.storeId]) || 0));
+          const newStoreStock = prevStoreStock + item.quantityReceivedNow;
+
+          invItem.storeAllocations[params.storeId] = newStoreStock;
+
+          const prevBoxAlloc = invItem.storeBoxAllocations[params.storeId] || {
+            fullBoxes: 0,
+            loosePieces: 0,
+            totalPieces: 0,
+            total_piece_equivalent: 0,
+          };
+
+          const newFullBoxes = isBoxUnit ? (prevBoxAlloc.fullBoxes || 0) + item.quantityReceivedNow : prevBoxAlloc.fullBoxes;
+          invItem.storeBoxAllocations[params.storeId] = {
+            ...prevBoxAlloc,
+            fullBoxes: newFullBoxes,
+            loosePieces: prevBoxAlloc.loosePieces || 0,
+            totalPieces: newStoreStock,
+            total_piece_equivalent: newStoreStock,
+          };
+
+          (invItem as any).lastStockChange = nowTs;
+          invItem.updatedAt = nowIso;
+
+          // Audit record for each inwarded item
+          auditRecords.push({
+            transactionId: `TXN-DIR-${Date.now().toString().slice(-5)}${idx}`,
+            referenceNumber: po.poNumber,
+            itemId: invItem.id,
+            sku: invItem.sku,
+            itemName: invItem.name,
+            batchNumber: purchaseBillItems[idx]?.batchNumber,
+            movementType: 'direct_store_purchase',
+            fromLocation: `Supplier: ${po.supplierName}`,
+            toLocation: `Store: ${params.storeName}`,
+            quantity: item.quantityReceivedNow,
+            quantityChanged: item.quantityReceivedNow,
+            previousStock: prevStoreStock,
+            newStock: newStoreStock,
+            unit: isBoxUnit ? 'boxes' : (item.unit || invItem.unit || 'units'),
+            balanceAfter: newStoreStock,
+            unitCost: item.unitCost,
+            totalCostImpact: item.quantityReceivedNow * item.unitCost,
+            performedBy: params.receivedBy || 'Store Manager',
+            userRole: 'Store Manager',
+            source: 'Direct Supplier Purchase',
+            supplierName: po.supplierName,
+            supplierId: po.supplierId,
+            invoiceNumber: newBill.supplierInvoiceNo,
+            purchaseOrderId: po.poNumber,
+            status: 'Completed',
+            notes: isBoxUnit
+              ? `Direct Store Inward: Received ${item.quantityReceivedNow} Boxes directly from ${po.supplierName}. Store Stock Before: ${prevStoreStock} ➔ After: ${newStoreStock} Boxes. Invoice No: ${newBill.supplierInvoiceNo}`
+              : `Direct Store Inward: Received ${item.quantityReceivedNow} Units directly from ${po.supplierName}. Store Stock Before: ${prevStoreStock} ➔ After: ${newStoreStock} Units. Invoice No: ${newBill.supplierInvoiceNo}`,
+          });
+        }
+      });
+
+      storage.saveInventory(currentInventory);
+      this.addAuditRecords(auditRecords);
+
+      // 3. Batches with Expiry Tracking for the Store
+      const batches = this.getBatches();
+      const newBatches: BatchRecord[] = purchaseBillItems.map((item, idx) => {
+        const daysToExpiry = Math.ceil(
+          (new Date(item.expiryDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24)
+        );
+        let status: BatchRecord['status'] = 'active';
+        if (daysToExpiry <= 0) status = 'expired';
+        else if (daysToExpiry <= 30) status = 'near_expiry';
+
+        return {
+          id: `bat-str-${Date.now()}-${idx}`,
+          itemId: item.itemId,
+          sku: item.sku,
+          name: item.name,
+          category: item.category,
+          batchNumber: item.batchNumber,
+          warehouseId: params.storeId,
+          warehouseName: params.storeName,
+          mfgDate: item.mfgDate,
+          expiryDate: item.expiryDate,
+          initialQuantity: item.quantity,
+          originalQuantity: item.quantity,
+          originalUnit: item.unit,
+          piecesPerBox: item.piecesPerBox || 1,
+          originalBaseQuantity: item.quantity,
+          currentBaseQuantity: item.quantity,
+          currentQuantity: item.quantity,
+          quantityInStock: 0, // Central stock is 0 for store batch
+          consumedQuantity: 0,
+          consumedBaseQuantity: 0,
+          locationQuantities: {
+            [params.storeId]: item.quantity,
+          },
+          locationUnit: item.unit || 'BOX',
+          unit: item.unit,
+          unitCost: item.unitCost,
+          purchaseBillRef: billNumber,
+          supplierName: po.supplierName,
+          daysToExpiry,
+          status,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+      });
+
+      this.saveBatches([...newBatches, ...batches]);
+
+      // 4. Update Supplier Ledger & Outstanding
+      const suppliers = this.getSuppliers();
+      const supplier = suppliers.find((s) => s.id === po.supplierId);
+      if (supplier) {
+        supplier.totalPurchases = (supplier.totalPurchases || 0) + newBill.grandTotal;
+        supplier.currentOutstanding = (supplier.currentOutstanding || 0) + newBill.dueAmount;
+        this.saveSuppliers(suppliers);
+
+        const ledgers = this.getSupplierLedger();
+        const newLedger: SupplierLedgerEntry = {
+          id: `led-${Date.now()}`,
+          supplierId: supplier.id,
+          supplierName: supplier.name,
+          date: newBill.billDate,
+          type: 'purchase_bill',
+          referenceNo: billNumber,
+          debit: 0,
+          credit: newBill.grandTotal,
+          runningBalance: supplier.currentOutstanding,
+          notes: `Direct Store Inward at ${params.storeName} against Invoice ${newBill.supplierInvoiceNo} (PO: ${po.poNumber})`,
+        };
+        this.saveSupplierLedger([newLedger, ...ledgers]);
+      }
+
+      // 5. Update PO Item Received Quantities and Status (Full or Partial Receiving)
+      validReceivedItems.forEach((rxItem) => {
+        const poItem = po.items.find((it) => it.itemId === rxItem.itemId || it.sku === rxItem.sku);
+        if (poItem) {
+          poItem.quantityReceived = (poItem.quantityReceived || 0) + rxItem.quantityReceivedNow;
+        }
+      });
+
+      // Check if all items in PO are fully received
+      const isAllFullyReceived = po.items.every((it) => (it.quantityReceived || 0) >= it.quantityOrdered);
+      po.status = isAllFullyReceived ? 'received' : 'partially_received';
+      this.savePurchaseOrders(orders);
+
+      storage.addNotification({
+        title: `Direct Stock Received: +${validReceivedItems.reduce((s, i) => s + i.quantityReceivedNow, 0)} ${validReceivedItems[0]?.unit || 'boxes'} at ${params.storeName}`,
+        message: `Inwarded from ${po.supplierName} (PO: ${po.poNumber}, Inv: ${newBill.supplierInvoiceNo}). Status: ${po.status.toUpperCase().replace(/_/g, ' ')}`,
+        type: 'order_update',
+        targetRole: 'admin',
+        read: false,
+      });
+
+      return { success: true, bill: newBill, po };
+    } finally {
+      inFlightTransferLocks.delete(lockKey);
+    }
+  },
+
+  // Helper to fetch direct store purchase orders
+  getDirectStorePOs(storeId?: string): PurchaseOrder[] {
+    const orders = this.getPurchaseOrders();
+    return orders.filter((p) => {
+      const isDirect = p.orderType === 'direct_store_po' || p.destinationType === 'store' || !!p.storeId;
+      if (!isDirect) return false;
+      if (storeId) {
+        return p.storeId === storeId || p.destinationId === storeId;
+      }
+      return true;
+    });
+  },
+
+  // Helper to fetch direct store inward bills
+  getDirectStoreInwardBills(storeId?: string): PurchaseBill[] {
+    const bills = this.getPurchaseBills();
+    return bills.filter((b) => {
+      const isDirect = b.destinationType === 'store' || b.source === 'Direct Supplier Purchase' || !!b.storeId;
+      if (!isDirect) return false;
+      if (storeId) {
+        return b.storeId === storeId || b.destinationId === storeId;
+      }
+      return true;
+    });
   },
 
   // =========================================================================
@@ -1762,19 +2214,16 @@ export const warehouseStorage = {
 
       this.saveStockTransfers(transfers);
 
-      // If an associated store indent exists, mark it as dispatched (in transit)
+      // If an associated store indent exists, mark it as in transit
       try {
         const indents = this.getStoreIndents();
         const linkedIndent = indents.find(
           (ind) =>
-            ind.linkedTransferId === transfer.id ||
-            (ind.storeId === transfer.destinationId &&
-              (ind.status === 'converted_to_transfer' || ind.status === 'approved'))
+            ind.storeId === transfer.destinationId &&
+            (ind.status === 'converted_to_transfer' || ind.status === 'approved')
         );
         if (linkedIndent) {
-          linkedIndent.status = 'dispatched';
-          linkedIndent.linkedTransferId = transfer.id;
-          linkedIndent.dispatchDate = transfer.dispatchDate;
+          linkedIndent.status = 'converted_to_transfer';
           this.saveStoreIndents(indents);
         }
       } catch {
@@ -1936,18 +2385,16 @@ export const warehouseStorage = {
       transfer.status = hasPartial ? 'partially_received' : 'completed';
       this.saveStockTransfers(transfers);
 
-      // If an associated store indent exists, mark it as completed or partially fulfilled
+      // If an associated store indent exists, mark it as completed
       try {
         const indents = this.getStoreIndents();
         const linkedIndent = indents.find(
           (ind) =>
-            ind.linkedTransferId === transfer.id ||
-            (ind.storeId === transfer.destinationId &&
-              (ind.status === 'dispatched' || ind.status === 'converted_to_transfer' || ind.status === 'approved'))
+            ind.storeId === transfer.destinationId &&
+            (ind.status === 'converted_to_transfer' || ind.status === 'approved')
         );
         if (linkedIndent) {
-          linkedIndent.status = hasPartial ? 'partially_fulfilled' : 'completed';
-          linkedIndent.completedDate = transfer.receivedDate;
+          linkedIndent.status = 'completed';
           this.saveStoreIndents(indents);
         }
       } catch {
@@ -2139,22 +2586,19 @@ export const warehouseStorage = {
 
   createStoreIndent(indentData: Omit<StoreStockIndent, 'id' | 'indentNumber' | 'status'>): StoreStockIndent {
     const indents = this.getStoreIndents();
-    const seq = (indents.length + 25).toString().padStart(3, '0');
-    const indentNumber = `IND-2026-${seq}`;
-    const poNumber = `PO-STR-2026-${seq}`;
+    const indentNumber = `IND-2026-${(indents.length + 25).toString().padStart(3, '0')}`;
     const newIndent: StoreStockIndent = {
       ...indentData,
       id: `ind-${Date.now()}`,
       indentNumber,
-      poNumber,
       status: 'pending',
     };
     this.saveStoreIndents([newIndent, ...indents]);
     cloudSync.syncDocument('store_indents', newIndent.id, newIndent);
 
     storage.addNotification({
-      title: `New Store Purchase Order: ${poNumber}`,
-      message: `${newIndent.storeName} raised purchase order for ${newIndent.items.length} items (${newIndent.urgency.toUpperCase()})`,
+      title: `New Store Indent Request: ${indentNumber}`,
+      message: `${newIndent.storeName} requested ${newIndent.items.length} items (${newIndent.urgency.toUpperCase()})`,
       type: 'order_update',
       targetRole: 'admin',
       read: false,
@@ -2167,6 +2611,9 @@ export const warehouseStorage = {
     const indents = this.getStoreIndents();
     const indent = indents.find((i) => i.id === indentId);
     if (!indent) return false;
+
+    indent.status = 'converted_to_transfer';
+    this.saveStoreIndents(indents);
 
     // Convert into active Stock Transfer
     const inventory = storage.getInventory();
@@ -2184,7 +2631,7 @@ export const warehouseStorage = {
       };
     });
 
-    const newTransfer = this.createStockTransfer({
+    this.createStockTransfer({
       type: 'warehouse_to_store',
       sourceType: 'warehouse',
       sourceId: indent.targetWarehouseId,
@@ -2195,12 +2642,8 @@ export const warehouseStorage = {
       requestedDate: indent.requestDate,
       status: 'approved',
       items: transferItems,
-      notes: `Generated from Store Purchase Order ${indent.poNumber || indent.indentNumber}`,
+      notes: `Generated from Indent Request ${indent.indentNumber}`,
     });
-
-    indent.status = 'approved';
-    indent.linkedTransferId = newTransfer.id;
-    this.saveStoreIndents(indents);
 
     return true;
   },
@@ -2328,98 +2771,55 @@ export const warehouseStorage = {
     return newAdj;
   },
 
-  // Direct single-store stock adjustment helper (Reconciliation/Store Count Correction / Direct Inward)
+  // Direct single-store stock adjustment helper (Reconciliation/Store Count Correction)
   adjustStoreStock(
     itemId: string,
     storeId: string,
     newQuantity: number,
     reason: string = 'Physical Store Stock Audit',
-    performedBy: string = 'Store Admin',
-    options?: {
-      loosePieces?: number;
-      isDeltaAdd?: boolean;
-      movementType?: MovementType;
-    }
+    performedBy: string = 'Warehouse Auditor'
   ): boolean {
     const inventory = storage.getInventory();
     const item = inventory.find((i) => i.id === itemId);
     if (!item) return false;
 
-    if (!item.storeAllocations) item.storeAllocations = {};
-    if (!item.storeBoxAllocations) item.storeBoxAllocations = {};
-
-    const ppb = Math.max(1, item.piecesPerBox && item.piecesPerBox > 1 ? item.piecesPerBox : 1);
-    const prevBoxes = Math.max(0, Number(item.storeAllocations[storeId]) || 0);
-    const prevLoose = item.storeBoxAllocations[storeId]?.loosePieces !== undefined
-      ? Math.max(0, Number(item.storeBoxAllocations[storeId]?.loosePieces) || 0)
-      : 0;
-    const prevTotalPieces = (prevBoxes * ppb) + prevLoose;
-
-    let targetBoxes = prevBoxes;
-    let targetLoose = prevLoose;
-
-    if (options?.isDeltaAdd) {
-      // Adding delta quantity
-      const addBoxes = Number(newQuantity) || 0;
-      const addLoose = Number(options?.loosePieces) || 0;
-      const newTotalPieces = Math.max(0, prevTotalPieces + (addBoxes * ppb) + addLoose);
-      targetBoxes = Math.floor(newTotalPieces / ppb);
-      targetLoose = newTotalPieces % ppb;
-    } else {
-      // Setting exact quantity
-      targetBoxes = Math.max(0, Number(newQuantity) || 0);
-      targetLoose = options?.loosePieces !== undefined ? Math.max(0, Number(options.loosePieces) || 0) : prevLoose;
+    if (!item.storeAllocations) {
+      item.storeAllocations = {};
     }
 
-    const newTotalPieces = (targetBoxes * ppb) + targetLoose;
-    const pieceDiff = newTotalPieces - prevTotalPieces;
-    const boxDiff = targetBoxes - prevBoxes;
+    const previousStoreStock = item.storeAllocations[storeId] || 0;
+    const diff = newQuantity - previousStoreStock;
+    if (diff === 0) return true;
 
-    if (pieceDiff === 0 && boxDiff === 0) return true;
-
-    item.storeAllocations[storeId] = targetBoxes;
-    item.storeBoxAllocations[storeId] = {
-      fullBoxes: targetBoxes,
-      loosePieces: targetLoose,
-      totalPieces: newTotalPieces,
-      total_piece_equivalent: newTotalPieces,
-    };
-
-    // Calculate total stock across all stores
-    const allStoreStock = Object.values(item.storeAllocations).reduce((s, v) => s + (Number(v) || 0), 0);
-    item.totalPieceEquivalent = (allStoreStock * ppb) + targetLoose;
-    item.total_piece_equivalent = item.totalPieceEquivalent;
+    item.storeAllocations[storeId] = Math.max(0, newQuantity);
 
     const store = storage.getStoreById(storeId);
     const storeName = store ? store.name : storeId;
     const adjRef = `ADJ-STR-${Date.now().toString().slice(-5)}`;
-
-    const movementType: MovementType = options?.movementType || (pieceDiff < 0 ? 'damage_scrap' : 'physical_adjustment');
 
     this.addAuditRecord({
       referenceNumber: adjRef,
       itemId: item.id,
       sku: item.sku,
       itemName: item.name,
-      movementType,
-      fromLocation: pieceDiff < 0 ? storeName : 'Direct Inward / Adjustment',
-      toLocation: pieceDiff < 0 ? 'Write-off / Spoilage / Adjustment' : storeName,
-      quantity: boxDiff !== 0 ? boxDiff : pieceDiff,
-      unit: item.unit || 'units',
-      balanceAfter: targetBoxes,
-      unitCost: item.costPrice || 0,
-      totalCostImpact: boxDiff * (item.costPrice || 0),
+      movementType: diff < 0 ? 'damage_scrap' : 'physical_adjustment',
+      fromLocation: storeName,
+      toLocation: diff < 0 ? 'Store Count Discrepancy / Spoilage' : 'Physical Store Count Audit',
+      quantity: diff,
+      unit: item.unit,
+      balanceAfter: item.storeAllocations[storeId],
+      unitCost: item.costPrice,
+      totalCostImpact: diff * item.costPrice,
       performedBy,
-      userRole: 'Store Admin',
-      notes: `${reason} • Store: ${storeName} • Prev: ${prevBoxes} Box + ${prevLoose} Loose (${prevTotalPieces} pcs) ➔ New: ${targetBoxes} Box + ${targetLoose} Loose (${newTotalPieces} pcs)`,
+      userRole: 'Store Manager',
+      notes: `${reason} • Store: ${storeName} • Prev: ${previousStoreStock} ➔ New: ${newQuantity} ${item.unit}`,
     });
 
     storage.saveInventory(inventory);
-    cloudSync.syncDocument('inventory', item.id, item);
 
     storage.addNotification({
-      title: `Store Stock Updated: ${item.name} (${storeName})`,
-      message: `${storeName} inventory updated: ${targetBoxes} ${item.unit || 'units'}${targetLoose > 0 ? ` + ${targetLoose} loose pcs` : ''} (${reason}). Real-time synchronized with Central Warehouse.`,
+      title: `Store Stock Adjusted: ${item.name}`,
+      message: `${storeName} count updated from ${previousStoreStock} to ${newQuantity} ${item.unit} (${reason}).`,
       type: 'order_update',
       targetRole: 'admin',
       read: false,

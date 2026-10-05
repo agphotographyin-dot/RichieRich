@@ -437,7 +437,13 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area: Expands sideways responsively to fit device size, screen, and resolution */}
-      <main className="flex-1 w-full max-w-[2400px] 2xl:max-w-none mx-auto px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 sm:py-6">
+      <main
+        className={`flex-1 w-full ${
+          currentRole === 'store_admin' || currentRole === 'warehouse'
+            ? 'max-w-none px-0 py-0'
+            : 'max-w-[2400px] 2xl:max-w-none mx-auto px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 sm:py-6'
+        }`}
+      >
         {/* ================================================================= */}
         {/* LANDING PAGE: 4 Operational Portals Grid + Customer Portal        */}
         {/* ================================================================= */}

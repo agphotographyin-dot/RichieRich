@@ -369,4 +369,58 @@ export const authService = {
   logoutStoreAdmin(): void {
     safeStorage.removeItem(STORE_ADMIN_STORAGE_KEY);
   },
+
+  verifyStoreAdminPassword(
+    storeId: string,
+    password: string
+  ): { success: boolean; adminName?: string; error?: string } {
+    const cleanStoreId = storeId.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanPassword) {
+      return { success: false, error: 'Store Admin password is required to authorize audit changes.' };
+    }
+
+    // 1. Master Admin master passwords
+    if (
+      cleanPassword === 'RRadmin' ||
+      cleanPassword === 'admin' ||
+      cleanPassword === 'admin123' ||
+      cleanPassword === 'RRmaster'
+    ) {
+      return { success: true, adminName: 'Master Admin' };
+    }
+
+    // 2. Standard Store Passwords pattern (e.g. RRbopal, RRgota, RRsbr, RRsg, RRvastrapur)
+    const standardStorePasswords: Record<string, string> = {
+      bopal: 'RRbopal',
+      gota: 'RRgota',
+      sindhubhavan: 'RRsbr',
+      sg_highway: 'RRsg',
+      vastrapur: 'RRvastrapur',
+      science_city: 'RRsciencecity',
+    };
+
+    if (standardStorePasswords[cleanStoreId] && cleanPassword === standardStorePasswords[cleanStoreId]) {
+      return { success: true, adminName: `Store Admin (${cleanStoreId})` };
+    }
+
+    // 3. Match from active registered Store Admins in database
+    const storeAdmins = storage.getStoreAdmins();
+    const matchedAdmin = storeAdmins.find(
+      (a) =>
+        (a.storeId === cleanStoreId || cleanStoreId === 'all') &&
+        a.password === cleanPassword &&
+        a.isActive
+    );
+
+    if (matchedAdmin) {
+      return { success: true, adminName: matchedAdmin.name };
+    }
+
+    return {
+      success: false,
+      error: 'Invalid Store Admin Password. Authorization denied. Please check your password.',
+    };
+  },
 };

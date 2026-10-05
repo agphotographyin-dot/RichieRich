@@ -2526,6 +2526,108 @@ export class StorageService {
   }
 
   /**
+   * Applies a manual/physical stock audit to a store outlet's allocation with discrepancy tracking
+   * and immutable audit log entry.
+   */
+  auditStoreStock(
+    storeId: string,
+    audits: Array<{
+      itemId: string;
+      countedStock: number;
+      reason: string;
+      notes?: string;
+    }>,
+    auditorName: string = 'Store Admin'
+  ): { success: boolean; modifiedCount: number; auditReference: string; error?: string } {
+    if (!audits || audits.length === 0) {
+      return { success: false, modifiedCount: 0, auditReference: '', error: 'No items provided for stock audit.' };
+    }
+
+    const store = this.getStoreById(storeId);
+    const storeName = store ? store.name : storeId;
+    const items = this.getInventory();
+    const nowIso = new Date().toISOString();
+    const nowTs = Date.now();
+    const auditReference = `AUD-${storeId.toUpperCase()}-${nowTs.toString().slice(-6)}`;
+    const auditRecords: any[] = [];
+    let modifiedCount = 0;
+
+    audits.forEach((audit) => {
+      const item = items.find((i) => i.id === audit.itemId || (i.sku && i.sku.toUpperCase() === audit.itemId.toUpperCase()));
+      if (!item) return;
+
+      if (!item.storeAllocations) {
+        item.storeAllocations = {};
+      }
+
+      const prevStock = Math.max(0, Number(item.storeAllocations[storeId]) || 0);
+      const newStock = Math.max(0, Number(audit.countedStock) || 0);
+      const delta = newStock - prevStock;
+
+      // Update store allocation
+      item.storeAllocations[storeId] = newStock;
+
+      const isBoxUnit = isBoxDenominatedUnit(item.unit);
+      if (!item.storeBoxAllocations) item.storeBoxAllocations = {};
+      item.storeBoxAllocations[storeId] = {
+        fullBoxes: isBoxUnit ? newStock : 0,
+        loosePieces: 0,
+        totalPieces: newStock,
+        total_piece_equivalent: newStock,
+      };
+
+      (item as any).lastStockChange = nowTs;
+      item.updatedAt = nowIso;
+      modifiedCount++;
+
+      // Register Movement Audit Record
+      const isShortage = delta < 0;
+      const discrepancyReason = audit.reason || 'Physical Count Audit';
+
+      auditRecords.push({
+        transactionId: `TXN-${nowTs.toString().slice(-5)}${Math.floor(10 + Math.random() * 90)}`,
+        referenceNumber: auditReference,
+        itemId: item.id,
+        sku: item.sku,
+        itemName: item.name,
+        movementType: isShortage ? 'damage_scrap' : 'physical_adjustment',
+        fromLocation: isShortage ? `Store: ${storeName}` : `Stock Audit: ${discrepancyReason}`,
+        toLocation: isShortage ? `Write-off (${discrepancyReason})` : `Store: ${storeName}`,
+        quantity: Math.abs(delta),
+        quantityChanged: delta,
+        previousStock: prevStock,
+        newStock: newStock,
+        status: 'Completed',
+        unit: item.unit || 'units',
+        balanceAfter: newStock,
+        unitCost: item.costPrice || 0,
+        totalCostImpact: delta * (item.costPrice || 0),
+        performedBy: auditorName,
+        userRole: 'Store Admin',
+        notes: `[Physical Store Audit - ${storeName}] Counted: ${newStock} ${item.unit} (Prev: ${prevStock}, Diff: ${delta >= 0 ? '+' : ''}${delta}). Reason: ${discrepancyReason}. Remarks: ${audit.notes || 'None'}`,
+      });
+    });
+
+    if (modifiedCount > 0) {
+      this.saveInventory(items);
+      if (auditRecords.length > 0 && warehouseStorageRef && typeof warehouseStorageRef.addAuditRecords === 'function') {
+        warehouseStorageRef.addAuditRecords(auditRecords);
+      }
+
+      this.addNotification({
+        title: `📋 Physical Stock Audit Applied: ${store?.shortName || storeName}`,
+        message: `Audited ${modifiedCount} SKU(s) under Ref #${auditReference}. Verified by ${auditorName}.`,
+        type: 'low_stock',
+        targetRole: 'admin',
+        read: false,
+        linkTab: 'inventory',
+      });
+    }
+
+    return { success: true, modifiedCount, auditReference };
+  }
+
+  /**
    * Executes an atomic inventory transaction with rollback safety.
    * If any step fails or stock is insufficient, original inventory is restored.
    */
