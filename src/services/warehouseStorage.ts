@@ -736,7 +736,31 @@ export const warehouseStorage = {
           this.savePurchaseOrders(INITIAL_PURCHASE_ORDERS);
           return INITIAL_PURCHASE_ORDERS;
         }
-        return parsed;
+        if (!Array.isArray(parsed)) return INITIAL_PURCHASE_ORDERS;
+
+        // Normalize PO records from persistence to guarantee valid numeric fields
+        return parsed.map((po) => ({
+          ...po,
+          id: po.id || `po-${Date.now()}`,
+          poNumber: po.poNumber || 'PO-RECORD',
+          supplierName: po.supplierName || 'Supplier',
+          status: po.status || 'approved',
+          grandTotal: Number(po.grandTotal) || 0,
+          subtotal: Number(po.subtotal) || 0,
+          taxTotal: Number(po.taxTotal) || 0,
+          freightCharge: Number(po.freightCharge) || 0,
+          items: Array.isArray(po.items)
+            ? po.items.map((it: any) => ({
+                ...it,
+                sku: it.sku || 'SKU',
+                name: it.name || 'Product',
+                quantityOrdered: Number(it.quantityOrdered) || 1,
+                quantityReceived: Number(it.quantityReceived) || 0,
+                unitPrice: Number(it.unitPrice) || 0,
+                totalAmount: Number(it.totalAmount) || 0,
+              }))
+            : [],
+        }));
       } catch {
         return INITIAL_PURCHASE_ORDERS;
       }
@@ -1227,7 +1251,34 @@ export const warehouseStorage = {
           this.savePurchaseBills(INITIAL_PURCHASE_BILLS);
           return INITIAL_PURCHASE_BILLS;
         }
-        return parsed;
+        if (!Array.isArray(parsed)) return INITIAL_PURCHASE_BILLS;
+
+        // Normalize Purchase Bills to guarantee valid fields across all storage backends
+        return parsed.map((b) => ({
+          ...b,
+          id: b.id || `pb-${Date.now()}`,
+          billNumber: b.billNumber || 'PB-RECORD',
+          supplierName: b.supplierName || 'Unknown Supplier',
+          supplierInvoiceNo: b.supplierInvoiceNo || 'N/A',
+          warehouseName: b.warehouseName || 'Central Warehouse',
+          grandTotal: Number(b.grandTotal) || 0,
+          dueAmount: Number(b.dueAmount) || 0,
+          paidAmount: Number(b.paidAmount) || 0,
+          subtotal: Number(b.subtotal) || 0,
+          gstAmount: Number(b.gstAmount) || 0,
+          paymentStatus: b.paymentStatus || (Number(b.dueAmount) > 0 ? 'due' : 'paid'),
+          grnStatus: b.grnStatus || 'verified_stocked',
+          items: Array.isArray(b.items)
+            ? b.items.map((it: any) => ({
+                ...it,
+                sku: it.sku || 'SKU',
+                name: it.name || 'Product',
+                quantity: Number(it.quantity) || 1,
+                unitCost: Number(it.unitCost) || 0,
+                totalCost: Number(it.totalCost) || 0,
+              }))
+            : [],
+        }));
       } catch {
         return INITIAL_PURCHASE_BILLS;
       }
@@ -1323,7 +1374,7 @@ export const warehouseStorage = {
         sku: item.sku,
         name: item.name,
         category: item.category,
-        batchNumber: item.batchNumber || `BATCH-${item.sku.slice(0, 3)}-${Date.now().toString().slice(-4)}`,
+        batchNumber: item.batchNumber || `BATCH-${(item.sku || 'SKU').slice(0, 3)}-${Date.now().toString().slice(-4)}`,
         warehouseId: 'wh-central-amd',
         warehouseName: 'Central Warehouse',
         mfgDate: item.mfgDate || newBill.billDate,

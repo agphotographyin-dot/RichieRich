@@ -1093,7 +1093,7 @@ export const StoreSuppliersView: React.FC<StoreSuppliersViewProps> = ({
                         </td>
 
                         <td className="py-3 px-4 text-right font-mono font-black text-slate-900">
-                          {CURRENCY}{po.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          {CURRENCY}{Number(po.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
 
                         <td className="py-3 px-4">
@@ -1219,7 +1219,7 @@ export const StoreSuppliersView: React.FC<StoreSuppliersViewProps> = ({
                         </td>
 
                         <td className="py-3 px-4 text-right font-mono font-black text-slate-900">
-                          {CURRENCY}{bill.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          {CURRENCY}{Number(bill.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
 
                         <td className="py-3 px-4 text-right font-mono font-bold">
@@ -1368,7 +1368,7 @@ export const StoreSuppliersView: React.FC<StoreSuppliersViewProps> = ({
                         </td>
 
                         <td className="py-3 px-4 text-right font-mono font-black text-slate-900">
-                          {CURRENCY}{led.runningBalance.toLocaleString('en-IN')}
+                          {CURRENCY}{Number(led.runningBalance || 0).toLocaleString('en-IN')}
                         </td>
 
                         <td className="py-3 px-4 text-slate-500 max-w-xs truncate">
@@ -1438,7 +1438,7 @@ export const StoreSuppliersView: React.FC<StoreSuppliersViewProps> = ({
                 >
                   {suppliers.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} (Due: {CURRENCY}{s.currentOutstanding.toLocaleString('en-IN')})
+                      {s.name} (Due: {CURRENCY}{Number(s.currentOutstanding || 0).toLocaleString('en-IN')})
                     </option>
                   ))}
                 </select>
@@ -1448,7 +1448,7 @@ export const StoreSuppliersView: React.FC<StoreSuppliersViewProps> = ({
               <div className="p-3.5 bg-rose-50 rounded-2xl border border-rose-200 flex items-center justify-between text-xs font-mono">
                 <span className="text-slate-700 font-bold font-sans">Current Outstanding:</span>
                 <span className="font-black text-rose-700 text-base">
-                  {CURRENCY}{(activePaySupplier?.currentOutstanding || 0).toLocaleString('en-IN')}
+                  {CURRENCY}{Number(activePaySupplier?.currentOutstanding || 0).toLocaleString('en-IN')}
                 </span>
               </div>
 
@@ -1558,7 +1558,7 @@ export const StoreSuppliersView: React.FC<StoreSuppliersViewProps> = ({
               {(supplierToDelete.currentOutstanding || 0) > 0 && (
                 <div className="mt-3 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>Warning: Outstanding balance of {CURRENCY}{supplierToDelete.currentOutstanding.toLocaleString('en-IN')} exists.</span>
+                  <span>Warning: Outstanding balance of {CURRENCY}{Number(supplierToDelete.currentOutstanding || 0).toLocaleString('en-IN')} exists.</span>
                 </div>
               )}
             </div>

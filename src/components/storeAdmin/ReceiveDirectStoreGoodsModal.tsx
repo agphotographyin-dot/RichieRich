@@ -57,24 +57,35 @@ export const ReceiveDirectStoreGoodsModal: React.FC<ReceiveDirectStoreGoodsModal
   onSuccess,
 }) => {
   const allStorePOs = useMemo(() => {
-    return warehouseStorage
-      .getPurchaseOrders()
+    if (!currentStore?.id) return [];
+    return (warehouseStorage.getPurchaseOrders() || [])
       .filter(
         (po) =>
+          po &&
           (po.storeId === currentStore.id || po.destinationId === currentStore.id) &&
           (po.status === 'sent_to_supplier' || po.status === 'partially_received' || po.status === 'approved')
       );
-  }, [currentStore.id]);
+  }, [currentStore?.id]);
 
   const [selectedPOId, setSelectedPOId] = useState<string>(() => {
     return preselectedPO?.id || allStorePOs[0]?.id || '';
   });
 
+  // Sync selected PO whenever preselectedPO, allStorePOs, or isOpen changes
+  React.useEffect(() => {
+    if (preselectedPO?.id) {
+      setSelectedPOId(preselectedPO.id);
+    } else if (allStorePOs.length > 0 && (!selectedPOId || !allStorePOs.some(p => p.id === selectedPOId))) {
+      setSelectedPOId(allStorePOs[0].id);
+    }
+  }, [preselectedPO, allStorePOs, isOpen]);
+
   const activePO = useMemo(() => {
     if (preselectedPO && preselectedPO.id === selectedPOId) return preselectedPO;
+    const allPOs = warehouseStorage.getPurchaseOrders() || [];
     return (
       allStorePOs.find((p) => p.id === selectedPOId) ||
-      warehouseStorage.getPurchaseOrders().find((p) => p.id === selectedPOId) ||
+      allPOs.find((p) => p.id === selectedPOId) ||
       allStorePOs[0] ||
       null
     );
@@ -97,41 +108,41 @@ export const ReceiveDirectStoreGoodsModal: React.FC<ReceiveDirectStoreGoodsModal
 
   // When activePO changes, rebuild item rows
   React.useEffect(() => {
-    if (!activePO) {
+    if (!activePO || !activePO.items) {
       setItemRows([]);
       return;
     }
     const todayStr = new Date().toISOString().split('T')[0];
     const defaultExpiry = new Date(Date.now() + 180 * 86400000).toISOString().split('T')[0];
 
-    const rows: InwardItemRow[] = activePO.items.map((it) => {
-      const inv = inventory.find((i) => i.id === it.itemId || i.sku === it.sku);
-      const storeStock = inv?.storeAllocations?.[currentStore.id] || 0;
-      const prevReceived = it.quantityReceived || 0;
-      const pending = Math.max(0, it.quantityOrdered - prevReceived);
+    const rows: InwardItemRow[] = (activePO.items || []).map((it) => {
+      const inv = (inventory || []).find((i) => i.id === it.itemId || (it.sku && i.sku === it.sku));
+      const storeStock = inv?.storeAllocations?.[currentStore?.id || ''] || 0;
+      const prevReceived = Number(it.quantityReceived) || 0;
+      const pending = Math.max(0, (Number(it.quantityOrdered) || 0) - prevReceived);
 
       return {
-        itemId: it.itemId,
-        sku: it.sku,
-        name: it.name,
-        category: it.category || 'General',
-        unit: it.unit || 'boxes',
-        orderedQty: it.quantityOrdered,
+        itemId: it.itemId || inv?.id || `item-${Date.now()}`,
+        sku: it.sku || inv?.sku || 'SKU',
+        name: it.name || inv?.name || 'Store Item',
+        category: it.category || inv?.category || 'General',
+        unit: it.unit || inv?.unit || 'boxes',
+        orderedQty: Number(it.quantityOrdered) || 1,
         previouslyReceivedQty: prevReceived,
         pendingQty: pending,
         quantityReceivedNow: pending, // Defaults to remaining pending
         damagedQty: 0,
-        batchNumber: `BATCH-STR-${it.sku.slice(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}`,
+        batchNumber: `BATCH-STR-${(it.sku || 'SKU').slice(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}`,
         mfgDate: todayStr,
         expiryDate: defaultExpiry,
-        unitCost: it.unitPrice,
-        taxPercent: it.taxPercent || 5,
+        unitCost: Number(it.unitPrice) || 0,
+        taxPercent: Number(it.taxPercent) || 5,
         currentStoreStock: storeStock,
       };
     });
 
     setItemRows(rows);
-  }, [activePO, inventory, currentStore.id]);
+  }, [activePO, inventory, currentStore?.id]);
 
   if (!isOpen) return null;
 
@@ -299,14 +310,14 @@ export const ReceiveDirectStoreGoodsModal: React.FC<ReceiveDirectStoreGoodsModal
                   >
                     {allStorePOs.map((po) => (
                       <option key={po.id} value={po.id}>
-                        {po.poNumber} — {po.supplierName} (₹{po.grandTotal.toFixed(0)}) [{po.status.toUpperCase()}]
+                        {po.poNumber} — {po.supplierName} (₹{Number(po.grandTotal || 0).toFixed(0)}) [{(po.status || 'approved').toUpperCase()}]
                       </option>
                     ))}
                   </select>
                 )}
                 {activePO && (
                   <p className="text-[11px] text-slate-500 mt-1">
-                    Supplier: <strong>{activePO.supplierName}</strong> • Ordered on: {activePO.orderDate}
+                    Supplier: <strong>{activePO.supplierName}</strong> • Ordered on: {activePO.orderDate || 'N/A'}
                   </p>
                 )}
               </div>

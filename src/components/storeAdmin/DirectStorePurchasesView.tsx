@@ -406,7 +406,7 @@ export const DirectStorePurchasesView: React.FC<DirectStorePurchasesViewProps> =
                             PO Grand Total
                           </span>
                           <span className="font-mono font-black text-slate-900 text-base">
-                            ₹{po.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            ₹{Number(po.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
 
@@ -573,31 +573,32 @@ export const DirectStorePurchasesView: React.FC<DirectStorePurchasesViewProps> =
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {storeInwardBills.map((bill) => {
-                    const totalItemsCount = bill.items.reduce((s, i) => s + i.quantity, 0);
+                  {(storeInwardBills || []).map((bill) => {
+                    const billItems = bill?.items || [];
+                    const totalItemsCount = billItems.reduce((s, i) => s + (Number(i?.quantity) || 0), 0);
                     return (
                       <tr key={bill.id} className="hover:bg-slate-50/50">
                         <td className="py-3 px-4">
-                          <div className="font-mono font-bold text-slate-900">{bill.billNumber}</div>
-                          <div className="text-[10px] text-slate-400">{bill.billDate}</div>
+                          <div className="font-mono font-bold text-slate-900">{bill.billNumber || 'PB-STORE'}</div>
+                          <div className="text-[10px] text-slate-400">{bill.billDate || 'N/A'}</div>
                         </td>
                         <td className="py-3 px-4">
-                          <div className="font-bold text-slate-900">{bill.supplierName}</div>
+                          <div className="font-bold text-slate-900">{bill.supplierName || 'Supplier'}</div>
                           <div className="text-[10px] text-slate-500 font-mono">
-                            Inv #: {bill.supplierInvoiceNo}
+                            Inv #: {bill.supplierInvoiceNo || 'N/A'}
                           </div>
                         </td>
                         <td className="py-3 px-4 font-mono font-bold text-slate-700">
                           {bill.poNumber || 'Direct Purchase'}
                         </td>
                         <td className="py-3 px-4 font-bold text-emerald-700">
-                          +{totalItemsCount} {bill.items[0]?.unit || 'boxes'} ({bill.items.length} SKUs)
+                          +{totalItemsCount} {billItems[0]?.unit || 'boxes'} ({billItems.length} SKUs)
                         </td>
                         <td className="py-3 px-4 text-slate-600">
-                          {bill.receivedBy}
+                          {bill.receivedBy || 'Store Admin'}
                         </td>
                         <td className="py-3 px-4 text-right font-mono font-black text-slate-900">
-                          ₹{bill.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          ₹{Number(bill.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
                     );
