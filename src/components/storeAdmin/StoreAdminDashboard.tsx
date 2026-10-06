@@ -60,6 +60,7 @@ import { StoreStockAuditModal } from './StoreStockAuditModal';
 import { StoreSuppliersView } from './StoreSuppliersView';
 import { SupplierModal } from './SupplierModal';
 import { StoreAdminSidebar, StoreAdminTabId } from './StoreAdminSidebar';
+import { StoreAdminHeader } from './StoreAdminHeader';
 import { isToday, getLocalDateString } from '../../utils/dateUtils';
 
 interface StoreAdminDashboardProps {
@@ -602,105 +603,6 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
               </button>
             </div>
           </div>
-
-        {/* ========================================================================= */}
-        {/* TAB NAVIGATION */}
-        {/* ========================================================================= */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-slate-200">
-          <button
-            onClick={() => handleTabSelect('financials')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === 'financials'
-                ? 'bg-[#1E293B] text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <IndianRupee className="w-4 h-4 text-amber-400" />
-            <span>Store Financial Statement & Calculations</span>
-          </button>
-
-          <button
-            onClick={() => handleTabSelect('expenses')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === 'expenses'
-                ? 'bg-[#1E293B] text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Receipt className="w-4 h-4 text-amber-400" />
-            <span>Store Expenses Ledger ({allExpenses.length})</span>
-          </button>
-
-          <button
-            onClick={() => handleTabSelect('sales_orders')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === 'sales_orders'
-                ? 'bg-[#1E293B] text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <ArrowUpRight className="w-4 h-4 text-amber-400" />
-            <span>Store Sales & Billed Orders ({allOrders.length})</span>
-          </button>
-
-          <button
-            onClick={() => handleTabSelect('staff_counters')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === 'staff_counters'
-                ? 'bg-[#1E293B] text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Users className="w-4 h-4 text-amber-400" />
-            <span>Staff & Counter Stations</span>
-          </button>
-
-          <button
-            onClick={() => handleTabSelect('store_inventory')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === 'store_inventory'
-                ? 'bg-[#1E293B] text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Package className="w-4 h-4 text-amber-400" />
-            <span>Store Stock Inventory ({storeInventory.length})</span>
-          </button>
-
-          <button
-            onClick={() => handleTabSelect('manage_stock')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === 'manage_stock'
-                ? 'bg-amber-600 text-white shadow-xs font-black'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Truck className="w-4 h-4 text-amber-400" />
-            <span>Manage Stock (Direct POs)</span>
-            {activeDirectPOCount > 0 && (
-              <span className="bg-slate-950 text-amber-300 text-[10px] font-black px-1.5 py-0.5 rounded-full">
-                {activeDirectPOCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => handleTabSelect('stock_indents')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === 'stock_indents'
-                ? 'bg-[#1E293B] text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Truck className="w-4 h-4 text-amber-400" />
-            <span>Warehouse Stock Indents</span>
-            {pendingIndentsCount > 0 && (
-              <span className="bg-amber-500 text-slate-950 text-[10px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
-                {pendingIndentsCount}
-              </span>
-            )}
-          </button>
-        </div>
 
         {/* ========================================================================= */}
         {/* TAB CONTENT 1: STORE FINANCIAL STATEMENT & CALCULATIONS */}
@@ -1669,8 +1571,12 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
             adminName={authState.adminName}
             onOpenCreatePOForSupplier={(sup) => {
               setDirectPOPreselectedItem(null);
-              setPreselectedSupplierForPO(sup.id);
+              setPreselectedSupplierForPO(sup?.id);
               setIsCreateDirectPOOpen(true);
+            }}
+            onOpenReceiveGoods={(po) => {
+              setSelectedPOForReceive(po || null);
+              setIsReceiveModalOpen(true);
             }}
             onOpenAddSupplier={() => {
               setSupplierToEdit(null);

@@ -150,7 +150,7 @@ export const StoreIndentsView: React.FC<StoreIndentsViewProps> = ({
     }
   };
 
-  const getStatusBadge = (status: StoreStockIndent['status']) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
         return (
