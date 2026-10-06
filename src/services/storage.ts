@@ -880,17 +880,10 @@ export class StorageService {
           let itemId = item.id ? String(item.id).trim() : '';
           let itemSku = item.sku ? String(item.sku).trim().toUpperCase() : '';
 
-          // If empty SKU, attempt to restore from INITIAL_INVENTORY or generate
+          // If empty SKU, generate clean SKU
           if (!itemSku) {
-            const matchedInit = INITIAL_INVENTORY.find(
-              (init) => init.id === itemId || (init.name && item.name && init.name.trim().toLowerCase() === String(item.name).trim().toLowerCase())
-            );
-            if (matchedInit && matchedInit.sku) {
-              itemSku = matchedInit.sku.toUpperCase();
-            } else {
-              const catPrefix = normalizeProductCategory(item.category).substring(0, 3).toUpperCase();
-              itemSku = `SKU-${catPrefix}-${String(i + 1).padStart(3, '0')}`;
-            }
+            const catPrefix = normalizeProductCategory(item.category).substring(0, 3).toUpperCase();
+            itemSku = `SKU-${catPrefix}-${String(i + 1).padStart(3, '0')}`;
             item.sku = itemSku;
             hadDuplicatesOrUnnormalized = true;
           } else {
