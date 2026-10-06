@@ -65,12 +65,12 @@ export const CreateStoreIndentModal: React.FC<CreateStoreIndentModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
 
-  // Master Inventory: Guarantees 100% of master products and SKUs are available to order from warehouse
+  // Master Inventory: Guarantees master products and SKUs are available to order from warehouse
   const masterInventory: InventoryItem[] = useMemo(() => {
     const live = storage.getInventory();
     if (live && live.length > 0) return live;
     if (inventory && inventory.length > 0) return inventory;
-    return INITIAL_INVENTORY;
+    return [];
   }, [isOpen, inventory]);
 
   const categories = useMemo(() => {

@@ -191,79 +191,8 @@ export const INITIAL_STORE_ADMINS: StoreAdminCredential[] = [
   },
 ];
 
-// Initial Store Expenses (Realistic Seed)
-export const INITIAL_STORE_EXPENSES: StoreExpense[] = [
-  {
-    id: 'exp-101',
-    storeId: 'bopal',
-    storeName: 'Richie Rich Pan House - Bopal Branch',
-    category: 'utilities',
-    amount: 1450,
-    description: 'Electricity & Backup DG Diesel refill',
-    paymentMethod: 'upi',
-    paidTo: 'Torrent Power & Fuel Station',
-    voucherNumber: 'EXP-BOP-001',
-    loggedBy: 'Rajesh Shah',
-    date: new Date().toISOString().split('T')[0],
-    createdAt: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),
-  },
-  {
-    id: 'exp-102',
-    storeId: 'bopal',
-    storeName: 'Richie Rich Pan House - Bopal Branch',
-    category: 'raw_materials_petty',
-    amount: 680,
-    description: 'Fresh mint leaves, organic limes & crushed cooling ice',
-    paymentMethod: 'cash',
-    paidTo: 'Local Mandi Vendor',
-    voucherNumber: 'EXP-BOP-002',
-    loggedBy: 'Rajesh Shah',
-    date: new Date().toISOString().split('T')[0],
-    createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-  },
-  {
-    id: 'exp-103',
-    storeId: 'gota',
-    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
-    category: 'supplies',
-    amount: 1200,
-    description: 'Biodegradable parcel boxes, luxury paan silver pouches, napkins',
-    paymentMethod: 'cash',
-    paidTo: 'Gala Packaging Hub',
-    voucherNumber: 'EXP-GOT-001',
-    loggedBy: 'Hardik Patel',
-    date: new Date().toISOString().split('T')[0],
-    createdAt: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
-  },
-  {
-    id: 'exp-104',
-    storeId: 'gota',
-    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
-    category: 'staff_advance',
-    amount: 500,
-    description: 'Staff dinner tea & snacks for night shift',
-    paymentMethod: 'cash',
-    paidTo: 'Counter Staff Pool',
-    voucherNumber: 'EXP-GOT-002',
-    loggedBy: 'Hardik Patel',
-    date: new Date().toISOString().split('T')[0],
-    createdAt: new Date(Date.now() - 1 * 3600 * 1000).toISOString(),
-  },
-  {
-    id: 'exp-105',
-    storeId: 'sindhubhavan',
-    storeName: 'Richie Rich Pan House - Sindhubhavan Road (SBR)',
-    category: 'cleaning',
-    amount: 850,
-    description: 'Lounge floor sanitizers, glass cleaner & air fragrance refills',
-    paymentMethod: 'upi',
-    paidTo: 'CleanCare Solutions',
-    voucherNumber: 'EXP-SBR-001',
-    loggedBy: 'Manish Varma',
-    date: new Date().toISOString().split('T')[0],
-    createdAt: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
-  },
-];
+// Initial Store Expenses
+export const INITIAL_STORE_EXPENSES: StoreExpense[] = [];
 
 // Initial Store Locations
 export const INITIAL_STORES: StoreLocation[] = [
@@ -338,1010 +267,20 @@ export const INITIAL_CATEGORIES: Category[] = [
   { id: 'Essentials', name: 'Essentials', icon: 'ShoppingBag', description: 'Mukhwas, Supari, Pocket Mouth Sprays, Chilled Hydration, Energy Drinks & Confections' },
 ];
 
-// Initial Rich Inventory Items with Multi-Store Allocation
-export const INITIAL_INVENTORY: InventoryItem[] = [
-  // 1. ROYAL PAAN (Paan Category)
-  {
-    id: 'item-101',
-    sku: 'PAN-MAG-01',
-    barcode: '890100101',
-    name: 'Royal Maghai Meetha Paan',
-    category: 'Paan',
-    description: 'Crisp Maghai betel leaf stuffed with premium gulkand, sweetened coconut, tutti frutti, dry dates and fragrant royal spices.',
-    costPrice: 20,
-    sellingPrice: 50,
-    stockQuantity: 0,
-    lowStockThreshold: 15,
-    unit: 'pieces',
-    imageUrl: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 5,
-    isAvailableForOnline: true,
-    ingredients: ['Maghai Leaf', 'Premium Gulkand', 'Shredded Coconut', 'Saunf', 'Cardamom', 'Silver Vark'],
-    marginPercentage: 60,
-    profitPerUnit: 30,
-    tags: ['Best Seller', 'Traditional', 'Royal'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-102',
-    sku: 'PAN-FIR-02',
-    barcode: '890100102',
-    name: 'Signature Chocolate Fire Paan',
-    category: 'Paan',
-    description: 'Spectacular flaming clove and dark chocolate blend placed directly into the mouth for an icy-hot sensory thrill.',
-    costPrice: 45,
-    sellingPrice: 110,
-    stockQuantity: 0,
-    lowStockThreshold: 12,
-    unit: 'pieces',
-    imageUrl: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 5,
-    isAvailableForOnline: true,
-    ingredients: ['Betel Leaf', 'Flaming Clove', 'Belgian Dark Chocolate', 'Gulkand', 'Menthol Crystals'],
-    marginPercentage: 59.09,
-    profitPerUnit: 65,
-    tags: ['Trending', 'Must Try', 'Live Experience'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-103',
-    sku: 'PAN-ICE-03',
-    barcode: '890100103',
-    name: 'Sub-Zero Ice Smoke Paan',
-    category: 'Paan',
-    description: 'Chilled liquid-nitrogen infused betel leaf with crushed cooling syrups and mint crystals creating misty aromatic breaths.',
-    costPrice: 35,
-    sellingPrice: 90,
-    stockQuantity: 0,
-    lowStockThreshold: 10,
-    unit: 'pieces',
-    imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 5,
-    isAvailableForOnline: true,
-    ingredients: ['Calcutta Leaf', 'Menthol Chuski', 'Rose Jelly', 'Ice Crystals', 'Sweet Spices'],
-    marginPercentage: 61.11,
-    profitPerUnit: 55,
-    tags: ['Cooling', 'Summer Special'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-104',
-    sku: 'PAN-SLV-04',
-    barcode: '890100104',
-    name: 'Kesar Kasturi Gold Vark Paan',
-    category: 'Paan',
-    description: 'Exotic saffron strands, natural musk syrup, crushed almonds and 24K edible gold vark wrapping for royal palates.',
-    costPrice: 80,
-    sellingPrice: 220,
-    stockQuantity: 0,
-    lowStockThreshold: 8,
-    unit: 'pieces',
-    imageUrl: 'https://images.unsplash.com/photo-1541832676-9b763b0239ab?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 5,
-    isAvailableForOnline: true,
-    ingredients: ['Gold Leaf Vark', 'Kashmiri Kesar', 'Kasturi Essence', 'Gulkand', 'Chuhara'],
-    marginPercentage: 63.64,
-    profitPerUnit: 140,
-    tags: ['Luxury', 'VIP Specialty'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-105',
-    sku: 'PAN-CAL-05',
-    barcode: '890100105',
-    name: 'Calcutta Sada Paan (100% Tobacco-Free)',
-    category: 'Paan',
-    description: 'Classic rich bitter-sweet Calcutta betel leaf prepared with fragrant kathaa, chuna, cardamom, and gentle supari.',
-    costPrice: 12,
-    sellingPrice: 35,
-    stockQuantity: 0,
-    lowStockThreshold: 15,
-    unit: 'pieces',
-    imageUrl: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 5,
-    isAvailableForOnline: true,
-    ingredients: ['Calcutta Mitha Leaf', 'Pure Kattha', 'Elachi Churna', 'Betel Nut flakes'],
-    marginPercentage: 65.71,
-    profitPerUnit: 23,
-    tags: ['Classic', 'Digestive'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
+// Initial Inventory Items
+export const INITIAL_INVENTORY: InventoryItem[] = [];
 
-  // 2. 24x7 FRESH COFFEE & CAFE BREWS (Cafe Category)
-  {
-    id: 'item-cof-1',
-    sku: 'COF-ESP-01',
-    barcode: '890100601',
-    name: 'Royal Dark Roast Espresso Double Shot',
-    category: 'Cafe',
-    description: 'Rich, aromatic double shot of 100% Arabica artisanal beans brewed fresh 24x7 with thick golden crema.',
-    costPrice: 20,
-    sellingPrice: 60,
-    stockQuantity: 0,
-    lowStockThreshold: 15,
-    unit: 'cups',
-    imageUrl: 'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 5,
-    isAvailableForOnline: true,
-    ingredients: ['100% Arabica Roasted Beans', 'Purified Hot Spring Water'],
-    marginPercentage: 66.67,
-    profitPerUnit: 40,
-    tags: ['24x7 Fresh', 'Espresso Bar', 'Hot Brew'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-cof-2',
-    sku: 'COF-CLD-02',
-    barcode: '890100602',
-    name: 'Richie Rich Chilled Hazelnut Cold Coffee (350ml)',
-    category: 'Cafe',
-    description: 'Signature thick cold coffee blended with roasted hazelnut syrup, full cream milk, and topped with chocolate curls.',
-    costPrice: 45,
-    sellingPrice: 120,
-    stockQuantity: 0,
-    lowStockThreshold: 12,
-    unit: 'bottles',
-    imageUrl: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 5,
-    isAvailableForOnline: true,
-    ingredients: ['Espresso Decoction', 'Hazelnut Syrup', 'Creamy Milk', 'Ice', 'Cocoa Flakes'],
-    marginPercentage: 62.5,
-    profitPerUnit: 75,
-    tags: ['Best Seller', 'Chilled', '24x7 Night Shift Hit'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-cof-3',
-    sku: 'COF-FLT-03',
-    barcode: '890100603',
-    name: 'Traditional South Indian Filter Kaapi',
-    category: 'Cafe',
-    description: 'Authentic frothy brass-dabara filter coffee made with chicory blend and bubbling boiled hot milk.',
-    costPrice: 15,
-    sellingPrice: 50,
-    stockQuantity: 0,
-    lowStockThreshold: 20,
-    unit: 'cups',
-    imageUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 5,
-    isAvailableForOnline: true,
-    ingredients: ['South Indian Kaapi Blend', 'Boiled Milk', 'Brown Sugar'],
-    marginPercentage: 70,
-    profitPerUnit: 35,
-    tags: ['Authentic', 'Frothy', 'Morning/Night Special'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-cof-4',
-    sku: 'COF-KRK-04',
-    barcode: '890100604',
-    name: 'Royal Karak Saffron Masala Chai (Kulhad)',
-    category: 'Cafe',
-    description: 'Slow-simmered Assam tea leaves with crushed cardamom, fresh ginger, cloves and infused with Kashmiri saffron strands in terracotta kulhad.',
-    costPrice: 12,
-    sellingPrice: 40,
-    stockQuantity: 0,
-    lowStockThreshold: 25,
-    unit: 'kulhads',
-    imageUrl: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 5,
-    isAvailableForOnline: true,
-    ingredients: ['Assam CTC Tea', 'Kesar Strands', 'Fresh Ginger', 'Cardamom', 'Cream Milk'],
-    marginPercentage: 70,
-    profitPerUnit: 28,
-    tags: ['Kulhad Chai', 'All Night Special', 'Hot'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-301',
-    sku: 'SHK-KES-01',
-    barcode: '890100301',
-    name: 'Royal Kesar Badam Rich Shake (350ml)',
-    category: 'Cafe',
-    description: 'Rich full cream milk slow-boiled with real saffron strands, crushed almonds, pistachios and cardamom syrup.',
-    costPrice: 55,
-    sellingPrice: 130,
-    stockQuantity: 0,
-    lowStockThreshold: 10,
-    unit: 'bottles',
-    imageUrl: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 5,
-    isAvailableForOnline: true,
-    ingredients: ['Full Cream Milk', 'Kashmiri Kesar', 'California Almonds', 'Pista', 'Elaichi'],
-    marginPercentage: 57.69,
-    profitPerUnit: 75,
-    tags: ['Chilled', 'Rich Dryfruit'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-302',
-    sku: 'SHK-FAL-02',
-    barcode: '890100302',
-    name: 'Richie Rich Special Rose Gulkand Falooda',
-    category: 'Cafe',
-    description: 'Layered delicacy with basil sabja seeds, silky falooda vermicelli, organic rose gulkand, rabdi and vanilla ice cream scoop.',
-    costPrice: 60,
-    sellingPrice: 150,
-    stockQuantity: 0,
-    lowStockThreshold: 8,
-    unit: 'glasses',
-    imageUrl: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 5,
-    isAvailableForOnline: true,
-    ingredients: ['Sabja Basil Seeds', 'Rose Syrup', 'Handmade Gulkand', 'Rabdi', 'Ice Cream'],
-    marginPercentage: 60,
-    profitPerUnit: 90,
-    tags: ['Signature Drink', 'Dessert'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-
-  // 3. 24x7 ESSENTIALS, MUKHWAS & REFRESHMENTS (Essentials Category)
-  {
-    id: 'item-ess-1',
-    sku: 'ESS-SPR-01',
-    barcode: '890100701',
-    name: 'Cool Mint Pocket Mouth Freshener Spray (15ml)',
-    category: 'Essentials',
-    description: 'Pocket-sized instant breath refresher spray with cooling spearmint and long-lasting freshness for round-the-clock confidence.',
-    costPrice: 40,
-    sellingPrice: 90,
-    stockQuantity: 0,
-    lowStockThreshold: 10,
-    unit: 'bottles',
-    imageUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 18,
-    isAvailableForOnline: true,
-    ingredients: ['Spearmint Oil', 'Menthol Crystals', 'Aloe Vera Extract', 'Purified Aqua'],
-    marginPercentage: 55.56,
-    profitPerUnit: 50,
-    tags: ['24x7 Essential', 'Pocket Size'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-ess-2',
-    sku: 'ESS-WAT-02',
-    barcode: '890100702',
-    name: 'Himalayan Natural Mineral Water (500ml Chilled)',
-    category: 'Essentials',
-    description: '100% natural alkaline mineral water sourced directly from Himalayan springs, served crisp and ice-cold 24x7.',
-    costPrice: 15,
-    sellingPrice: 30,
-    stockQuantity: 0,
-    lowStockThreshold: 30,
-    unit: 'bottles',
-    imageUrl: 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: false,
-    taxRate: 0,
-    isAvailableForOnline: true,
-    ingredients: ['Natural Mineral Water', 'Electrolytes'],
-    marginPercentage: 50,
-    profitPerUnit: 15,
-    tags: ['24x7 Hydration', 'Chilled', 'Tax Exempt'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-ess-3',
-    sku: 'ESS-ENR-03',
-    barcode: '890100703',
-    name: 'Red Bull Energy Drink (250ml Ice-Cold Can)',
-    category: 'Essentials',
-    description: 'Vitalizes body and mind for late-night drives and midnight study shifts.',
-    costPrice: 90,
-    sellingPrice: 125,
-    stockQuantity: 0,
-    lowStockThreshold: 15,
-    unit: 'cans',
-    imageUrl: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 28,
-    isAvailableForOnline: true,
-    ingredients: ['Caffeine', 'Taurine', 'B-Group Vitamins', 'Alpine Water'],
-    marginPercentage: 28,
-    profitPerUnit: 35,
-    tags: ['24x7 Night Owl', 'Energy Booster'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-ess-4',
-    sku: 'ESS-LGT-04',
-    barcode: '890100704',
-    name: 'Luxury Windproof Jet Flame Lighter (Refillable)',
-    category: 'Essentials',
-    description: 'Heavy metallic windproof jet lighter designed for outdoor use and high altitude performance.',
-    costPrice: 65,
-    sellingPrice: 150,
-    stockQuantity: 0,
-    lowStockThreshold: 6,
-    unit: 'pieces',
-    imageUrl: 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 18,
-    isAvailableForOnline: true,
-    ingredients: ['Zinc Alloy Body', 'Piezo Electric Ignition'],
-    marginPercentage: 56.67,
-    profitPerUnit: 85,
-    tags: ['Accessories', 'Windproof'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-201',
-    sku: 'MUK-RAJ-01',
-    barcode: '890100201',
-    name: 'Royal Rajwadi Shahi Mukhwas (200g Jar)',
-    category: 'Essentials',
-    description: 'Artisanal blend of roasted fennel, candied melon seeds, silver coated cardamom pods, dried rose petals and amber glaze.',
-    costPrice: 90,
-    sellingPrice: 180,
-    stockQuantity: 0,
-    lowStockThreshold: 8,
-    unit: 'jars',
-    imageUrl: 'https://images.unsplash.com/photo-1599785209707-a456fc1337bb?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 12,
-    isAvailableForOnline: true,
-    ingredients: ['Roasted Fennel', 'Silver Cardamom', 'Melon Seeds', 'Rose Petals', 'Sugar Crystals'],
-    marginPercentage: 50,
-    profitPerUnit: 90,
-    tags: ['Packaging Jar', 'Digestive'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-202',
-    sku: 'MUK-KAS-02',
-    barcode: '890100202',
-    name: 'Kashmiri Saffron Flavoured Supari (100g)',
-    category: 'Essentials',
-    description: 'Finely sliced premium betel nuts treated in saffron water, rose essence and light menthol seasoning.',
-    costPrice: 65,
-    sellingPrice: 140,
-    stockQuantity: 0,
-    lowStockThreshold: 10,
-    unit: 'pouches',
-    imageUrl: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 12,
-    isAvailableForOnline: true,
-    ingredients: ['Betel Nut Slivers', 'Kashmiri Saffron extract', 'Menthol', 'Natural Fragrance'],
-    marginPercentage: 53.57,
-    profitPerUnit: 75,
-    tags: ['Saffron', 'Premium Supari'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-203',
-    sku: 'MUK-CAL-03',
-    barcode: '890100203',
-    name: 'Calcutta Sweet Meethi Saunf (250g)',
-    category: 'Essentials',
-    description: 'Crisp green Lucknowi fennel seed coated with light sugar syrup and cooling peppermint.',
-    costPrice: 40,
-    sellingPrice: 95,
-    stockQuantity: 0,
-    lowStockThreshold: 12,
-    unit: 'pouches',
-    imageUrl: 'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 5,
-    isAvailableForOnline: true,
-    ingredients: ['Lucknowi Saunf', 'Sugar Coating', 'Peppermint Oil'],
-    marginPercentage: 57.89,
-    profitPerUnit: 55,
-    tags: ['Family Pack', 'Sweet'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-401',
-    sku: 'CHO-TRU-01',
-    barcode: '890100401',
-    name: 'Handcrafted Paan Ganache Dark Truffles (Box of 6)',
-    category: 'Essentials',
-    description: '55% Belgian dark chocolate truffles oozing with creamy gulkand paan cream and sprinkled with silver dust.',
-    costPrice: 110,
-    sellingPrice: 260,
-    stockQuantity: 0,
-    lowStockThreshold: 6,
-    unit: 'boxes',
-    imageUrl: 'https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 18,
-    isAvailableForOnline: true,
-    ingredients: ['Belgian Dark Chocolate', 'Betel Leaf Extract', 'Rose Petal Cream', 'Edible Silver Dust'],
-    marginPercentage: 57.69,
-    profitPerUnit: 150,
-    tags: ['Gift Box', 'Luxury Confection'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-501',
-    sku: 'HER-MNT-01',
-    barcode: '890100501',
-    name: 'Herbal Molasses 100% Tobacco-Free (Pan Mint - 100g)',
-    category: 'Essentials',
-    description: 'Natural fruit molasses and sugar cane base infused with cooling icy mint and fresh paan essence.',
-    costPrice: 85,
-    sellingPrice: 195,
-    stockQuantity: 0,
-    lowStockThreshold: 5,
-    unit: 'packs',
-    imageUrl: 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 18,
-    isAvailableForOnline: true,
-    ingredients: ['Sugar Cane Molasses', 'Glycerine', 'Herbal Extracts', 'Paan Flavoring'],
-    marginPercentage: 56.41,
-    profitPerUnit: 110,
-    tags: ['Herbal', '0% Tobacco'],
-    storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-  },
-  {
-    id: 'item-box-cig-1',
-    sku: 'CIG-CLK-01',
-    barcode: '890100801',
-    name: 'Classic Gold Filter (10 Pcs Box / Loose)',
-    category: 'Essentials',
-    brand: 'Richie Rich Signature',
-    vendor: 'Gujarat Betel Traders',
-    priceType: 'fixed',
-    status: 'active',
-    description: 'Gold tipped herbal filtered sticks. Sold either as a full 10-piece box or as individual loose pieces.',
-    costPrice: 45,
-    sellingPrice: 100,
-    stockQuantity: 20,
-    lowStockThreshold: 5,
-    unit: 'boxes',
-    imageUrl: 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=600&auto=format&fit=crop&q=80',
-    isTaxApplicable: true,
-    taxRate: 18,
-    isAvailableForOnline: true,
-    ingredients: ['Herbal Extracts', 'Aromatic Spices', 'Pure Filter Tip'],
-    marginPercentage: 55,
-    profitPerUnit: 55,
-    tags: ['Box & Loose', '1 Box = 10 Pcs'],
-    storeAllocations: { bopal: 10, gota: 20, sindhubhavan: 8, sg_highway: 6 },
-    piecesPerBox: 10,
-    sellAsLoose: true,
-    boxBarcode: '890100801',
-    looseBarcode: 'PCS-890100801',
-    loosePrice: 10,
-    loosePriceType: 'fixed',
-    fullBoxStock: 20,
-    loosePieceStock: 0,
-    storeBoxAllocations: {
-      bopal: { fullBoxes: 10, loosePieces: 0 },
-      gota: { fullBoxes: 20, loosePieces: 0 },
-      sindhubhavan: { fullBoxes: 8, loosePieces: 0 },
-      sg_highway: { fullBoxes: 6, loosePieces: 0 },
-    },
-  },
-];
-
-// Initial Seed Customers
-export const INITIAL_CUSTOMERS: Customer[] = [
-  {
-    id: 'cust-1',
-    name: 'Rajesh Sharma',
-    phone: '9820199882',
-    email: 'rajesh.sharma@example.com',
-    loyaltyPoints: 420,
-    tier: 'Platinum Royal',
-    totalSpent: 4200,
-    totalOrders: 18,
-    joinDate: '2026-01-10',
-    preferences: ['Royal Maghai Meetha', 'No Supari', 'Extra Gulkand'],
-  },
-  {
-    id: 'cust-2',
-    name: 'Pooja Mehta',
-    phone: '9876543210',
-    email: 'pooja.mehta@example.com',
-    loyaltyPoints: 185,
-    tier: 'Gold',
-    totalSpent: 1850,
-    totalOrders: 9,
-    joinDate: '2026-02-05',
-    preferences: ['Signature Chocolate Fire Paan', 'Rose Gulkand Falooda'],
-  },
-  {
-    id: 'cust-3',
-    name: 'Amitabh Verma',
-    phone: '9123456789',
-    email: 'amitabh.v@example.com',
-    loyaltyPoints: 80,
-    tier: 'Silver',
-    totalSpent: 800,
-    totalOrders: 4,
-    joinDate: '2026-02-14',
-    preferences: ['Calcutta Sada Paan'],
-  },
-];
+// Initial Customers
+export const INITIAL_CUSTOMERS: Customer[] = [];
 
 // Initial Promotions
-export const INITIAL_PROMOTIONS: Promotion[] = [
-  {
-    id: 'promo-1',
-    code: 'ROYALPAN20',
-    title: 'Flat 20% Off Specialty Paans',
-    description: 'Get 20% discount on all Specialty and Fire Paan orders above ₹200.',
-    discountType: 'percentage',
-    discountValue: 20,
-    minOrderAmount: 200,
-    startDate: '2026-08-01',
-    endDate: '2026-09-30',
-    isActive: true,
-    usageCount: 42,
-    bannerColor: 'from-amber-600 to-emerald-700',
-    targetTier: 'All',
-  },
-  {
-    id: 'promo-2',
-    code: 'FESTIVE50',
-    title: '₹50 Cashback on Mukhwas & Shakes',
-    description: 'Flat ₹50 instant deduction on combo orders above ₹300.',
-    discountType: 'fixed',
-    discountValue: 50,
-    minOrderAmount: 300,
-    startDate: '2026-08-10',
-    endDate: '2026-09-15',
-    isActive: true,
-    usageCount: 19,
-    bannerColor: 'from-emerald-700 to-teal-800',
-    targetTier: 'All',
-  },
-  {
-    id: 'promo-3',
-    code: 'VIPROYALTY',
-    title: 'Platinum Royal VIP 25% Off',
-    description: 'Exclusive 25% discount for our top loyalty patrons on all orders.',
-    discountType: 'percentage',
-    discountValue: 25,
-    minOrderAmount: 150,
-    startDate: '2026-01-01',
-    endDate: '2026-12-31',
-    isActive: true,
-    usageCount: 68,
-    bannerColor: 'from-purple-800 to-amber-600',
-    targetTier: 'Platinum Royal',
-  },
-];
+export const INITIAL_PROMOTIONS: Promotion[] = [];
 
-// Helper to generate dynamic ISO timestamps for today and recent days
-const getRelativeDateISO = (daysAgo: number, hours: number, minutes: number): string => {
-  const d = new Date();
-  d.setDate(d.getDate() - daysAgo);
-  d.setHours(hours, minutes, 0, 0);
-  return d.toISOString();
-};
-
-// Initial Recent Orders with full Store & Salesperson details and mixed payment methods
-export const INITIAL_ORDERS: Order[] = [
-  {
-    id: 'ord-1001',
-    orderNumber: 'RR-2026-1001',
-    source: 'pos_counter',
-    storeId: 'gota',
-    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
-    counterNumber: 1,
-    counterName: 'Counter 1 (Royal Paan Special)',
-    cashierName: 'Mahesh Solanki',
-    customerId: 'cust-1',
-    customerName: 'Rajesh Sharma',
-    customerPhone: '9820199882',
-    items: [
-      { itemId: 'item-101', name: 'Royal Maghai Meetha Paan', sku: 'PAN-MAG-01', price: 50, costPrice: 20, quantity: 2, subtotal: 100, profit: 60, isTaxApplicable: true, taxRate: 5 },
-      { itemId: 'item-301', name: 'Royal Kesar Badam Rich Shake (350ml)', sku: 'SHK-KES-01', price: 130, costPrice: 55, quantity: 1, subtotal: 130, profit: 75, isTaxApplicable: true, taxRate: 5 },
-    ],
-    subtotal: 230,
-    discountAmount: 20,
-    appliedPromoCode: 'ROYALPAN20',
-    loyaltyPointsUsed: 0,
-    loyaltyPointsEarned: 21,
-    taxAmount: 10.5,
-    grandTotal: 220.5,
-    totalCost: 95,
-    totalProfit: 125.5,
-    paymentMethod: 'upi_qr',
-    paymentStatus: 'paid',
-    status: 'completed',
-    createdAt: getRelativeDateISO(0, 9, 30), // Today 09:30 AM
-  },
-  {
-    id: 'ord-1002',
-    orderNumber: 'RR-2026-1002',
-    source: 'customer_online',
-    storeId: 'gota',
-    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
-    customerId: 'cust-2',
-    customerName: 'Pooja Mehta',
-    customerPhone: '9876543210',
-    items: [
-      { itemId: 'item-102', name: 'Signature Chocolate Fire Paan', sku: 'PAN-FIR-02', price: 110, costPrice: 45, quantity: 2, subtotal: 220, profit: 130, isTaxApplicable: true, taxRate: 5 },
-      { itemId: 'item-401', name: 'Handcrafted Paan Ganache Dark Truffles (Box of 6)', sku: 'CHO-TRU-01', price: 260, costPrice: 110, quantity: 1, subtotal: 260, profit: 150, isTaxApplicable: true, taxRate: 18 },
-    ],
-    subtotal: 480,
-    discountAmount: 50,
-    appliedPromoCode: 'FESTIVE50',
-    loyaltyPointsUsed: 0,
-    loyaltyPointsEarned: 43,
-    taxAmount: 42.5,
-    grandTotal: 472.5,
-    totalCost: 200,
-    totalProfit: 272.5,
-    paymentMethod: 'card',
-    paymentStatus: 'paid',
-    status: 'completed',
-    createdAt: getRelativeDateISO(0, 10, 45), // Today 10:45 AM
-    notes: 'Please pack in insulated cool pouch.',
-    cashierName: 'Online Direct App',
-  },
-  {
-    id: 'ord-1003',
-    orderNumber: 'RR-2026-1003',
-    source: 'pos_counter',
-    storeId: 'bopal',
-    storeName: 'Richie Rich Pan House - Bopal Branch',
-    counterNumber: 1,
-    counterName: 'Counter 1 (Main Billing)',
-    cashierName: 'Karan Patel',
-    customerId: 'cust-3',
-    customerName: 'Amitabh Verma',
-    customerPhone: '9123456789',
-    items: [
-      { itemId: 'item-105', name: 'Calcutta Sada Paan', sku: 'PAN-CAL-05', price: 35, costPrice: 12, quantity: 3, subtotal: 105, profit: 69, isTaxApplicable: true, taxRate: 5 },
-      { itemId: 'item-cof-1', name: 'Royal Dark Roast Espresso Double Shot', sku: 'COF-ESP-01', price: 60, costPrice: 20, quantity: 1, subtotal: 60, profit: 40, isTaxApplicable: true, taxRate: 5 },
-      { itemId: 'item-201', name: 'Royal Rajwadi Shahi Mukhwas (200g Jar)', sku: 'MUK-RAJ-01', price: 180, costPrice: 90, quantity: 1, subtotal: 180, profit: 90, isTaxApplicable: true, taxRate: 12 },
-    ],
-    subtotal: 345,
-    discountAmount: 0,
-    loyaltyPointsUsed: 0,
-    loyaltyPointsEarned: 35,
-    taxAmount: 29.85,
-    grandTotal: 374.85,
-    totalCost: 146,
-    totalProfit: 228.85,
-    paymentMethod: 'cash',
-    paymentStatus: 'paid',
-    status: 'completed',
-    createdAt: getRelativeDateISO(0, 11, 20), // Today 11:20 AM
-  },
-  {
-    id: 'ord-1004',
-    orderNumber: 'RR-2026-1004',
-    source: 'pos_counter',
-    storeId: 'sindhubhavan',
-    storeName: 'Richie Rich Pan & Espresso Lounge - Sindhubhavan Road',
-    counterNumber: 1,
-    counterName: 'Counter 1 (VIP Pan Lounge)',
-    cashierName: 'Pritesh Dave',
-    customerName: 'Vikram Sarabhai',
-    customerPhone: '9988776655',
-    items: [
-      { itemId: 'item-104', name: 'Kesar Kasturi Gold Vark Paan', sku: 'PAN-SLV-04', price: 220, costPrice: 80, quantity: 2, subtotal: 440, profit: 280, isTaxApplicable: true, taxRate: 5 },
-      { itemId: 'item-cof-2', name: 'Richie Rich Chilled Hazelnut Cold Coffee (350ml)', sku: 'COF-CLD-02', price: 120, costPrice: 45, quantity: 2, subtotal: 240, profit: 150, isTaxApplicable: true, taxRate: 5 },
-    ],
-    subtotal: 680,
-    discountAmount: 50,
-    loyaltyPointsUsed: 0,
-    loyaltyPointsEarned: 68,
-    taxAmount: 31.5,
-    grandTotal: 661.5,
-    totalCost: 250,
-    totalProfit: 411.5,
-    paymentMethod: 'upi_qr',
-    paymentStatus: 'paid',
-    status: 'completed',
-    createdAt: getRelativeDateISO(0, 13, 10), // Today 01:10 PM
-  },
-  {
-    id: 'ord-1005',
-    orderNumber: 'RR-2026-1005',
-    source: 'pos_counter',
-    storeId: 'sg_highway',
-    storeName: 'Richie Rich Express Drive-Thru - SG Highway',
-    counterNumber: 1,
-    counterName: 'Counter 1 (Express Highway Window)',
-    cashierName: 'Vikram Rajput',
-    customerName: 'Hardik Shah',
-    customerPhone: '9898012345',
-    items: [
-      { itemId: 'item-ess-3', name: 'Red Bull Energy Drink (250ml Ice-Cold Can)', sku: 'ESS-ENR-03', price: 125, costPrice: 90, quantity: 2, subtotal: 250, profit: 70, isTaxApplicable: true, taxRate: 28 },
-      { itemId: 'item-ess-1', name: 'Cool Mint Pocket Mouth Freshener Spray (15ml)', sku: 'ESS-SPR-01', price: 90, costPrice: 40, quantity: 1, subtotal: 90, profit: 50, isTaxApplicable: true, taxRate: 18 },
-      { itemId: 'item-ess-2', name: 'Himalayan Natural Mineral Water (500ml Chilled)', sku: 'ESS-WAT-02', price: 30, costPrice: 15, quantity: 2, subtotal: 60, profit: 30, isTaxApplicable: false, taxRate: 0 },
-    ],
-    subtotal: 400,
-    discountAmount: 0,
-    loyaltyPointsUsed: 0,
-    loyaltyPointsEarned: 40,
-    taxAmount: 86.2,
-    grandTotal: 486.2,
-    totalCost: 250,
-    totalProfit: 236.2,
-    paymentMethod: 'card',
-    paymentStatus: 'paid',
-    status: 'completed',
-    createdAt: getRelativeDateISO(0, 14, 45), // Today 02:45 PM
-  },
-  {
-    id: 'ord-1006',
-    orderNumber: 'RR-2026-1006',
-    source: 'pos_counter',
-    storeId: 'gota',
-    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
-    counterNumber: 2,
-    counterName: 'Counter 2 (Beverages & Shakes)',
-    cashierName: 'Jayesh Patel',
-    customerName: 'Ananya Desai',
-    customerPhone: '9879512345',
-    items: [
-      { itemId: 'item-302', name: 'Belgian Chocolate Thick Shake', sku: 'SHK-CHO-02', price: 140, costPrice: 50, quantity: 2, subtotal: 280, profit: 180, isTaxApplicable: true, taxRate: 5 },
-      { itemId: 'item-103', name: 'Silver Coated Navratan Sweet Paan', sku: 'PAN-NAV-03', price: 80, costPrice: 30, quantity: 2, subtotal: 160, profit: 100, isTaxApplicable: true, taxRate: 5 },
-    ],
-    subtotal: 440,
-    discountAmount: 0,
-    loyaltyPointsUsed: 0,
-    loyaltyPointsEarned: 44,
-    taxAmount: 22.0,
-    grandTotal: 462.0,
-    totalCost: 160,
-    totalProfit: 302.0,
-    paymentMethod: 'cash',
-    paymentStatus: 'paid',
-    status: 'completed',
-    createdAt: getRelativeDateISO(0, 15, 30), // Today 03:30 PM
-  },
-  {
-    id: 'ord-1007',
-    orderNumber: 'RR-2026-1007',
-    source: 'pos_counter',
-    storeId: 'bopal',
-    storeName: 'Richie Rich Pan House - Bopal Branch',
-    counterNumber: 1,
-    counterName: 'Counter 1 (Main Billing)',
-    cashierName: 'Karan Patel',
-    customerName: 'Nikhil Trivedi',
-    customerPhone: '9426011223',
-    items: [
-      { itemId: 'item-101', name: 'Royal Maghai Meetha Paan', sku: 'PAN-MAG-01', price: 50, costPrice: 20, quantity: 4, subtotal: 200, profit: 120, isTaxApplicable: true, taxRate: 5 },
-      { itemId: 'item-cof-1', name: 'Royal Dark Roast Espresso Double Shot', sku: 'COF-ESP-01', price: 60, costPrice: 20, quantity: 2, subtotal: 120, profit: 80, isTaxApplicable: true, taxRate: 5 },
-    ],
-    subtotal: 320,
-    discountAmount: 20,
-    appliedPromoCode: 'ROYALPAN20',
-    loyaltyPointsUsed: 0,
-    loyaltyPointsEarned: 30,
-    taxAmount: 15.0,
-    grandTotal: 315.0,
-    totalCost: 120,
-    totalProfit: 195.0,
-    paymentMethod: 'upi_qr',
-    paymentStatus: 'paid',
-    status: 'completed',
-    createdAt: getRelativeDateISO(0, 16, 15), // Today 04:15 PM
-  },
-  {
-    id: 'ord-1008',
-    orderNumber: 'RR-2026-1008',
-    source: 'pos_counter',
-    storeId: 'sindhubhavan',
-    storeName: 'Richie Rich Pan & Espresso Lounge - Sindhubhavan Road',
-    counterNumber: 1,
-    counterName: 'Counter 1 (VIP Pan Lounge)',
-    cashierName: 'Pritesh Dave',
-    customerName: 'Sunil Mittal',
-    customerPhone: '9712988334',
-    items: [
-      { itemId: 'item-401', name: 'Handcrafted Paan Ganache Dark Truffles (Box of 6)', sku: 'CHO-TRU-01', price: 260, costPrice: 110, quantity: 2, subtotal: 520, profit: 300, isTaxApplicable: true, taxRate: 18 },
-    ],
-    subtotal: 520,
-    discountAmount: 0,
-    loyaltyPointsUsed: 0,
-    loyaltyPointsEarned: 52,
-    taxAmount: 93.6,
-    grandTotal: 613.6,
-    totalCost: 220,
-    totalProfit: 393.6,
-    paymentMethod: 'cash',
-    paymentStatus: 'paid',
-    status: 'completed',
-    createdAt: getRelativeDateISO(0, 17, 0), // Today 05:00 PM
-  },
-  {
-    id: 'ord-1009',
-    orderNumber: 'RR-2026-1009',
-    source: 'pos_counter',
-    storeId: 'gota',
-    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
-    counterNumber: 1,
-    counterName: 'Counter 1 (Royal Paan Special)',
-    cashierName: 'Mahesh Solanki',
-    customerName: 'Rohan Mehra',
-    customerPhone: '9925044556',
-    items: [
-      { itemId: 'item-102', name: 'Signature Chocolate Fire Paan', sku: 'PAN-FIR-02', price: 110, costPrice: 45, quantity: 3, subtotal: 330, profit: 195, isTaxApplicable: true, taxRate: 5 },
-      { itemId: 'item-cof-2', name: 'Richie Rich Chilled Hazelnut Cold Coffee (350ml)', sku: 'COF-CLD-02', price: 120, costPrice: 45, quantity: 1, subtotal: 120, profit: 75, isTaxApplicable: true, taxRate: 5 },
-    ],
-    subtotal: 450,
-    discountAmount: 0,
-    loyaltyPointsUsed: 0,
-    loyaltyPointsEarned: 45,
-    taxAmount: 22.5,
-    grandTotal: 472.5,
-    totalCost: 180,
-    totalProfit: 292.5,
-    paymentMethod: 'card',
-    paymentStatus: 'paid',
-    status: 'completed',
-    createdAt: getRelativeDateISO(1, 19, 20), // Yesterday
-  },
-  {
-    id: 'ord-1010',
-    orderNumber: 'RR-2026-1010',
-    source: 'pos_counter',
-    storeId: 'sg_highway',
-    storeName: 'Richie Rich Express Drive-Thru - SG Highway',
-    counterNumber: 1,
-    counterName: 'Counter 1 (Express Highway Window)',
-    cashierName: 'Vikram Rajput',
-    customerName: 'Chirag Vyas',
-    customerPhone: '9879022334',
-    items: [
-      { itemId: 'item-201', name: 'Royal Rajwadi Shahi Mukhwas (200g Jar)', sku: 'MUK-RAJ-01', price: 180, costPrice: 90, quantity: 2, subtotal: 360, profit: 180, isTaxApplicable: true, taxRate: 12 },
-    ],
-    subtotal: 360,
-    discountAmount: 0,
-    loyaltyPointsUsed: 0,
-    loyaltyPointsEarned: 36,
-    taxAmount: 43.2,
-    grandTotal: 403.2,
-    totalCost: 180,
-    totalProfit: 223.2,
-    paymentMethod: 'cash',
-    paymentStatus: 'paid',
-    status: 'completed',
-    createdAt: getRelativeDateISO(2, 18, 10), // 2 days ago
-  },
-  {
-    id: 'ord-1011',
-    orderNumber: 'RR-2026-1011',
-    source: 'pos_counter',
-    storeId: 'gota',
-    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
-    counterNumber: 1,
-    counterName: 'Counter 1 (Royal Paan Special)',
-    cashierName: 'Mahesh Solanki',
-    customerName: 'Aditya Dave',
-    customerPhone: '9825012345',
-    items: [
-      {
-        itemId: 'item-box-cig-1',
-        name: 'Classic Gold Filter (1 Box)',
-        sku: 'CIG-CLK-01',
-        price: 100,
-        costPrice: 45,
-        quantity: 5,
-        subtotal: 500,
-        profit: 275,
-        isTaxApplicable: true,
-        taxRate: 18,
-        saleType: 'box',
-        piecesPerBox: 10,
-        boxEquivalentSold: 5,
-      },
-    ],
-    subtotal: 500,
-    discountAmount: 0,
-    loyaltyPointsUsed: 0,
-    loyaltyPointsEarned: 50,
-    taxAmount: 90,
-    grandTotal: 590,
-    totalCost: 225,
-    totalProfit: 275,
-    paymentMethod: 'upi_qr',
-    paymentStatus: 'paid',
-    status: 'completed',
-    createdAt: getRelativeDateISO(0, 11, 20), // Today
-  },
-  {
-    id: 'ord-1012',
-    orderNumber: 'RR-2026-1012',
-    source: 'pos_counter',
-    storeId: 'gota',
-    storeName: 'Richie Rich Pan House & Coffee Lounge - Gota Main',
-    counterNumber: 1,
-    counterName: 'Counter 1 (Royal Paan Special)',
-    cashierName: 'Mahesh Solanki',
-    customerName: 'Harsh Trivedi',
-    customerPhone: '9825098765',
-    items: [
-      {
-        itemId: 'item-box-cig-1',
-        name: 'Classic Gold Filter (Loose Piece)',
-        sku: 'CIG-CLK-01',
-        price: 10,
-        costPrice: 4.5,
-        quantity: 17,
-        subtotal: 170,
-        profit: 93.5,
-        isTaxApplicable: true,
-        taxRate: 18,
-        saleType: 'loose',
-        piecesPerBox: 10,
-        boxEquivalentSold: 1.7,
-      },
-    ],
-    subtotal: 170,
-    discountAmount: 0,
-    loyaltyPointsUsed: 0,
-    loyaltyPointsEarned: 17,
-    taxAmount: 30.6,
-    grandTotal: 200.6,
-    totalCost: 76.5,
-    totalProfit: 93.5,
-    paymentMethod: 'cash',
-    paymentStatus: 'paid',
-    status: 'completed',
-    createdAt: getRelativeDateISO(0, 13, 40), // Today
-  },
-];
+// Initial Recent Orders
+export const INITIAL_ORDERS: Order[] = [];
 
 // Initial System Notifications
-export const INITIAL_NOTIFICATIONS: PushNotification[] = [
-  {
-    id: 'notif-1',
-    title: '⚠️ Low Stock Alert: Signature Chocolate Fire Paan',
-    message: 'Current stock is 8 pieces, which is below the minimum threshold (12 pieces). Reorder soon!',
-    type: 'low_stock',
-    timestamp: '2026-08-22T06:00:00.000Z',
-    targetRole: 'admin',
-    read: false,
-    linkRole: 'warehouse',
-    linkTab: 'inventory',
-  },
-  {
-    id: 'notif-2',
-    title: '⚠️ Low Stock Alert: Kesar Kasturi Gold Vark Paan',
-    message: 'Current stock is only 5 units remaining (threshold: 8). High profit margin item!',
-    type: 'low_stock',
-    timestamp: '2026-08-22T06:10:00.000Z',
-    targetRole: 'admin',
-    read: false,
-    linkRole: 'warehouse',
-    linkTab: 'inventory',
-  },
-  {
-    id: 'notif-3',
-    title: '👑 Loyalty Tier Upgrade: Rajesh Sharma',
-    message: 'Customer Rajesh Sharma has reached Platinum Royal status with over 4,000 points earned!',
-    type: 'loyalty_reward',
-    timestamp: '2026-08-22T06:15:00.000Z',
-    targetRole: 'admin',
-    read: false,
-    linkRole: 'admin',
-    linkTab: 'loyalty_promos',
-  },
-  {
-    id: 'notif-4',
-    title: '💾 Automated Daily Database Backup Successful',
-    message: 'System snapshot generated and stored safely at 12:00 AM. 12 catalog items and records archived.',
-    type: 'system_backup',
-    timestamp: '2026-08-22T00:00:00.000Z',
-    targetRole: 'admin',
-    read: true,
-    linkRole: 'admin',
-    linkTab: 'backups',
-  },
-];
+export const INITIAL_NOTIFICATIONS: PushNotification[] = [];
 
 // Cross-tab real-time sync via BroadcastChannel
 let syncChannel: BroadcastChannel | null = null;
@@ -1623,31 +562,11 @@ export class StorageService {
           }
         });
 
-        // Ensure catalog items exist
-        INITIAL_INVENTORY.forEach((initItem) => {
-          const found = uniqueParsed.find((i) => i.id === initItem.id || i.sku === initItem.sku);
-          if (!found) {
-            uniqueParsed.push({
-              ...initItem,
-              category: normalizeProductCategory(initItem.category),
-              stockQuantity: 0,
-              storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-            });
-            hasChanges = true;
-          }
-        });
-
         if (hasChanges || uniqueParsed.length !== parsed.length) {
           safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(uniqueParsed));
         }
       } catch {
-        const zeroStockInit = INITIAL_INVENTORY.map((item) => ({
-          ...item,
-          category: normalizeProductCategory(item.category),
-          stockQuantity: 0,
-          storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-        }));
-        safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(zeroStockInit));
+        safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify([]));
       }
     }
 
@@ -1655,36 +574,19 @@ export class StorageService {
     safeStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
 
     if (!safeStorage.getItem(STORAGE_KEYS.CUSTOMERS)) {
-      safeStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(INITIAL_CUSTOMERS));
+      safeStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify([]));
     }
     if (!safeStorage.getItem(STORAGE_KEYS.ORDERS)) {
-      safeStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(INITIAL_ORDERS));
+      safeStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify([]));
     }
     if (!safeStorage.getItem(STORAGE_KEYS.PROMOTIONS)) {
-      safeStorage.setItem(STORAGE_KEYS.PROMOTIONS, JSON.stringify(INITIAL_PROMOTIONS));
+      safeStorage.setItem(STORAGE_KEYS.PROMOTIONS, JSON.stringify([]));
     }
     if (!safeStorage.getItem(STORAGE_KEYS.NOTIFICATIONS)) {
-      safeStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(INITIAL_NOTIFICATIONS));
+      safeStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify([]));
     }
     if (!safeStorage.getItem(STORAGE_KEYS.BACKUPS)) {
-      // Seed initial baseline backup
-      const baselineBackup: BackupSnapshot = {
-        id: 'backup-init-1',
-        timestamp: '2026-08-22T00:00:00.000Z',
-        type: 'automated_daily',
-        itemCount: INITIAL_INVENTORY.length,
-        orderCount: INITIAL_ORDERS.length,
-        customerCount: INITIAL_CUSTOMERS.length,
-        fileSizeKb: 14.8,
-        checksum: 'SHA256-RR-0012A',
-        dataJson: JSON.stringify({
-          inventory: INITIAL_INVENTORY,
-          orders: INITIAL_ORDERS,
-          customers: INITIAL_CUSTOMERS,
-          promotions: INITIAL_PROMOTIONS,
-        }),
-      };
-      safeStorage.setItem(STORAGE_KEYS.BACKUPS, JSON.stringify([baselineBackup]));
+      safeStorage.setItem(STORAGE_KEYS.BACKUPS, JSON.stringify([]));
     }
 
     // Check stores and counters
@@ -1700,7 +602,147 @@ export class StorageService {
 
     // Check store expenses
     if (!safeStorage.getItem(STORAGE_KEYS.STORE_EXPENSES)) {
-      safeStorage.setItem(STORAGE_KEYS.STORE_EXPENSES, JSON.stringify(INITIAL_STORE_EXPENSES));
+      safeStorage.setItem(STORAGE_KEYS.STORE_EXPENSES, JSON.stringify([]));
+    }
+
+    // Run active purge of legacy dummy mock entries
+    this.purgeAllDummyData();
+  }
+
+  /**
+   * Purges all mock/dummy test records from storage
+   */
+  public purgeAllDummyData(): void {
+    if (typeof window === 'undefined') return;
+
+    try {
+      // 1. Purge dummy orders
+      const rawOrders = safeStorage.getItem(STORAGE_KEYS.ORDERS);
+      if (rawOrders) {
+        try {
+          const orders: Order[] = JSON.parse(rawOrders);
+          if (Array.isArray(orders)) {
+            const cleanOrders = orders.filter(
+              (o) =>
+                o &&
+                !String(o.id).startsWith('ord-10') &&
+                !String(o.orderNumber).startsWith('RR-2026-10') &&
+                o.customerName !== 'Rajesh Sharma' &&
+                o.customerName !== 'Pooja Mehta' &&
+                o.customerName !== 'Amitabh Verma'
+            );
+            safeStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(cleanOrders));
+            this.setCached(STORAGE_KEYS.ORDERS, cleanOrders);
+          }
+        } catch {}
+      }
+
+      // 2. Purge dummy customers
+      const rawCustomers = safeStorage.getItem(STORAGE_KEYS.CUSTOMERS);
+      if (rawCustomers) {
+        try {
+          const customers: Customer[] = JSON.parse(rawCustomers);
+          if (Array.isArray(customers)) {
+            const cleanCustomers = customers.filter(
+              (c) =>
+                c &&
+                c.id !== 'cust-1' &&
+                c.id !== 'cust-2' &&
+                c.id !== 'cust-3' &&
+                c.name !== 'Rajesh Sharma' &&
+                c.name !== 'Pooja Mehta' &&
+                c.name !== 'Amitabh Verma'
+            );
+            safeStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(cleanCustomers));
+            this.setCached(STORAGE_KEYS.CUSTOMERS, cleanCustomers);
+          }
+        } catch {}
+      }
+
+      // 3. Purge dummy store expenses
+      const rawExpenses = safeStorage.getItem(STORAGE_KEYS.STORE_EXPENSES);
+      if (rawExpenses) {
+        try {
+          const expenses: StoreExpense[] = JSON.parse(rawExpenses);
+          if (Array.isArray(expenses)) {
+            const cleanExpenses = expenses.filter(
+              (e) =>
+                e &&
+                !['exp-101', 'exp-102', 'exp-103', 'exp-104', 'exp-105'].includes(e.id) &&
+                !['Torrent Power & Fuel Station', 'Gala Packaging Hub', 'CleanCare Solutions'].includes(e.paidTo)
+            );
+            safeStorage.setItem(STORAGE_KEYS.STORE_EXPENSES, JSON.stringify(cleanExpenses));
+            this.setCached(STORAGE_KEYS.STORE_EXPENSES, cleanExpenses);
+          }
+        } catch {}
+      }
+
+      // 4. Purge dummy promotions
+      const rawPromos = safeStorage.getItem(STORAGE_KEYS.PROMOTIONS);
+      if (rawPromos) {
+        try {
+          const promos: Promotion[] = JSON.parse(rawPromos);
+          if (Array.isArray(promos)) {
+            const cleanPromos = promos.filter(
+              (p) => p && !['promo-1', 'promo-2', 'promo-3'].includes(p.id) && !['ROYALPAN20', 'FESTIVE50', 'VIPROYALTY'].includes(p.code)
+            );
+            safeStorage.setItem(STORAGE_KEYS.PROMOTIONS, JSON.stringify(cleanPromos));
+            this.setCached(STORAGE_KEYS.PROMOTIONS, cleanPromos);
+          }
+        } catch {}
+      }
+
+      // 5. Purge dummy notifications
+      const rawNotifs = safeStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+      if (rawNotifs) {
+        try {
+          const notifs: PushNotification[] = JSON.parse(rawNotifs);
+          if (Array.isArray(notifs)) {
+            const cleanNotifs = notifs.filter((n) => n && !['notif-1', 'notif-2', 'notif-3', 'notif-4'].includes(n.id));
+            safeStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(cleanNotifs));
+            this.setCached(STORAGE_KEYS.NOTIFICATIONS, cleanNotifs);
+          }
+        } catch {}
+      }
+
+      // 6. Purge dummy suppliers
+      const rawSuppliers = safeStorage.getItem('rr_wh_suppliers');
+      if (rawSuppliers) {
+        try {
+          const suppliers: any[] = JSON.parse(rawSuppliers);
+          if (Array.isArray(suppliers)) {
+            const cleanSuppliers = suppliers.filter(
+              (s) =>
+                s &&
+                !['sup-101', 'sup-102', 'sup-103', 'sup-104'].includes(s.id) &&
+                !['Gujarat Betel Traders', 'Shreeji Spices & Supari', 'Apex Cafe & Beverage Distributors', 'Royal Luxury Packaging & Vark'].includes(s.name)
+            );
+            safeStorage.setItem('rr_wh_suppliers', JSON.stringify(cleanSuppliers));
+          }
+        } catch {}
+      }
+
+      // 7. Purge dummy inventory items if they are old mock template items
+      const rawInv = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
+      if (rawInv) {
+        try {
+          const inv: InventoryItem[] = JSON.parse(rawInv);
+          if (Array.isArray(inv)) {
+            const cleanInv = inv.filter(
+              (i) =>
+                i &&
+                !['item-101', 'item-102', 'item-103', 'item-104', 'item-105', 'item-106', 'item-201', 'item-202', 'item-203', 'item-204', 'item-301', 'item-302', 'item-303', 'item-304', 'item-305', 'item-401'].includes(i.id)
+            );
+            safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(cleanInv));
+            this.setCached(STORAGE_KEYS.INVENTORY, cleanInv);
+          }
+        } catch {}
+      }
+
+      this.memoryCache.clear();
+      this.notify(true);
+    } catch (err) {
+      console.warn('Error purging dummy data:', err);
     }
   }
 
@@ -2033,24 +1075,6 @@ export class StorageService {
           sanitized.push(item);
         }
 
-        // Guarantee that all catalog items and SKUs from INITIAL_INVENTORY are always present with 0 initial stock
-        INITIAL_INVENTORY.forEach((initItem) => {
-          const initSku = initItem.sku ? initItem.sku.trim().toLowerCase() : '';
-          const alreadyPresent = sanitized.some(
-            (s) => s.id === initItem.id || (initSku && s.sku && s.sku.trim().toLowerCase() === initSku)
-          );
-          if (!alreadyPresent) {
-            sanitized.push({
-              ...initItem,
-              sku: (initItem.sku || `SKU-${initItem.id}`).toUpperCase(),
-              category: normalizeProductCategory(initItem.category),
-              stockQuantity: 0,
-              storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-            });
-            hadDuplicatesOrUnnormalized = true;
-          }
-        });
-
         if (hadDuplicatesOrUnnormalized && typeof window !== 'undefined') {
           try {
             safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(sanitized));
@@ -2061,7 +1085,7 @@ export class StorageService {
 
         return sanitized;
       } catch {
-        return INITIAL_INVENTORY;
+        return [];
       }
     });
   }
@@ -2736,9 +1760,9 @@ export class StorageService {
     return this.getCached(STORAGE_KEYS.CUSTOMERS, () => {
       try {
         const data = safeStorage.getItem(STORAGE_KEYS.CUSTOMERS);
-        return data ? JSON.parse(data) : INITIAL_CUSTOMERS;
+        return data ? JSON.parse(data) : [];
       } catch {
-        return INITIAL_CUSTOMERS;
+        return [];
       }
     });
   }
@@ -2805,9 +1829,9 @@ export class StorageService {
     return this.getCached(STORAGE_KEYS.ORDERS, () => {
       try {
         const data = safeStorage.getItem(STORAGE_KEYS.ORDERS);
-        return data ? JSON.parse(data) : INITIAL_ORDERS;
+        return data ? JSON.parse(data) : [];
       } catch {
-        return INITIAL_ORDERS;
+        return [];
       }
     });
   }
@@ -3075,9 +2099,9 @@ export class StorageService {
     return this.getCached(STORAGE_KEYS.PROMOTIONS, () => {
       try {
         const data = safeStorage.getItem(STORAGE_KEYS.PROMOTIONS);
-        return data ? JSON.parse(data) : INITIAL_PROMOTIONS;
+        return data ? JSON.parse(data) : [];
       } catch {
-        return INITIAL_PROMOTIONS;
+        return [];
       }
     });
   }
@@ -3136,9 +2160,9 @@ export class StorageService {
     return this.getCached(STORAGE_KEYS.NOTIFICATIONS, () => {
       try {
         const data = safeStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
-        return data ? JSON.parse(data) : INITIAL_NOTIFICATIONS;
+        return data ? JSON.parse(data) : [];
       } catch {
-        return INITIAL_NOTIFICATIONS;
+        return [];
       }
     });
   }
@@ -3798,15 +2822,13 @@ export class StorageService {
       try {
         const data = safeStorage.getItem(STORAGE_KEYS.STORE_EXPENSES);
         let expenses: StoreExpense[] = [];
-        if (!data) {
-          expenses = INITIAL_STORE_EXPENSES;
-        } else {
+        if (data) {
           const parsed = JSON.parse(data);
-          expenses = Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_STORE_EXPENSES;
+          expenses = Array.isArray(parsed) ? parsed : [];
         }
         return expenses;
       } catch {
-        return INITIAL_STORE_EXPENSES;
+        return [];
       }
     });
 

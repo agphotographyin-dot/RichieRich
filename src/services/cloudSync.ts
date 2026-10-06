@@ -423,47 +423,26 @@ class PocketBaseTwoWayRealtimeSyncService {
   }
 
   /**
-   * Initial Bi-Directional Reconciliation:
-   * 1. Pulls existing server records and merges into local cache
-   * 2. Pushes local records that are not yet on the server
+   * Two-Way Server Reconciliation:
+   * Pulls existing server records and updates local state.
+   * If server collection is empty or records are deleted on server, local state is synchronized cleanly.
    */
   public async performTwoWayReconciliation(): Promise<void> {
     for (const [colName, info] of Object.entries(COLLECTION_STORAGE_MAP)) {
       try {
-        // A. Pull from Server (Server -> Device)
         const serverRecords = await pb.collection(colName).getFullList({ requestKey: null }).catch(() => null);
 
-        let map = this.collectionDocsMap.get(colName);
-        if (!map) {
-          map = new Map<string, any>();
-          this.collectionDocsMap.set(colName, map);
-        }
-
-        if (Array.isArray(serverRecords) && serverRecords.length > 0) {
+        if (Array.isArray(serverRecords)) {
+          const newMap = new Map<string, any>();
           serverRecords.forEach((record: any) => {
             const docData = record.data ? { ...record.data, id: record.recordId || record.id } : record;
-            const id = String(docData.id || record.recordId || record.id);
-            map!.set(id, docData);
+            const id = String(docData.id || record.recordId || record.id || (docData as any).sku);
+            newMap.set(id, docData);
           });
-          const merged = Array.from(map.values());
-          this.applyRemoteUpdate(info.storageKey, merged, info.isWarehouse);
-        }
+          this.collectionDocsMap.set(colName, newMap);
 
-        // B. Push Local-Only Records (Device -> Server)
-        const localDocs = Array.from(map.values());
-        if (localDocs.length > 0) {
-          const serverDocIds = new Set(
-            (serverRecords || []).map((r: any) => String(r.recordId || r.id))
-          );
-          const toPush = localDocs.filter((doc) => {
-            const docId = String(doc.id || doc.sku);
-            return !serverDocIds.has(docId);
-          });
-
-          if (toPush.length > 0) {
-            // Throttled concurrency push to prevent CPU spikes and SQLite database lock contention
-            await this.throttledBatchPush(colName, toPush, true);
-          }
+          const syncedDocs = Array.from(newMap.values());
+          this.applyRemoteUpdate(info.storageKey, syncedDocs, info.isWarehouse);
         }
       } catch {}
     }

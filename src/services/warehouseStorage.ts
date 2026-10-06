@@ -63,265 +63,75 @@ export const INITIAL_WAREHOUSES: Warehouse[] = [
   },
 ];
 
-// Initial Authentic Suppliers Seed
-export const INITIAL_SUPPLIERS: Supplier[] = [
-  {
-    id: 'sup-101',
-    code: 'SUP-GUJ-01',
-    name: 'Gujarat Betel Traders',
-    category: 'raw_materials',
-    contactPerson: 'Ramesh Patel',
-    phone: '+91 98250 88710',
-    email: 'orders@gujaratbetel.in',
-    gstin: '24AABCG1234F1Z1',
-    panNumber: 'AABCG1234F',
-    address: 'Plot 44, APMC Market Yard, Jamalpur',
-    city: 'Ahmedabad',
-    state: 'Gujarat',
-    paymentTerms: 'net_15',
-    creditLimit: 500000,
-    currentOutstanding: 14500,
-    totalPurchases: 285000,
-    totalPaid: 270500,
-    rating: 4.9,
-    isActive: true,
-  },
-  {
-    id: 'sup-102',
-    code: 'SUP-SHR-02',
-    name: 'Shreeji Spices & Supari',
-    category: 'spices_mukhwas',
-    contactPerson: 'Paresh Shah',
-    phone: '+91 98251 44520',
-    email: 'sales@shreejispices.in',
-    gstin: '24AABCS5678G1Z2',
-    panNumber: 'AABCS5678G',
-    address: '108, Ring Road Spice Market',
-    city: 'Surat',
-    state: 'Gujarat',
-    paymentTerms: 'net_30',
-    creditLimit: 350000,
-    currentOutstanding: 8200,
-    totalPurchases: 195000,
-    totalPaid: 186800,
-    rating: 4.8,
-    isActive: true,
-  },
-  {
-    id: 'sup-103',
-    code: 'SUP-APX-03',
-    name: 'Apex Cafe & Beverage Distributors',
-    category: 'cafe_beverages',
-    contactPerson: 'Amit Joshi',
-    phone: '+91 98252 66730',
-    email: 'supply@apexbeverages.in',
-    gstin: '24AABCA9012H1Z3',
-    panNumber: 'AABCA9012H',
-    address: 'B-12, GIDC Estate, Changodar',
-    city: 'Ahmedabad',
-    state: 'Gujarat',
-    paymentTerms: 'net_15',
-    creditLimit: 400000,
-    currentOutstanding: 22000,
-    totalPurchases: 340000,
-    totalPaid: 318000,
-    rating: 4.7,
-    isActive: true,
-  },
-  {
-    id: 'sup-104',
-    code: 'SUP-ROY-04',
-    name: 'Royal Luxury Packaging & Vark',
-    category: 'packaging',
-    contactPerson: 'Narendra Soni',
-    phone: '+91 98253 99840',
-    email: 'contact@royalvarkworks.in',
-    gstin: '24AABCR3456J1Z4',
-    panNumber: 'AABCR3456J',
-    address: '77, Soni Bazaar, Manek Chowk',
-    city: 'Ahmedabad',
-    state: 'Gujarat',
-    paymentTerms: 'immediate',
-    creditLimit: 200000,
-    currentOutstanding: 0,
-    totalPurchases: 120000,
-    totalPaid: 120000,
-    rating: 4.9,
-    isActive: true,
-  },
-];
+// Initial Suppliers
+export const INITIAL_SUPPLIERS: Supplier[] = [];
 export const INITIAL_LEDGER_ENTRIES: SupplierLedgerEntry[] = [];
-export const INITIAL_PURCHASE_ORDERS: PurchaseOrder[] = [
-  {
-    id: 'po-seed-101',
-    poNumber: 'PO-2026-001',
-    supplierId: 'sup-101',
-    supplierName: 'Calcutta Paan Supply Co.',
-    supplierGstin: '19AAACC1234F1Z8',
-    destinationWarehouseId: 'wh-central-amd',
-    destinationWarehouseName: 'Central Warehouse',
-    orderDate: '2026-09-15',
-    expectedDeliveryDate: '2026-09-18',
-    status: 'received',
-    items: [
-      {
-        itemId: 'item-101',
-        sku: 'PAN-MAG-01',
-        name: 'Royal Maghai Meetha Paan',
-        category: 'Paan',
-        quantityOrdered: 200,
-        quantityReceived: 200,
-        unit: 'pieces',
-        unitPrice: 20,
-        taxPercent: 5,
-        taxAmount: 200,
-        totalAmount: 4200,
-      },
-      {
-        itemId: 'item-103',
-        sku: 'PAN-ICE-03',
-        name: 'Sub-Zero Ice Smoke Paan',
-        category: 'Paan',
-        quantityOrdered: 100,
-        quantityReceived: 100,
-        unit: 'pieces',
-        unitPrice: 35,
-        taxPercent: 5,
-        taxAmount: 175,
-        totalAmount: 3675,
-      },
-    ],
-    subtotal: 7500,
-    taxTotal: 375,
-    freightCharge: 250,
-    grandTotal: 8125,
-    createdByName: 'Vikramsinh Vaghela (WH Inward Officer)',
-    approvedByName: 'Rajesh Patel (Admin / General Manager)',
-    paymentTerms: 'Net 30 Days',
-    paymentStatus: 'unpaid',
-    notes: 'Premium batch ordered for Central Warehouse cold storage replenishment.',
-  },
-  {
-    id: 'po-seed-102',
-    poNumber: 'PO-2026-002',
-    supplierId: 'sup-102',
-    supplierName: 'Banaras Heritage Betel Leaves',
-    supplierGstin: '09AABCB5678G2Z1',
-    destinationWarehouseId: 'wh-central-amd',
-    destinationWarehouseName: 'Central Warehouse',
-    orderDate: '2026-09-17',
-    expectedDeliveryDate: '2026-09-20',
-    status: 'approved',
-    items: [
-      {
-        itemId: 'item-102',
-        sku: 'PAN-FIR-02',
-        name: 'Signature Chocolate Fire Paan',
-        category: 'Paan',
-        quantityOrdered: 150,
-        quantityReceived: 0,
-        unit: 'pieces',
-        unitPrice: 45,
-        taxPercent: 5,
-        taxAmount: 338,
-        totalAmount: 7088,
-      },
-    ],
-    subtotal: 6750,
-    taxTotal: 338,
-    freightCharge: 200,
-    grandTotal: 7288,
-    createdByName: 'Vikramsinh Vaghela (WH Inward Officer)',
-    approvedByName: 'Rajesh Patel (Admin / General Manager)',
-    paymentTerms: 'Net 15 Days',
-    paymentStatus: 'unpaid',
-    notes: 'Approved PO awaiting physical delivery to Central Warehouse for Inward GRN inspection.',
-  },
-];
-
-export const INITIAL_PURCHASE_BILLS: PurchaseBill[] = [
-  {
-    id: 'pb-seed-101',
-    billNumber: 'PB-2026-001',
-    poReferenceId: 'po-seed-101',
-    poNumber: 'PO-2026-001',
-    supplierId: 'sup-101',
-    supplierName: 'Calcutta Paan Supply Co.',
-    supplierInvoiceNo: 'INV-CAL-9942',
-    warehouseId: 'wh-central-amd',
-    warehouseName: 'Central Warehouse',
-    billDate: '2026-09-18',
-    receivedDate: '2026-09-18',
-    items: [
-      {
-        itemId: 'item-101',
-        sku: 'PAN-MAG-01',
-        name: 'Royal Maghai Meetha Paan',
-        category: 'Paan',
-        quantity: 200,
-        unit: 'pieces',
-        unitCost: 20,
-        taxRate: 5,
-        taxAmount: 200,
-        totalCost: 4200,
-        batchNumber: 'BATCH-MAG-2026-09A',
-        mfgDate: '2026-09-17',
-        expiryDate: '2026-10-17',
-      },
-      {
-        itemId: 'item-103',
-        sku: 'PAN-ICE-03',
-        name: 'Sub-Zero Ice Smoke Paan',
-        category: 'Paan',
-        quantity: 100,
-        unit: 'pieces',
-        unitCost: 35,
-        taxRate: 5,
-        taxAmount: 175,
-        totalCost: 3675,
-        batchNumber: 'BATCH-ICE-2026-09B',
-        mfgDate: '2026-09-17',
-        expiryDate: '2026-10-17',
-      },
-    ],
-    subtotal: 7500,
-    gstAmount: 375,
-    freightCharges: 250,
-    roundOff: 0,
-    grandTotal: 8125,
-    paidAmount: 0,
-    dueAmount: 8125,
-    dueDate: '2026-10-18',
-    paymentStatus: 'due',
-    grnStatus: 'verified_stocked',
-    receivedBy: 'Vikramsinh Vaghela (Inward Officer)',
-    notes: 'Inward GRN against PO-2026-001. All items physically verified and stocked into Central Warehouse cold vaults.',
-  },
-];
+export const INITIAL_PURCHASE_ORDERS: PurchaseOrder[] = [];
+export const INITIAL_PURCHASE_BILLS: PurchaseBill[] = [];
 export const INITIAL_BATCHES: BatchRecord[] = [];
 export const INITIAL_TRANSFERS: StockTransfer[] = [];
 export const INITIAL_INDENTS: StoreStockIndent[] = [];
 export const INITIAL_ADJUSTMENTS: StockAdjustment[] = [];
 export const INITIAL_AUDIT_TRAIL: StockMovementAudit[] = [];
 
-// Automatic one-time cleanup of any previous dummy seed items in localStorage
+// Automatic one-time cleanup and self-healing schema migration of warehouse data
 export function cleanWarehouseDummyData(): void {
   try {
-    const cleanFlag = safeStorage.getItem('rr_wh_dummy_cleaned_v2');
+    const cleanFlag = safeStorage.getItem('rr_wh_grn_clean_v4');
     if (!cleanFlag) {
-      safeStorage.setItem(WH_KEYS.SUPPLIERS, JSON.stringify([]));
-      safeStorage.setItem(WH_KEYS.SUPPLIER_LEDGER, JSON.stringify([]));
-      safeStorage.setItem(WH_KEYS.PURCHASE_ORDERS, JSON.stringify([]));
-      safeStorage.setItem(WH_KEYS.PURCHASE_BILLS, JSON.stringify([]));
-      safeStorage.setItem(WH_KEYS.BATCHES, JSON.stringify([]));
-      safeStorage.setItem(WH_KEYS.TRANSFERS, JSON.stringify([]));
-      safeStorage.setItem(WH_KEYS.INDENTS, JSON.stringify([]));
-      safeStorage.setItem(WH_KEYS.ADJUSTMENTS, JSON.stringify([]));
-      safeStorage.setItem(WH_KEYS.AUDIT_TRAIL, JSON.stringify([]));
-      safeStorage.setItem('rr_wh_dummy_cleaned_v2', 'true');
+      // 1. Sanitize or initialize suppliers
+      const rawSuppliers = safeStorage.getItem(WH_KEYS.SUPPLIERS);
+      if (!rawSuppliers) {
+        safeStorage.setItem(WH_KEYS.SUPPLIERS, JSON.stringify([]));
+      }
+
+      // 2. Sanitize purchase orders
+      const rawPOs = safeStorage.getItem(WH_KEYS.PURCHASE_ORDERS);
+      if (!rawPOs || rawPOs === '[]') {
+        safeStorage.setItem(WH_KEYS.PURCHASE_ORDERS, JSON.stringify(INITIAL_PURCHASE_ORDERS));
+      } else {
+        try {
+          const parsedPOs = JSON.parse(rawPOs);
+          if (Array.isArray(parsedPOs)) {
+            const sanitized = parsedPOs.map((po) => ({
+              ...po,
+              grandTotal: Number(po.grandTotal) || 0,
+              subtotal: Number(po.subtotal) || 0,
+              status: po.status || 'approved',
+              items: Array.isArray(po.items) ? po.items : [],
+            }));
+            safeStorage.setItem(WH_KEYS.PURCHASE_ORDERS, JSON.stringify(sanitized));
+          }
+        } catch {}
+      }
+
+      // 3. Sanitize purchase bills
+      const rawBills = safeStorage.getItem(WH_KEYS.PURCHASE_BILLS);
+      if (!rawBills || rawBills === '[]') {
+        safeStorage.setItem(WH_KEYS.PURCHASE_BILLS, JSON.stringify(INITIAL_PURCHASE_BILLS));
+      } else {
+        try {
+          const parsedBills = JSON.parse(rawBills);
+          if (Array.isArray(parsedBills)) {
+            const sanitized = parsedBills.map((b) => ({
+              ...b,
+              grandTotal: Number(b.grandTotal) || 0,
+              dueAmount: Number(b.dueAmount) || 0,
+              paidAmount: Number(b.paidAmount) || 0,
+              subtotal: Number(b.subtotal) || 0,
+              paymentStatus: b.paymentStatus || 'due',
+              grnStatus: b.grnStatus || 'verified_stocked',
+              items: Array.isArray(b.items) ? b.items : [],
+            }));
+            safeStorage.setItem(WH_KEYS.PURCHASE_BILLS, JSON.stringify(sanitized));
+          }
+        } catch {}
+      }
+
+      safeStorage.setItem('rr_wh_grn_clean_v4', 'true');
     }
   } catch (e) {
-    console.error('Error cleaning dummy warehouse data', e);
+    console.error('Error in self-healing warehouse data migration', e);
   }
 }
 cleanWarehouseDummyData();
@@ -575,17 +385,12 @@ export const warehouseStorage = {
       try {
         const data = safeStorage.getItem(WH_KEYS.SUPPLIERS);
         if (!data) {
-          this.saveSuppliers(INITIAL_SUPPLIERS);
-          return INITIAL_SUPPLIERS;
+          return [];
         }
         const parsed = JSON.parse(data);
-        if (!Array.isArray(parsed) || parsed.length === 0) {
-          this.saveSuppliers(INITIAL_SUPPLIERS);
-          return INITIAL_SUPPLIERS;
-        }
-        return parsed;
+        return Array.isArray(parsed) ? parsed : [];
       } catch {
-        return INITIAL_SUPPLIERS;
+        return [];
       }
     });
   },
@@ -728,15 +533,10 @@ export const warehouseStorage = {
       try {
         const data = safeStorage.getItem(WH_KEYS.PURCHASE_ORDERS);
         if (!data) {
-          this.savePurchaseOrders(INITIAL_PURCHASE_ORDERS);
-          return INITIAL_PURCHASE_ORDERS;
+          return [];
         }
         const parsed = JSON.parse(data);
-        if (Array.isArray(parsed) && parsed.length === 0 && INITIAL_PURCHASE_ORDERS.length > 0) {
-          this.savePurchaseOrders(INITIAL_PURCHASE_ORDERS);
-          return INITIAL_PURCHASE_ORDERS;
-        }
-        if (!Array.isArray(parsed)) return INITIAL_PURCHASE_ORDERS;
+        if (!Array.isArray(parsed)) return [];
 
         // Normalize PO records from persistence to guarantee valid numeric fields
         return parsed.map((po) => ({
@@ -762,7 +562,7 @@ export const warehouseStorage = {
             : [],
         }));
       } catch {
-        return INITIAL_PURCHASE_ORDERS;
+        return [];
       }
     });
   },
@@ -1243,15 +1043,10 @@ export const warehouseStorage = {
       try {
         const data = safeStorage.getItem(WH_KEYS.PURCHASE_BILLS);
         if (!data) {
-          this.savePurchaseBills(INITIAL_PURCHASE_BILLS);
-          return INITIAL_PURCHASE_BILLS;
+          return [];
         }
         const parsed = JSON.parse(data);
-        if (Array.isArray(parsed) && parsed.length === 0 && INITIAL_PURCHASE_BILLS.length > 0) {
-          this.savePurchaseBills(INITIAL_PURCHASE_BILLS);
-          return INITIAL_PURCHASE_BILLS;
-        }
-        if (!Array.isArray(parsed)) return INITIAL_PURCHASE_BILLS;
+        if (!Array.isArray(parsed)) return [];
 
         // Normalize Purchase Bills to guarantee valid fields across all storage backends
         return parsed.map((b) => ({
@@ -1280,7 +1075,7 @@ export const warehouseStorage = {
             : [],
         }));
       } catch {
-        return INITIAL_PURCHASE_BILLS;
+        return [];
       }
     });
   },
