@@ -19,7 +19,7 @@ import {
 import { Warehouse, StoreStockIndentItem } from '../../types/warehouse';
 import { InventoryItem, StoreLocation } from '../../types';
 import { warehouseStorage } from '../../services/warehouseStorage';
-import { storage, INITIAL_INVENTORY } from '../../services/storage';
+import { storage } from '../../services/storage';
 import { soundEffects } from '../../services/audio';
 import { getLocalDateString } from '../../utils/dateUtils';
 

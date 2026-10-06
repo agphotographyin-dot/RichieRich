@@ -472,52 +472,7 @@ class PocketBaseTwoWayRealtimeSyncService {
   private applyRemoteUpdate(storageKey: string, remoteDocs: any[], isWarehouse: boolean) {
     this.isApplyingRemoteUpdate = true;
     try {
-      let resolvedDocs = remoteDocs;
-
-      // Ensure local inventory items aren't overwritten by stale remote data
-      if (storageKey === STORAGE_KEYS.INVENTORY && Array.isArray(remoteDocs)) {
-        try {
-          const rawLocal = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
-          if (rawLocal) {
-            const localItems: any[] = JSON.parse(rawLocal);
-            if (Array.isArray(localItems)) {
-              const localMap = new Map(localItems.map((l: any) => [String(l.id || l.sku), l]));
-              resolvedDocs = remoteDocs.map((r: any) => {
-                const docId = String(r.id || r.sku);
-                const localItem = localMap.get(docId);
-                if (!localItem) return r;
-
-                const localTs = localItem.lastStockChange || (localItem.updatedAt ? new Date(localItem.updatedAt).getTime() : 0);
-                const remoteTs = r.lastStockChange || (r.updatedAt ? new Date(r.updatedAt).getTime() : 0);
-
-                // If local has newer stock mutation, preserve local stock to avoid stale overwrite
-                if (localTs > remoteTs) {
-                  return {
-                    ...r,
-                    stockQuantity: localItem.stockQuantity,
-                    storeAllocations: localItem.storeAllocations,
-                    fullBoxStock: localItem.fullBoxStock,
-                    loosePieceStock: localItem.loosePieceStock,
-                    storeBoxAllocations: localItem.storeBoxAllocations,
-                    lastStockChange: localItem.lastStockChange,
-                    updatedAt: localItem.updatedAt,
-                  };
-                }
-                return r;
-              });
-
-              // Also preserve any un-synced local items
-              const remoteIdSet = new Set(resolvedDocs.map((r: any) => String(r.id || r.sku)));
-              const unSyncedLocal = localItems.filter(
-                (loc) => loc && !remoteIdSet.has(String(loc.id)) && (!loc.sku || !remoteIdSet.has(String(loc.sku)))
-              );
-              if (unSyncedLocal.length > 0) {
-                resolvedDocs = [...resolvedDocs, ...unSyncedLocal];
-              }
-            }
-          }
-        } catch {}
-      }
+      let resolvedDocs = Array.isArray(remoteDocs) ? remoteDocs : [];
 
       // Normalize remote documents by collection type to guarantee reliable numbers
       if (Array.isArray(resolvedDocs)) {

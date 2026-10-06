@@ -424,155 +424,12 @@ export class StorageService {
   private initDefaultData() {
     if (typeof window === 'undefined') return;
 
-    // Check and seed/merge inventory
-    const existingInventory = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
-    const cleanedFlag = safeStorage.getItem('rr_wh_cleaned_dummy_v1');
-    const hygieneFlag = safeStorage.getItem('rr_wh_stock_hygiene_v2');
-
-    if (!existingInventory) {
-      const zeroStockInit = INITIAL_INVENTORY.map((item) => ({
-        ...item,
-        category: normalizeProductCategory(item.category),
-        stockQuantity: 0,
-        storeAllocations: { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 },
-      }));
-      safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(zeroStockInit));
-      safeStorage.setItem('rr_wh_stock_hygiene_v2', 'true');
-    } else {
-      try {
-        const parsed: InventoryItem[] = JSON.parse(existingInventory);
-        let hasChanges = false;
-
-        // One-time cleanup of all dummy stock quantities
-        if (!cleanedFlag) {
-          parsed.forEach((item) => {
-            item.stockQuantity = 0;
-            item.storeAllocations = { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 };
-          });
-          hasChanges = true;
-          safeStorage.setItem('rr_wh_cleaned_dummy_v1', 'true');
-        }
-
-        // Deduplicate any items with duplicate IDs or duplicate SKUs
-        const seenIds = new Set<string>();
-        const seenSkus = new Set<string>();
-        const uniqueParsed: InventoryItem[] = [];
-
-        parsed.forEach((item, idx) => {
-          if (!item || typeof item !== 'object') return;
-          let id = item.id ? String(item.id).trim() : '';
-          let rawSku = item.sku ? String(item.sku).trim().toUpperCase() : '';
-          if (!rawSku) {
-            rawSku = `SKU-ITEM-${idx + 1}`;
-            item.sku = rawSku;
-            hasChanges = true;
-          }
-
-          let skuKey = rawSku.toLowerCase();
-
-          // Only if EXACT duplicate SKU already encountered, ensure unique SKU instead of dropping
-          if (seenSkus.has(skuKey)) {
-            rawSku = `${rawSku}-${idx + 1}`;
-            item.sku = rawSku;
-            skuKey = rawSku.toLowerCase();
-            hasChanges = true;
-          }
-
-          if (!id || seenIds.has(id)) {
-            id = `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${idx}`;
-            item.id = id;
-            hasChanges = true;
-          }
-          seenIds.add(id);
-          seenSkus.add(skuKey);
-
-          uniqueParsed.push(item);
-        });
-
-        // Reset any phantom seed store allocations if still present from early mock data
-        if (!hygieneFlag) {
-          uniqueParsed.forEach((item) => {
-            const alloc = item.storeAllocations || {};
-            if (
-              (alloc.bopal === 18 && alloc.gota === 30 && alloc.sindhubhavan === 14 && alloc.sg_highway === 12) ||
-              (alloc.bopal === 6 && alloc.gota === 12 && alloc.sindhubhavan === 6 && alloc.sg_highway === 4) ||
-              (alloc.bopal === 8 && alloc.gota === 14 && alloc.sindhubhavan === 6 && alloc.sg_highway === 6) ||
-              (alloc.bopal === 25 && alloc.gota === 35 && alloc.sindhubhavan === 15 && alloc.sg_highway === 15) ||
-              (alloc.bopal === 30 && alloc.gota === 50 && alloc.sindhubhavan === 20 && alloc.sg_highway === 20) ||
-              (alloc.bopal === 15 && alloc.gota === 25 && alloc.sindhubhavan === 15 && alloc.sg_highway === 10) ||
-              (alloc.bopal === 10 && alloc.gota === 20 && alloc.sindhubhavan === 10 && alloc.sg_highway === 8) ||
-              (alloc.bopal === 20 && alloc.gota === 30 && alloc.sindhubhavan === 15 && alloc.sg_highway === 15) ||
-              (alloc.bopal === 25 && alloc.gota === 45 && alloc.sindhubhavan === 20 && alloc.sg_highway === 20) ||
-              (alloc.bopal === 12 && alloc.gota === 22 && alloc.sindhubhavan === 10 && alloc.sg_highway === 8) ||
-              (alloc.bopal === 5 && alloc.gota === 11 && alloc.sindhubhavan === 5 && alloc.sg_highway === 5) ||
-              (alloc.bopal === 10 && alloc.gota === 18 && alloc.sindhubhavan === 8 && alloc.sg_highway === 8) ||
-              (alloc.bopal === 7 && alloc.gota === 14 && alloc.sindhubhavan === 6 && alloc.sg_highway === 5) ||
-              (alloc.bopal === 12 && alloc.gota === 23 && alloc.sindhubhavan === 10 && alloc.sg_highway === 10) ||
-              (alloc.bopal === 5 && alloc.gota === 10 && alloc.sindhubhavan === 4 && alloc.sg_highway === 3) ||
-              (alloc.bopal === 5 && alloc.gota === 11 && alloc.sindhubhavan === 5 && alloc.sg_highway === 4)
-            ) {
-              item.storeAllocations = { bopal: 0, gota: 0, sindhubhavan: 0, sg_highway: 0 };
-              hasChanges = true;
-            }
-          });
-          safeStorage.setItem('rr_wh_stock_hygiene_v2', 'true');
-        }
-
-        // Upgrade existing inventory items with 3 canonical categories (Paan, Cafe, or Essentials), GST tax rates, vendors, brand, and price type
-        uniqueParsed.forEach((item) => {
-          const normalizedCat = normalizeProductCategory(item.category);
-          if (item.category !== normalizedCat) {
-            item.category = normalizedCat;
-            hasChanges = true;
-          }
-          if (item.taxRate === undefined) {
-            item.isTaxApplicable = item.isTaxApplicable !== false;
-            item.taxRate = item.isTaxApplicable ? (item.category === 'Paan' ? 5 : item.category === 'Cafe' ? 5 : 18) : 0;
-            hasChanges = true;
-          }
-          if (!item.brand) {
-            item.brand = 'Richie Rich Signature';
-            hasChanges = true;
-          }
-          if (!item.priceType) {
-            item.priceType = item.sellingPrice === 0 ? 'variable' : 'fixed';
-            hasChanges = true;
-          }
-          if (!item.status) {
-            item.status = 'active';
-            hasChanges = true;
-          }
-          if (!item.vendors || item.vendors.length === 0) {
-            if (item.vendor) {
-              item.vendors = [item.vendor];
-            } else if (item.category === 'Paan') {
-              item.vendors = ['Gujarat Betel Traders', 'Royal Luxury Packaging & Vark'];
-              item.vendor = 'Gujarat Betel Traders';
-            } else if (item.category === 'Cafe') {
-              item.vendors = ['Apex Cafe & Beverage Distributors'];
-              item.vendor = 'Apex Cafe & Beverage Distributors';
-            } else {
-              item.vendors = ['Shreeji Spices & Supari'];
-              item.vendor = 'Shreeji Spices & Supari';
-            }
-            hasChanges = true;
-          } else if (!item.vendor) {
-            item.vendor = item.vendors[0];
-            hasChanges = true;
-          }
-        });
-
-        if (hasChanges || uniqueParsed.length !== parsed.length) {
-          safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(uniqueParsed));
-        }
-      } catch {
-        safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify([]));
-      }
+    if (!safeStorage.getItem(STORAGE_KEYS.INVENTORY)) {
+      safeStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify([]));
     }
-
-    // Always ensure categories are Paan, Cafe, Essentials
-    safeStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
-
+    if (!safeStorage.getItem(STORAGE_KEYS.CATEGORIES)) {
+      safeStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
+    }
     if (!safeStorage.getItem(STORAGE_KEYS.CUSTOMERS)) {
       safeStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify([]));
     }
@@ -588,19 +445,12 @@ export class StorageService {
     if (!safeStorage.getItem(STORAGE_KEYS.BACKUPS)) {
       safeStorage.setItem(STORAGE_KEYS.BACKUPS, JSON.stringify([]));
     }
-
-    // Check stores and counters
-    const existingStores = safeStorage.getItem(STORAGE_KEYS.STORES);
-    if (!existingStores) {
+    if (!safeStorage.getItem(STORAGE_KEYS.STORES)) {
       safeStorage.setItem(STORAGE_KEYS.STORES, JSON.stringify(INITIAL_STORES));
     }
-
-    // Check store admins
     if (!safeStorage.getItem(STORAGE_KEYS.STORE_ADMINS)) {
       safeStorage.setItem(STORAGE_KEYS.STORE_ADMINS, JSON.stringify(INITIAL_STORE_ADMINS));
     }
-
-    // Check store expenses
     if (!safeStorage.getItem(STORAGE_KEYS.STORE_EXPENSES)) {
       safeStorage.setItem(STORAGE_KEYS.STORE_EXPENSES, JSON.stringify([]));
     }
@@ -1014,9 +864,9 @@ export class StorageService {
     return this.getCached(STORAGE_KEYS.INVENTORY, () => {
       try {
         const data = safeStorage.getItem(STORAGE_KEYS.INVENTORY);
-        if (!data) return INITIAL_INVENTORY;
+        if (!data) return [];
         const rawList: any = JSON.parse(data);
-        if (!Array.isArray(rawList)) return INITIAL_INVENTORY;
+        if (!Array.isArray(rawList)) return [];
 
         const seenIds = new Set<string>();
         const seenSkus = new Set<string>();
