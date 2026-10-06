@@ -284,31 +284,23 @@ export const AdminBackupsSecurity: React.FC<AdminBackupsSecurityProps> = ({ back
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white border border-slate-200 p-5 rounded-xl shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Scheduled Auto-Backup</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Scheduled Backup Cycle</span>
             <Clock className="w-4 h-4 text-sky-600" />
           </div>
-          <div className="text-lg font-bold text-slate-900 mt-2">Daily 12:00 AM Midnight</div>
+          <div className="text-lg font-bold text-slate-900 mt-2">Every Day at 12:00 AM</div>
           <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1 font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Automatic Full Cloud Snapshot
-          </p>
-          <p className="text-[11px] text-slate-400 mt-1">
-            Backs up Store Stock, Inventory & PocketBase collections.
+            Automated Cron Scheduler Active
           </p>
         </div>
 
         <div className="bg-white border border-slate-200 p-5 rounded-xl shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">PocketBase & Store Stock</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Snapshots Kept</span>
             <HardDrive className="w-4 h-4 text-amber-600" />
           </div>
-          <div className="text-lg font-bold text-slate-900 mt-2">12 Live Data Collections</div>
-          <p className="text-xs text-slate-600 mt-1 font-medium">
-            Central WH + 4 Store Allocations + PocketBase DB
-          </p>
-          <p className="text-[11px] text-slate-400 mt-1">
-            {backups.length} Verified Recovery Snapshots available.
-          </p>
+          <div className="text-lg font-bold text-slate-900 mt-2">{backups.length} Archived Snapshots</div>
+          <p className="text-xs text-slate-500 mt-1">Stored securely with SHA-256 digital signatures.</p>
         </div>
 
         <div className="bg-white border border-slate-200 p-5 rounded-xl shadow-xs">
@@ -316,11 +308,8 @@ export const AdminBackupsSecurity: React.FC<AdminBackupsSecurityProps> = ({ back
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Data Integrity & Privacy</span>
             <Shield className="w-4 h-4 text-emerald-600" />
           </div>
-          <div className="text-lg font-bold text-emerald-700 mt-2">SHA-256 Checksum Verified</div>
-          <p className="text-xs text-slate-500 mt-1">Anti-tamper envelopes with strict schema validation.</p>
-          <p className="text-[11px] text-emerald-600 font-semibold mt-1">
-            ✓ VPS & Local Storage Sync Protected
-          </p>
+          <div className="text-lg font-bold text-emerald-700 mt-2">Strict Schema & PII Masking</div>
+          <p className="text-xs text-slate-500 mt-1">Anti-poisoning filters with SHA-256 verification.</p>
         </div>
       </div>
 
