@@ -150,7 +150,7 @@ export const StoreIndentsView: React.FC<StoreIndentsViewProps> = ({
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: StoreStockIndent['status']) => {
     switch (status) {
       case 'pending':
         return (
@@ -167,25 +167,10 @@ export const StoreIndentsView: React.FC<StoreIndentsViewProps> = ({
           </span>
         );
       case 'converted_to_transfer':
-      case 'dispatched':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-50 text-purple-900 border border-purple-300 shadow-xs">
-            <Truck className="w-3 h-3 text-purple-600" />
-            Dispatched (In Transit)
-          </span>
-        );
-      case 'partially_fulfilled':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-300 shadow-xs">
-            <Clock className="w-3 h-3 text-amber-600" />
-            Partially Fulfilled
-          </span>
-        );
-      case 'completed':
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-900 border border-emerald-300 shadow-xs">
-            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-            Completed (Stock Inwarded)
+            <Truck className="w-3 h-3 text-emerald-600" />
+            Dispatched (Transfer Created)
           </span>
         );
       case 'declined':

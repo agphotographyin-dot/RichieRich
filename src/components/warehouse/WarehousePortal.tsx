@@ -1,10 +1,4 @@
 import React, { useState, useEffect, useMemo, useTransition } from 'react';
-import {
-  FileSpreadsheet,
-  PackagePlus,
-  Truck,
-  RotateCcw,
-} from 'lucide-react';
 import { WarehouseHeader } from './WarehouseHeader';
 import { WarehouseSidebar } from './WarehouseSidebar';
 import { WarehouseDashboardView } from './views/WarehouseDashboardView';
@@ -407,129 +401,48 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
   };
 
   return (
-    <div className="w-full min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
+    <div className="w-full">
       {layoutMode === 'modern' ? (
-        /* ================= MODERN WORKSPACE LAYOUT (MATCHING STORE ADMIN SIDEBAR PLACEMENT) ================= */
-        <div className="flex-1 flex flex-col md:flex-row w-full relative min-h-[calc(100vh-4rem)]">
-          {/* Left-side Navigation Panel (Same Placement & Height as Store Admin) */}
-          <WarehouseSidebar
-            activeTab={activeTab}
-            onSelectTab={handleSelectTab}
-            subRole={subRole}
-            onChangeSubRole={handleSubRoleChange}
-            isCollapsed={isSidebarCollapsed}
-            onToggleCollapse={toggleSidebarCollapse}
-            onOpenNewPO={() => setIsPOModalOpen(true)}
-            onOpenInwardBill={() => setIsInwardModalOpen(true)}
-            onOpenTransfer={() => setIsTransferModalOpen(true)}
-            onOpenIndent={() => setIsIndentModalOpen(true)}
-            onOpenAdjustment={() => setIsAdjustmentModalOpen(true)}
-            onOpenAddItem={() => setIsAddItemOpen(true)}
-            onOpenPipelineTester={() => setIsPipelineTesterOpen(true)}
-            nearExpiryCount={nearExpiryCount}
-            inTransitCount={inTransitCount}
-            lowStockCount={lowStockCount}
-            overdueBillsCount={overdueBillsCount}
-            layoutMode="modern"
-            onToggleLayoutMode={toggleLayoutMode}
-          />
+        /* ================= MODERN WORKSPACE LAYOUT ================= */
+        <div className="space-y-3.5 animate-in fade-in duration-200">
+          {/* Body Frame: Left Sidebar + Central Workspace */}
+          <div className="flex bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden min-h-[calc(100vh-8rem)]">
+            <WarehouseSidebar
+              activeTab={activeTab}
+              onSelectTab={handleSelectTab}
+              subRole={subRole}
+              onChangeSubRole={handleSubRoleChange}
+              isCollapsed={isSidebarCollapsed}
+              onToggleCollapse={toggleSidebarCollapse}
+              onOpenNewPO={() => setIsPOModalOpen(true)}
+              onOpenInwardBill={() => setIsInwardModalOpen(true)}
+              onOpenTransfer={() => setIsTransferModalOpen(true)}
+              onOpenIndent={() => setIsIndentModalOpen(true)}
+              onOpenAdjustment={() => setIsAdjustmentModalOpen(true)}
+              onOpenAddItem={() => setIsAddItemOpen(true)}
+              onOpenPipelineTester={() => setIsPipelineTesterOpen(true)}
+              nearExpiryCount={nearExpiryCount}
+              inTransitCount={inTransitCount}
+              lowStockCount={lowStockCount}
+              overdueBillsCount={overdueBillsCount}
+              layoutMode="modern"
+              onToggleLayoutMode={toggleLayoutMode}
+            />
 
-          {/* Main Content Viewport: Edge-to-edge full width matching Store Admin */}
-          <main className="flex-1 min-w-0 p-3 sm:p-5 lg:p-6 space-y-5 overflow-x-hidden bg-[#F8FAFC]">
-            {/* Breadcrumb & View Header */}
-            <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
-                  <span>Enterprise HQ</span>
-                  <span>/</span>
-                  <span className="text-amber-600 font-extrabold">Central Logistics & Supply Chain</span>
-                  <span>/</span>
-                  <span className="text-slate-800 capitalize font-extrabold">
-                    {activeTab.replace(/_/g, ' ')}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 mt-1">
-                  <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-                    {activeTab === 'dashboard' && 'Warehouse Executive Command Dashboard'}
-                    {activeTab === 'inventory' && 'Central Master Stock & Batch Inventory'}
-                    {activeTab === 'transfers' && 'Stock Transfers & Store Indent Fulfillments'}
-                    {activeTab === 'purchases' && 'Vendor Purchase Orders & Inward Bills'}
-                    {activeTab === 'store_stock' && 'Store Outlets Stock Allocation & Replenishment'}
-                    {activeTab === 'locations' && 'Bin Locations & Storage Capacity'}
-                    {activeTab === 'adjustments' && 'Stock Adjustments & Expiry Waste Control'}
-                    {activeTab === 'audit_trail' && 'Complete System Movement & Audit Trail'}
-                    {activeTab === 'reports' && 'Valuation, Expiry & Supplier Financial Reports'}
-                  </h1>
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-black border border-emerald-200 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span>Warehouse Online</span>
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-mono">
-                    {warehouses[0]?.name || 'Central Ahmedabad WH'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Quick action toolbar buttons */}
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsPOModalOpen(true)}
-                  className="px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer border border-indigo-500/30"
-                  title="Issue Purchase Order"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5" />
-                  <span>Issue PO</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsInwardModalOpen(true)}
-                  className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer border border-emerald-500/30"
-                  title="Inward Verified Bill & GRN"
-                >
-                  <PackagePlus className="w-3.5 h-3.5" />
-                  <span>Inward Bill</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTransferInitialData(null);
-                    setIsTransferModalOpen(true);
-                  }}
-                  className="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer border border-amber-500/30"
-                  title="Transfer Stock to Store Outlet"
-                >
-                  <Truck className="w-3.5 h-3.5" />
-                  <span>Transfer Stock</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={loadData}
-                  className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer border border-slate-200"
-                  title="Refresh Real-time Warehouse Data"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Active Tab View */}
-            <div className="space-y-6">
+            {/* Central Workspace Container */}
+            <div className="flex-1 p-3 sm:p-5 lg:p-6 bg-[#F8FAFC] overflow-y-auto min-w-0 relative">
               {isPending && (
-                <div className="h-1 bg-indigo-100 overflow-hidden rounded-full">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-indigo-100 overflow-hidden z-20">
                   <div className="h-full bg-indigo-600 animate-pulse w-full"></div>
                 </div>
               )}
               {renderActiveView('modern')}
             </div>
-          </main>
+          </div>
         </div>
       ) : (
         /* ================= CLASSIC TABBED LAYOUT ================= */
-        <div className="p-3 sm:p-5 lg:p-6 space-y-4 animate-in fade-in duration-200">
+        <div className="space-y-4 animate-in fade-in duration-200">
           <WarehouseHeader
             activeTab={activeTab}
             onSelectTab={handleSelectTab}

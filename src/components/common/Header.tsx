@@ -60,7 +60,6 @@ export const Header: React.FC<HeaderProps> = ({
 
   const adminTabs: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-3.5 h-3.5" /> },
-    { id: 'inventory', label: 'Inventory & Catalog', icon: <Package className="w-3.5 h-3.5" /> },
     { id: 'staff_counters', label: 'Staff & POS PINs', icon: <Users className="w-3.5 h-3.5" /> },
     { id: 'analytics', label: 'Analytics', icon: <TrendingUp className="w-3.5 h-3.5" /> },
     { id: 'orders', label: 'Orders', icon: <Receipt className="w-3.5 h-3.5" /> },

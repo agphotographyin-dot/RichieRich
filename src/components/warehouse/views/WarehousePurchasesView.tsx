@@ -68,71 +68,52 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
     data: null,
   });
 
-  const filteredPOs = (purchaseOrders || []).filter((po) => {
-    if (!po) return false;
-    const q = (searchQuery || '').toLowerCase();
-    const poNum = (po.poNumber || '').toLowerCase();
-    const supName = (po.supplierName || '').toLowerCase();
-    const destName = (po.destinationWarehouseName || po.destinationName || po.storeName || '').toLowerCase();
+  const filteredPOs = purchaseOrders.filter((po) => {
+    const q = searchQuery.toLowerCase();
     return (
       !q ||
-      poNum.includes(q) ||
-      supName.includes(q) ||
-      destName.includes(q)
+      po.poNumber.toLowerCase().includes(q) ||
+      po.supplierName.toLowerCase().includes(q) ||
+      po.destinationWarehouseName.toLowerCase().includes(q)
     );
   });
 
-  const filteredBills = (purchaseBills || []).filter((b) => {
-    if (!b) return false;
-    const q = (searchQuery || '').toLowerCase();
-    const billNum = (b.billNumber || '').toLowerCase();
-    const supName = (b.supplierName || '').toLowerCase();
-    const invNo = (b.supplierInvoiceNo || '').toLowerCase();
-    const poNum = (b.poNumber || '').toLowerCase();
-    const poRef = (b.poReferenceId || '').toLowerCase();
+  const filteredBills = purchaseBills.filter((b) => {
+    const q = searchQuery.toLowerCase();
     return (
       !q ||
-      billNum.includes(q) ||
-      supName.includes(q) ||
-      invNo.includes(q) ||
-      poNum.includes(q) ||
-      poRef.includes(q)
+      b.billNumber.toLowerCase().includes(q) ||
+      b.supplierName.toLowerCase().includes(q) ||
+      b.supplierInvoiceNo.toLowerCase().includes(q) ||
+      (b.poNumber && b.poNumber.toLowerCase().includes(q)) ||
+      (b.poReferenceId && b.poReferenceId.toLowerCase().includes(q))
     );
   });
 
-  const filteredSuppliers = (suppliers || []).filter((s) => {
-    if (!s) return false;
-    const q = (searchQuery || '').toLowerCase();
-    const sName = (s.name || '').toLowerCase();
-    const sCat = (s.category || '').toLowerCase();
-    const sCity = (s.city || '').toLowerCase();
-    const sGstin = (s.gstin || '').toLowerCase();
+  const filteredSuppliers = suppliers.filter((s) => {
+    const q = searchQuery.toLowerCase();
     return (
       !q ||
-      sName.includes(q) ||
-      sCat.includes(q) ||
-      sCity.includes(q) ||
-      sGstin.includes(q)
+      s.name.toLowerCase().includes(q) ||
+      s.category.toLowerCase().includes(q) ||
+      s.city.toLowerCase().includes(q) ||
+      s.gstin.toLowerCase().includes(q)
     );
   });
 
-  const filteredLedger = (ledgerEntries || []).filter((l) => {
-    if (!l) return false;
-    const q = (searchQuery || '').toLowerCase();
-    const supName = (l.supplierName || '').toLowerCase();
-    const refNo = (l.referenceNo || '').toLowerCase();
-    const notes = (l.notes || '').toLowerCase();
+  const filteredLedger = ledgerEntries.filter((l) => {
+    const q = searchQuery.toLowerCase();
     const matchesSearch =
       !q ||
-      supName.includes(q) ||
-      refNo.includes(q) ||
-      notes.includes(q);
+      l.supplierName.toLowerCase().includes(q) ||
+      l.referenceNo.toLowerCase().includes(q) ||
+      (l.notes && l.notes.toLowerCase().includes(q));
 
     const matchesSup = selectedSupplierFilter === 'all' || l.supplierId === selectedSupplierFilter;
     return matchesSearch && matchesSup;
   });
 
-  const totalOutstanding = (suppliers || []).reduce((sum, s) => sum + (Number(s?.currentOutstanding) || 0), 0);
+  const totalOutstanding = suppliers.reduce((sum, s) => sum + s.currentOutstanding, 0);
 
   return (
     <div className="space-y-5">
@@ -259,39 +240,35 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                       </td>
                       <td className="py-3 px-3 font-sans text-slate-600">
                         <div className="flex items-center gap-1.5 font-medium text-slate-800">
-                          {po.destinationType === 'store' || po.storeId ? (
-                            <Store className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                          ) : (
+                          {po.destinationWarehouseId?.startsWith('wh') ? (
                             <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          ) : (
+                            <Store className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                           )}
-                          <span>{po.destinationName || po.destinationWarehouseName || po.storeName || 'Central Warehouse'}</span>
+                          <span>{po.destinationWarehouseName}</span>
                         </div>
                         <span className={`inline-block mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded border ${
-                          po.destinationType === 'store' || po.storeId
-                            ? 'text-purple-700 bg-purple-50 border-purple-200'
-                            : 'text-indigo-700 bg-indigo-50 border-indigo-200'
+                          po.destinationWarehouseId?.startsWith('wh')
+                            ? 'text-indigo-700 bg-indigo-50 border-indigo-200'
+                            : 'text-purple-700 bg-purple-50 border-purple-200'
                         }`}>
-                          {po.destinationType === 'store' || po.storeId ? 'Direct Store PO (No WH Approval)' : 'Central Warehouse'}
+                          {po.destinationWarehouseId?.startsWith('wh') ? 'Warehouse' : 'Store Direct'}
                         </span>
                       </td>
-                      <td className="py-3 px-3 text-slate-600">{po.orderDate || 'N/A'}</td>
-                      <td className="py-3 px-3 text-slate-600">{po.expectedDeliveryDate || 'N/A'}</td>
+                      <td className="py-3 px-3 text-slate-600">{po.orderDate}</td>
+                      <td className="py-3 px-3 text-slate-600">{po.expectedDeliveryDate}</td>
                       <td className="py-3 px-3 text-right font-bold text-slate-900">
-                        {CURRENCY}{Number(po.grandTotal || 0).toLocaleString('en-IN')}
+                        {CURRENCY}{po.grandTotal.toLocaleString('en-IN')}
                       </td>
                       <td className="py-3 px-3 text-center font-sans">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                           po.status === 'received'
                             ? 'bg-emerald-100 text-emerald-800'
-                            : po.status === 'partially_received'
-                            ? 'bg-blue-100 text-blue-800'
-                            : po.status === 'sent_to_supplier'
-                            ? 'bg-amber-100 text-amber-800'
                             : po.status === 'approved'
                             ? 'bg-indigo-100 text-indigo-800'
                             : 'bg-slate-100 text-slate-700'
                         }`}>
-                          {(po.status || 'draft').toUpperCase().replace(/_/g, ' ')}
+                          {po.status.toUpperCase()}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right font-sans">
@@ -351,16 +328,16 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                   </tr>
                 ) : (
                   filteredBills.map((b) => {
-                    const linkedPO = (purchaseOrders || []).find(
-                      (p) => p && (p.id === b.poReferenceId || p.poNumber === b.poNumber || (b.poReferenceId && p.poNumber === b.poReferenceId))
+                    const linkedPO = purchaseOrders.find(
+                      (p) => p.id === b.poReferenceId || p.poNumber === b.poNumber || (b.poReferenceId && p.poNumber === b.poReferenceId)
                     );
 
                     return (
                       <tr key={b.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4 font-bold text-slate-900">{b.billNumber || 'PB-RECORD'}</td>
+                        <td className="py-3 px-4 font-bold text-slate-900">{b.billNumber}</td>
                         <td className="py-3 px-4 font-sans">
-                          <div className="font-semibold text-slate-900">{b.supplierName || 'Unknown Supplier'}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">Inv: {b.supplierInvoiceNo || 'N/A'}</div>
+                          <div className="font-semibold text-slate-900">{b.supplierName}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">Inv: {b.supplierInvoiceNo}</div>
                         </td>
 
                         {/* Linked PO / Manifest Column */}
@@ -376,7 +353,7 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                                 <span>{linkedPO.poNumber}</span>
                               </button>
                               <div className="text-[10px] text-slate-500 font-sans">
-                                PO Val: <strong className="text-slate-700 font-mono">{CURRENCY}{Number(linkedPO.grandTotal || 0).toLocaleString('en-IN')}</strong>
+                                PO Val: <strong className="text-slate-700 font-mono">{CURRENCY}{linkedPO.grandTotal.toLocaleString('en-IN')}</strong>
                               </div>
                             </div>
                           ) : b.poNumber ? (
@@ -399,12 +376,12 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                           </span>
                         </td>
 
-                        <td className="py-3 px-3 text-slate-600">{b.billDate || 'N/A'}</td>
+                        <td className="py-3 px-3 text-slate-600">{b.billDate}</td>
                         <td className="py-3 px-3 text-right font-bold text-slate-900">
-                          {CURRENCY}{Number(b.grandTotal || 0).toLocaleString('en-IN')}
+                          {CURRENCY}{b.grandTotal.toLocaleString('en-IN')}
                         </td>
                         <td className="py-3 px-3 text-right font-bold text-rose-600">
-                          {CURRENCY}{Number(b.dueAmount || 0).toLocaleString('en-IN')}
+                          {CURRENCY}{b.dueAmount.toLocaleString('en-IN')}
                         </td>
                         <td className="py-3 px-3 text-center font-sans">
                           <span
@@ -416,7 +393,7 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                                 : 'bg-rose-100 text-rose-800'
                             }`}
                           >
-                            {(b.paymentStatus || 'due').toUpperCase()}
+                            {b.paymentStatus.toUpperCase()}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right font-sans">
@@ -439,7 +416,7 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                               <FileText className="w-3.5 h-3.5 text-emerald-600" />
                               <span>GRN Slip</span>
                             </button>
-                            {(Number(b.dueAmount) || 0) > 0 && (
+                            {b.dueAmount > 0 && (
                               <button
                                 onClick={() => onOpenRecordPayment(b.supplierId)}
                                 className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs transition-colors border border-indigo-200"
@@ -474,7 +451,7 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                 </div>
                 <div className="text-right">
                   <div className="text-xs font-mono font-bold text-rose-600">
-                    {CURRENCY}{Number(sup.currentOutstanding || 0).toLocaleString('en-IN')}
+                    {CURRENCY}{sup.currentOutstanding.toLocaleString('en-IN')}
                   </div>
                   <div className="text-[10px] text-slate-400">Outstanding</div>
                 </div>
@@ -527,7 +504,7 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
             </div>
 
             <div className="text-xs font-semibold text-slate-700">
-              Total Outstanding Balance: <strong className="text-rose-600 font-mono text-sm">{CURRENCY}{Number(totalOutstanding || 0).toLocaleString('en-IN')}</strong>
+              Total Outstanding Balance: <strong className="text-rose-600 font-mono text-sm">{CURRENCY}{totalOutstanding.toLocaleString('en-IN')}</strong>
             </div>
           </div>
 
@@ -563,18 +540,18 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                             ? 'bg-emerald-100 text-emerald-800'
                             : 'bg-indigo-100 text-indigo-800'
                         }`}>
-                          {(led.type || 'payment').replace(/_/g, ' ').toUpperCase()}
+                          {led.type.replace('_', ' ').toUpperCase()}
                         </span>
                       </td>
                       <td className="py-3 px-3 font-bold text-slate-800">{led.referenceNo}</td>
                       <td className="py-3 px-3 text-right font-bold text-emerald-600">
-                        {Number(led.debit || 0) > 0 ? `${CURRENCY}${Number(led.debit).toLocaleString('en-IN')}` : '-'}
+                        {led.debit > 0 ? `${CURRENCY}${led.debit.toLocaleString('en-IN')}` : '-'}
                       </td>
                       <td className="py-3 px-3 text-right font-bold text-slate-900">
-                        {Number(led.credit || 0) > 0 ? `${CURRENCY}${Number(led.credit).toLocaleString('en-IN')}` : '-'}
+                        {led.credit > 0 ? `${CURRENCY}${led.credit.toLocaleString('en-IN')}` : '-'}
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-rose-600">
-                        {CURRENCY}{Number(led.runningBalance || 0).toLocaleString('en-IN')}
+                        {CURRENCY}{led.runningBalance.toLocaleString('en-IN')}
                       </td>
                     </tr>
                   ))

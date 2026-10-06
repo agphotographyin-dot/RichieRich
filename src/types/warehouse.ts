@@ -53,16 +53,13 @@ export interface Supplier {
   address: string;
   city: string;
   state: string;
-  paymentTerms: string; // e.g. 'Net 15 Days', 'Net 30 Days', 'Immediate', 'Cash on Delivery'
+  paymentTerms: string; // e.g. 'Net 15 Days', 'Net 30 Days', 'Immediate'
   creditLimit: number;
   currentOutstanding: number;
   totalPurchases: number;
   totalPaid: number;
   rating: number; // 1-5
   isActive: boolean;
-  associatedItemIds?: string[];
-  associatedProductNames?: string[];
-  notes?: string;
   bankDetails?: {
     accountName: string;
     accountNumber: string;
@@ -107,16 +104,8 @@ export interface PurchaseOrder {
   supplierId: string;
   supplierName: string;
   supplierGstin: string;
-  destinationWarehouseId?: string;
-  destinationWarehouseName?: string;
-  destinationType?: 'warehouse' | 'store';
-  destinationId?: string;
-  destinationName?: string;
-  orderType?: 'warehouse_po' | 'direct_store_po';
-  storeId?: string;
-  storeName?: string;
-  source?: 'Direct Supplier Purchase' | 'Central Warehouse Transfer' | string;
-  deliveryAddress?: string;
+  destinationWarehouseId: string;
+  destinationWarehouseName: string;
   orderDate: string;
   expectedDeliveryDate: string;
   status: 'draft' | 'approved' | 'sent_to_supplier' | 'partially_received' | 'received' | 'cancelled';
@@ -159,14 +148,8 @@ export interface PurchaseBill {
   supplierId: string;
   supplierName: string;
   supplierInvoiceNo: string; // Supplier's original invoice
-  warehouseId?: string;
-  warehouseName?: string;
-  destinationType?: 'warehouse' | 'store';
-  destinationId?: string;
-  destinationName?: string;
-  storeId?: string;
-  storeName?: string;
-  source?: 'Direct Supplier Purchase' | 'Central Warehouse Transfer' | string;
+  warehouseId: string;
+  warehouseName: string;
   billDate: string;
   receivedDate: string;
   items: PurchaseBillItem[];
@@ -339,8 +322,7 @@ export interface StockMovementAudit {
     | 'store_return_in'
     | 'pos_sales_consumption'
     | 'damage_scrap'
-    | 'physical_adjustment'
-    | 'direct_store_purchase';
+    | 'physical_adjustment';
   fromLocation: string;
   toLocation: string;
   quantity: number;
@@ -353,11 +335,6 @@ export interface StockMovementAudit {
   totalCostImpact: number;
   performedBy: string;
   userRole: string;
-  source?: string;          // e.g. 'Direct Supplier Purchase', 'Central Warehouse Transfer', etc.
-  supplierName?: string;
-  supplierId?: string;
-  invoiceNumber?: string;
-  purchaseOrderId?: string;
   status?: string;          // Movement status, default 'Completed'
   notes: string;
 }

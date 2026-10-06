@@ -35,7 +35,7 @@ export const getPocketBaseUrl = (): string => {
 
   if (typeof window !== 'undefined' && window.location) {
     const { port, origin, hostname, protocol } = window.location;
-    // When served over HTTPS, avoid mixed content errors by preferring same-origin reverse proxy
+    // When served over HTTPS, avoid mixed content errors by preferring same-origin
     if (protocol === 'https:') {
       return origin;
     }
@@ -47,8 +47,8 @@ export const getPocketBaseUrl = (): string => {
     if (port === '80' || port === '') {
       return origin;
     }
-    // Any HTTP host (VPS IP, localhost, internal network): default to port 8090 on the same host
-    if (hostname) {
+    // Local development fallback
+    if (hostname && (hostname === 'localhost' || hostname === '127.0.0.1')) {
       return `http://${hostname}:8090`;
     }
   }
@@ -65,13 +65,14 @@ export const getCandidatePocketBaseUrls = (customUrl?: string): string[] => {
   if (typeof window !== 'undefined' && window.location) {
     const { origin, hostname, protocol } = window.location;
     if (origin && !urls.includes(origin)) urls.push(origin);
-    if (protocol !== 'https:' && hostname) {
-      const host8090 = `http://${hostname}:8090`;
-      if (!urls.includes(host8090)) urls.push(host8090);
+    if (protocol !== 'https:') {
+      const localhost8090 = `http://${hostname || 'localhost'}:8090`;
+      if (!urls.includes(localhost8090)) urls.push(localhost8090);
+      if (!urls.includes(DEFAULT_POCKETBASE_URL)) urls.push(DEFAULT_POCKETBASE_URL);
     }
+  } else {
+    if (!urls.includes(DEFAULT_POCKETBASE_URL)) urls.push(DEFAULT_POCKETBASE_URL);
   }
-
-  if (!urls.includes(DEFAULT_POCKETBASE_URL)) urls.push(DEFAULT_POCKETBASE_URL);
 
   return urls;
 };

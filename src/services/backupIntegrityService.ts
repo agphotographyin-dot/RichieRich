@@ -11,18 +11,6 @@ export interface BackupEnvelope {
     customers: Customer[];
     promotions: Promotion[];
     stores?: StoreLocation[];
-    storeExpenses?: any[];
-    warehouses?: any[];
-    suppliers?: any[];
-    purchaseOrders?: any[];
-    purchaseBills?: any[];
-    batches?: any[];
-    transfers?: any[];
-    indents?: any[];
-    adjustments?: any[];
-    auditTrail?: any[];
-    pocketbase_collections?: Record<string, any>;
-    storeStockAndInventorySummary?: Record<string, any>;
   };
 }
 
@@ -37,10 +25,6 @@ export interface BackupValidationResult {
     orderCount: number;
     customerCount: number;
     promotionCount: number;
-    storesCount?: number;
-    batchesCount?: number;
-    transfersCount?: number;
-    purchaseBillsCount?: number;
   };
   sanitizedData?: {
     inventory: InventoryItem[];
@@ -48,18 +32,6 @@ export interface BackupValidationResult {
     customers: Customer[];
     promotions: Promotion[];
     stores?: StoreLocation[];
-    storeExpenses?: any[];
-    warehouses?: any[];
-    suppliers?: any[];
-    purchaseOrders?: any[];
-    purchaseBills?: any[];
-    batches?: any[];
-    transfers?: any[];
-    indents?: any[];
-    adjustments?: any[];
-    auditTrail?: any[];
-    pocketbase_collections?: Record<string, any>;
-    storeStockAndInventorySummary?: Record<string, any>;
   };
 }
 
@@ -94,7 +66,13 @@ export function validateAndSanitizeBackupPayload(rawPayload: any): {
   isValid: boolean;
   errors: string[];
   warnings: string[];
-  sanitized: NonNullable<BackupValidationResult['sanitizedData']>;
+  sanitized: {
+    inventory: InventoryItem[];
+    orders: Order[];
+    customers: Customer[];
+    promotions: Promotion[];
+    stores?: StoreLocation[];
+  };
 } {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -281,21 +259,6 @@ export function validateAndSanitizeBackupPayload(rawPayload: any): {
     });
   });
 
-  // --- 5. STORES, WAREHOUSE & POCKETBASE COLLECTIONS SANITIZATION ---
-  const stores = Array.isArray(rawPayload.stores) ? rawPayload.stores : (Array.isArray(rawPayload.pocketbase_collections?.stores) ? rawPayload.pocketbase_collections.stores : undefined);
-  const storeExpenses = Array.isArray(rawPayload.storeExpenses) ? rawPayload.storeExpenses : (Array.isArray(rawPayload.pocketbase_collections?.store_expenses) ? rawPayload.pocketbase_collections.store_expenses : undefined);
-  const warehouses = Array.isArray(rawPayload.warehouses) ? rawPayload.warehouses : (Array.isArray(rawPayload.pocketbase_collections?.warehouses) ? rawPayload.pocketbase_collections.warehouses : undefined);
-  const suppliers = Array.isArray(rawPayload.suppliers) ? rawPayload.suppliers : (Array.isArray(rawPayload.pocketbase_collections?.suppliers) ? rawPayload.pocketbase_collections.suppliers : undefined);
-  const purchaseOrders = Array.isArray(rawPayload.purchaseOrders) ? rawPayload.purchaseOrders : (Array.isArray(rawPayload.pocketbase_collections?.purchase_orders) ? rawPayload.pocketbase_collections.purchase_orders : undefined);
-  const purchaseBills = Array.isArray(rawPayload.purchaseBills) ? rawPayload.purchaseBills : (Array.isArray(rawPayload.pocketbase_collections?.purchase_bills) ? rawPayload.pocketbase_collections.purchase_bills : undefined);
-  const batches = Array.isArray(rawPayload.batches) ? rawPayload.batches : (Array.isArray(rawPayload.pocketbase_collections?.batches) ? rawPayload.pocketbase_collections.batches : undefined);
-  const transfers = Array.isArray(rawPayload.transfers) ? rawPayload.transfers : (Array.isArray(rawPayload.pocketbase_collections?.stock_transfers) ? rawPayload.pocketbase_collections.stock_transfers : undefined);
-  const indents = Array.isArray(rawPayload.indents) ? rawPayload.indents : (Array.isArray(rawPayload.pocketbase_collections?.store_indents) ? rawPayload.pocketbase_collections.store_indents : undefined);
-  const adjustments = Array.isArray(rawPayload.adjustments) ? rawPayload.adjustments : (Array.isArray(rawPayload.pocketbase_collections?.stock_adjustments) ? rawPayload.pocketbase_collections.stock_adjustments : undefined);
-  const auditTrail = Array.isArray(rawPayload.auditTrail) ? rawPayload.auditTrail : (Array.isArray(rawPayload.pocketbase_collections?.stock_audit_trail) ? rawPayload.pocketbase_collections.stock_audit_trail : undefined);
-  const pocketbase_collections = rawPayload.pocketbase_collections && typeof rawPayload.pocketbase_collections === 'object' ? rawPayload.pocketbase_collections : undefined;
-  const storeStockAndInventorySummary = rawPayload.storeStockAndInventorySummary && typeof rawPayload.storeStockAndInventorySummary === 'object' ? rawPayload.storeStockAndInventorySummary : undefined;
-
   if (sanitizedInventory.length === 0 && sanitizedOrders.length === 0 && sanitizedCustomers.length === 0) {
     errors.push('The backup file contains zero valid inventory items, orders, or customer profiles.');
     return {
@@ -315,19 +278,6 @@ export function validateAndSanitizeBackupPayload(rawPayload: any): {
       orders: sanitizedOrders,
       customers: sanitizedCustomers,
       promotions: sanitizedPromotions,
-      stores,
-      storeExpenses,
-      warehouses,
-      suppliers,
-      purchaseOrders,
-      purchaseBills,
-      batches,
-      transfers,
-      indents,
-      adjustments,
-      auditTrail,
-      pocketbase_collections,
-      storeStockAndInventorySummary,
     },
   };
 }
@@ -335,13 +285,19 @@ export function validateAndSanitizeBackupPayload(rawPayload: any): {
 /**
  * Creates a cryptographically signed Backup Envelope with SHA-256 checksum
  */
-export async function createSignedBackupEnvelope(payload: BackupEnvelope['payload']): Promise<BackupEnvelope> {
+export async function createSignedBackupEnvelope(payload: {
+  inventory: InventoryItem[];
+  orders: Order[];
+  customers: Customer[];
+  promotions: Promotion[];
+  stores?: StoreLocation[];
+}): Promise<BackupEnvelope> {
   const payloadString = JSON.stringify(payload);
   const checksum = await calculateSha256Checksum(payloadString);
 
   return {
     system: 'RICHIE_RICH_POS_CLOUD',
-    version: '3.0',
+    version: '2.6',
     timestamp: new Date().toISOString(),
     checksum,
     payload,
