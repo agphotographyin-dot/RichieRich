@@ -17,13 +17,14 @@ export function getSupplierProducts(
   supplier: Supplier | undefined | null,
   inventory: InventoryItem[]
 ): InventoryItem[] {
-  const activeItems = inventory.filter((item) => item.status !== 'inactive');
+  const safeInventory = Array.isArray(inventory) ? inventory : [];
+  const activeItems = safeInventory.filter((item) => item && item.status !== 'inactive');
   if (!supplier) return activeItems;
 
-  const sName = (supplier.name || '').toLowerCase().trim();
-  const sCode = (supplier.code || '').toLowerCase().trim();
-  const sId = (supplier.id || '').toLowerCase().trim();
-  const sCategory = (supplier.category || '').toLowerCase().trim();
+  const sName = String(supplier.name || '').toLowerCase().trim();
+  const sCode = String(supplier.code || '').toLowerCase().trim();
+  const sId = String(supplier.id || '').toLowerCase().trim();
+  const sCategory = String(supplier.category || '').toLowerCase().trim();
 
   // Extract core keywords from supplier name (e.g., "Gujarat Betel Traders" -> ["gujarat", "betel"])
   const nameKeywords = sName
@@ -33,14 +34,21 @@ export function getSupplierProducts(
     .filter((w) => w.length >= 3);
 
   const matched = activeItems.filter((item) => {
-    const v1 = (item.vendor || '').toLowerCase().trim();
-    const vList = (item.vendors || []).map((v) => v.toLowerCase().trim());
-    const vId = ((item as any).vendorId || '').toLowerCase().trim();
-    const itemCat = (item.category || '').toLowerCase().trim();
-    const tags = (item.tags || []).map((t) => t.toLowerCase().trim());
-    const itemName = (item.name || '').toLowerCase().trim();
-    const itemDesc = (item.description || '').toLowerCase().trim();
-    const ingredients = (item.ingredients || []).map((ing) => ing.toLowerCase().trim());
+    if (!item) return false;
+    const v1 = String(item.vendor || '').toLowerCase().trim();
+    const vList = Array.isArray(item.vendors)
+      ? item.vendors.map((v) => String(v || '').toLowerCase().trim())
+      : [];
+    const vId = String((item as any).vendorId || '').toLowerCase().trim();
+    const itemCat = String(item.category || '').toLowerCase().trim();
+    const tags = Array.isArray(item.tags)
+      ? item.tags.map((t) => String(t || '').toLowerCase().trim())
+      : [];
+    const itemName = String(item.name || '').toLowerCase().trim();
+    const itemDesc = String(item.description || '').toLowerCase().trim();
+    const ingredients = Array.isArray(item.ingredients)
+      ? item.ingredients.map((ing) => String(ing || '').toLowerCase().trim())
+      : [];
 
     // 1. Direct match on item.vendor or item.vendors list
     if (v1 === sName || v1.includes(sName) || (sName.includes(v1) && v1.length >= 3)) {

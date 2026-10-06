@@ -103,19 +103,19 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
     let text = '';
     if (currentType === 'purchase_order') {
       const po = currentData as PurchaseOrder;
-      text = `[PURCHASE ORDER MANIFEST]\nPO Number: ${po.poNumber}\nSupplier: ${po.supplierName} (GSTIN: ${po.supplierGstin})\nDestination: ${po.destinationWarehouseName}\nOrder Date: ${po.orderDate}\nTotal Amount: ${CURRENCY}${po.grandTotal}\nItems: ${po.items.map(i => `${i.quantityOrdered}x ${i.name}`).join(', ')}`;
+      text = `[PURCHASE ORDER MANIFEST]\nPO Number: ${po.poNumber || 'N/A'}\nSupplier: ${po.supplierName || 'Vendor'} (GSTIN: ${po.supplierGstin || 'N/A'})\nDestination: ${po.destinationWarehouseName || 'Central WH'}\nOrder Date: ${po.orderDate || 'N/A'}\nTotal Amount: ${CURRENCY}${po.grandTotal ?? 0}\nItems: ${(po.items || []).map(i => `${i.quantityOrdered}x ${i.name}`).join(', ')}`;
     } else if (currentType === 'stock_transfer') {
       const st = currentData as StockTransfer;
-      text = `[STOCK TRANSFER MANIFEST & GATE PASS]\nTransfer Ref: ${st.transferNumber}\nRoute: ${st.sourceName} -> ${st.destinationName}\nStatus: ${st.status.toUpperCase()}\nSecurity OTP/PIN: ${st.otpOrPin || 'N/A'}\nVehicle: ${st.vehicleNumber || 'Standard Delivery'}\nTotal Valuation: ${CURRENCY}${st.totalValuation}\nItems: ${st.items.map(i => `${i.dispatchedQty}x ${i.name}`).join(', ')}`;
+      text = `[STOCK TRANSFER MANIFEST & GATE PASS]\nTransfer Ref: ${st.transferNumber || 'N/A'}\nRoute: ${st.sourceName || 'WH'} -> ${st.destinationName || 'Store'}\nStatus: ${String(st.status || 'dispatched').toUpperCase()}\nSecurity OTP/PIN: ${st.otpOrPin || 'N/A'}\nVehicle: ${st.vehicleNumber || 'Standard Delivery'}\nTotal Valuation: ${CURRENCY}${st.totalValuation ?? 0}\nItems: ${(st.items || []).map(i => `${i.dispatchedQty}x ${i.name}`).join(', ')}`;
     } else if (currentType === 'purchase_bill') {
       const pb = currentData as PurchaseBill;
-      text = `[GOODS RECEIPT NOTE (GRN) INWARD MANIFEST]\nGRN Ref: ${pb.billNumber}\nSupplier: ${pb.supplierName}\nInvoice No: ${pb.supplierInvoiceNo}\nWarehouse: ${pb.warehouseName} (Central WH Only)\nTotal Inwarded: ${CURRENCY}${pb.grandTotal}\nItems: ${pb.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}`;
+      text = `[GOODS RECEIPT NOTE (GRN) INWARD MANIFEST]\nGRN Ref: ${pb.billNumber || 'N/A'}\nSupplier: ${pb.supplierName || 'Vendor'}\nInvoice No: ${pb.supplierInvoiceNo || 'N/A'}\nWarehouse: ${pb.warehouseName || 'Central Warehouse'} (Central WH Only)\nTotal Inwarded: ${CURRENCY}${pb.grandTotal ?? 0}\nItems: ${(pb.items || []).map(i => `${i.quantity}x ${i.name}`).join(', ')}`;
     } else if (currentType === 'retail_order') {
       const ord = currentData as Order;
-      text = `[RETAIL TAX INVOICE]\nInvoice No: ${ord.orderNumber}\nOutlet: ${ord.storeName || 'Gota Main'}\nDate: ${new Date(ord.createdAt).toLocaleString()}\nTotal: ${CURRENCY}${ord.grandTotal}\nItems: ${ord.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}`;
+      text = `[RETAIL TAX INVOICE]\nInvoice No: ${ord.orderNumber || 'N/A'}\nOutlet: ${ord.storeName || 'Gota Main'}\nDate: ${new Date(ord.createdAt || Date.now()).toLocaleString()}\nTotal: ${CURRENCY}${ord.grandTotal ?? 0}\nItems: ${(ord.items || []).map(i => `${i.quantity}x ${i.name}`).join(', ')}`;
     } else if (currentType === 'store_indent') {
       const ind = currentData as StoreStockIndent;
-      text = `[STORE INDENT REQUISITION]\nIndent Ref: ${ind.indentNumber}\nStore: ${ind.storeName}\nWarehouse: ${ind.targetWarehouseName}\nDate: ${ind.requestDate}\nUrgency: ${ind.urgency.toUpperCase()}\nItems: ${ind.items.map(i => `${i.requestedQty}x ${i.name}`).join(', ')}`;
+      text = `[STORE INDENT REQUISITION]\nIndent Ref: ${ind.indentNumber || 'N/A'}\nStore: ${ind.storeName || 'Store'}\nWarehouse: ${ind.targetWarehouseName || 'Central Warehouse'}\nDate: ${ind.requestDate || 'N/A'}\nUrgency: ${String(ind.urgency || 'normal').toUpperCase()}\nItems: ${(ind.items || []).map(i => `${i.requestedQty}x ${i.name}`).join(', ')}`;
     }
 
     navigator.clipboard.writeText(text);
@@ -446,8 +446,8 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
               {/* ------------------------------------------------------------- */}
               {/* SPECIFIC VIEW: STOCK TRANSFER DELIVERY CHALLAN & GATE PASS    */}
               {/* ------------------------------------------------------------- */}
-              {documentType === 'stock_transfer' && (() => {
-                const st = documentData as StockTransfer;
+              {currentType === 'stock_transfer' && (() => {
+                const st = currentData as StockTransfer;
                 return (
                   <div className="space-y-5">
                     {/* Route & Transporter Information */}

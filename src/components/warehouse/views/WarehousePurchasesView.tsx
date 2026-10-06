@@ -68,48 +68,63 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
     data: null,
   });
 
-  const filteredPOs = purchaseOrders.filter((po) => {
-    const q = searchQuery.toLowerCase();
-    const destName = po.destinationWarehouseName || po.destinationName || po.storeName || '';
+  const filteredPOs = (purchaseOrders || []).filter((po) => {
+    if (!po) return false;
+    const q = String(searchQuery || '').toLowerCase().trim();
+    if (!q) return true;
+    const poNum = String(po.poNumber || '').toLowerCase();
+    const supName = String(po.supplierName || '').toLowerCase();
+    const destName = String(po.destinationWarehouseName || po.destinationName || po.storeName || '').toLowerCase();
     return (
-      !q ||
-      po.poNumber.toLowerCase().includes(q) ||
-      po.supplierName.toLowerCase().includes(q) ||
-      destName.toLowerCase().includes(q)
+      poNum.includes(q) ||
+      supName.includes(q) ||
+      destName.includes(q)
     );
   });
 
-  const filteredBills = purchaseBills.filter((b) => {
-    const q = searchQuery.toLowerCase();
+  const filteredBills = (purchaseBills || []).filter((b) => {
+    if (!b) return false;
+    const q = String(searchQuery || '').toLowerCase().trim();
+    if (!q) return true;
+    const bNum = String(b.billNumber || '').toLowerCase();
+    const supName = String(b.supplierName || '').toLowerCase();
+    const invNo = String(b.supplierInvoiceNo || '').toLowerCase();
+    const poNum = String(b.poNumber || '').toLowerCase();
+    const poRef = String(b.poReferenceId || '').toLowerCase();
     return (
-      !q ||
-      b.billNumber.toLowerCase().includes(q) ||
-      b.supplierName.toLowerCase().includes(q) ||
-      b.supplierInvoiceNo.toLowerCase().includes(q) ||
-      (b.poNumber && b.poNumber.toLowerCase().includes(q)) ||
-      (b.poReferenceId && b.poReferenceId.toLowerCase().includes(q))
+      bNum.includes(q) ||
+      supName.includes(q) ||
+      invNo.includes(q) ||
+      poNum.includes(q) ||
+      poRef.includes(q)
     );
   });
 
-  const filteredSuppliers = suppliers.filter((s) => {
-    const q = searchQuery.toLowerCase();
+  const filteredSuppliers = (suppliers || []).filter((s) => {
+    if (!s) return false;
+    const q = String(searchQuery || '').toLowerCase().trim();
+    if (!q) return true;
+    const name = String(s.name || '').toLowerCase();
+    const cat = String(s.category || '').toLowerCase();
+    const city = String(s.city || '').toLowerCase();
+    const gstin = String(s.gstin || '').toLowerCase();
+    const code = String(s.code || '').toLowerCase();
     return (
-      !q ||
-      s.name.toLowerCase().includes(q) ||
-      s.category.toLowerCase().includes(q) ||
-      s.city.toLowerCase().includes(q) ||
-      s.gstin.toLowerCase().includes(q)
+      name.includes(q) ||
+      cat.includes(q) ||
+      city.includes(q) ||
+      gstin.includes(q) ||
+      code.includes(q)
     );
   });
 
-  const filteredLedger = ledgerEntries.filter((l) => {
-    const q = searchQuery.toLowerCase();
-    const matchesSearch =
-      !q ||
-      l.supplierName.toLowerCase().includes(q) ||
-      l.referenceNo.toLowerCase().includes(q) ||
-      (l.notes && l.notes.toLowerCase().includes(q));
-
+  const filteredLedger = (ledgerEntries || []).filter((l) => {
+    if (!l) return false;
+    const q = String(searchQuery || '').toLowerCase().trim();
+    const name = String(l.supplierName || '').toLowerCase();
+    const ref = String(l.referenceNo || '').toLowerCase();
+    const notes = String(l.notes || '').toLowerCase();
+    const matchesSearch = !q || name.includes(q) || ref.includes(q) || notes.includes(q);
     const matchesSup = selectedSupplierFilter === 'all' || l.supplierId === selectedSupplierFilter;
     return matchesSearch && matchesSup;
   });
@@ -259,7 +274,7 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                       <td className="py-3 px-3 text-slate-600">{po.orderDate}</td>
                       <td className="py-3 px-3 text-slate-600">{po.expectedDeliveryDate}</td>
                       <td className="py-3 px-3 text-right font-bold text-slate-900">
-                        {CURRENCY}{po.grandTotal.toLocaleString('en-IN')}
+                        {CURRENCY}{(po.grandTotal ?? 0).toLocaleString('en-IN')}
                       </td>
                       <td className="py-3 px-3 text-center font-sans">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -333,16 +348,22 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                   </tr>
                 ) : (
                   filteredBills.map((b) => {
-                    const linkedPO = purchaseOrders.find(
-                      (p) => p.id === b.poReferenceId || p.poNumber === b.poNumber || (b.poReferenceId && p.poNumber === b.poReferenceId)
+                    const linkedPO = (purchaseOrders || []).find(
+                      (p) =>
+                        p &&
+                        (p.id === b.poReferenceId ||
+                          (p.poNumber && b.poNumber && p.poNumber === b.poNumber) ||
+                          (b.poReferenceId && p.poNumber && p.poNumber === b.poReferenceId))
                     );
 
+                    const payStatus = String(b.paymentStatus || 'due').toLowerCase();
+
                     return (
-                      <tr key={b.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4 font-bold text-slate-900">{b.billNumber}</td>
+                      <tr key={b.id || `bill-${Math.random()}`} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 px-4 font-bold text-slate-900">{b.billNumber || 'N/A'}</td>
                         <td className="py-3 px-4 font-sans">
-                          <div className="font-semibold text-slate-900">{b.supplierName}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">Inv: {b.supplierInvoiceNo}</div>
+                          <div className="font-semibold text-slate-900">{b.supplierName || 'Unknown Vendor'}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">Inv: {b.supplierInvoiceNo || 'N/A'}</div>
                         </td>
 
                         {/* Linked PO / Manifest Column */}
@@ -355,10 +376,10 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                                 title="Click to view full Purchase Order Manifest"
                               >
                                 <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
-                                <span>{linkedPO.poNumber}</span>
+                                <span>{linkedPO.poNumber || 'PO Manifest'}</span>
                               </button>
                               <div className="text-[10px] text-slate-500 font-sans">
-                                PO Val: <strong className="text-slate-700 font-mono">{CURRENCY}{linkedPO.grandTotal.toLocaleString('en-IN')}</strong>
+                                PO Val: <strong className="text-slate-700 font-mono">{CURRENCY}{(linkedPO.grandTotal ?? 0).toLocaleString('en-IN')}</strong>
                               </div>
                             </div>
                           ) : b.poNumber ? (
@@ -381,24 +402,24 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                           </span>
                         </td>
 
-                        <td className="py-3 px-3 text-slate-600">{b.billDate}</td>
+                        <td className="py-3 px-3 text-slate-600">{b.billDate || 'N/A'}</td>
                         <td className="py-3 px-3 text-right font-bold text-slate-900">
-                          {CURRENCY}{b.grandTotal.toLocaleString('en-IN')}
+                          {CURRENCY}{(b.grandTotal ?? 0).toLocaleString('en-IN')}
                         </td>
                         <td className="py-3 px-3 text-right font-bold text-rose-600">
-                          {CURRENCY}{b.dueAmount.toLocaleString('en-IN')}
+                          {CURRENCY}{(b.dueAmount ?? 0).toLocaleString('en-IN')}
                         </td>
                         <td className="py-3 px-3 text-center font-sans">
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              b.paymentStatus === 'paid'
+                              payStatus === 'paid'
                                 ? 'bg-emerald-100 text-emerald-800'
-                                : b.paymentStatus === 'partial'
+                                : payStatus === 'partial'
                                 ? 'bg-amber-100 text-amber-800'
                                 : 'bg-rose-100 text-rose-800'
                             }`}
                           >
-                            {b.paymentStatus.toUpperCase()}
+                            {payStatus.toUpperCase()}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right font-sans">
@@ -421,7 +442,7 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                               <FileText className="w-3.5 h-3.5 text-emerald-600" />
                               <span>GRN Slip</span>
                             </button>
-                            {b.dueAmount > 0 && (
+                            {(b.dueAmount ?? 0) > 0 && b.supplierId && (
                               <button
                                 onClick={() => onOpenRecordPayment(b.supplierId)}
                                 className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs transition-colors border border-indigo-200"
@@ -456,7 +477,7 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                 </div>
                 <div className="text-right">
                   <div className="text-xs font-mono font-bold text-rose-600">
-                    {CURRENCY}{sup.currentOutstanding.toLocaleString('en-IN')}
+                    {CURRENCY}{(sup.currentOutstanding ?? 0).toLocaleString('en-IN')}
                   </div>
                   <div className="text-[10px] text-slate-400">Outstanding</div>
                 </div>
@@ -509,7 +530,7 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
             </div>
 
             <div className="text-xs font-semibold text-slate-700">
-              Total Outstanding Balance: <strong className="text-rose-600 font-mono text-sm">{CURRENCY}{totalOutstanding.toLocaleString('en-IN')}</strong>
+              Total Outstanding Balance: <strong className="text-rose-600 font-mono text-sm">{CURRENCY}{(totalOutstanding ?? 0).toLocaleString('en-IN')}</strong>
             </div>
           </div>
 
@@ -550,13 +571,13 @@ export const WarehousePurchasesView: React.FC<WarehousePurchasesViewProps> = ({
                       </td>
                       <td className="py-3 px-3 font-bold text-slate-800">{led.referenceNo}</td>
                       <td className="py-3 px-3 text-right font-bold text-emerald-600">
-                        {led.debit > 0 ? `${CURRENCY}${led.debit.toLocaleString('en-IN')}` : '-'}
+                        {led.debit > 0 ? `${CURRENCY}${(led.debit ?? 0).toLocaleString('en-IN')}` : '-'}
                       </td>
                       <td className="py-3 px-3 text-right font-bold text-slate-900">
-                        {led.credit > 0 ? `${CURRENCY}${led.credit.toLocaleString('en-IN')}` : '-'}
+                        {led.credit > 0 ? `${CURRENCY}${(led.credit ?? 0).toLocaleString('en-IN')}` : '-'}
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-rose-600">
-                        {CURRENCY}{led.runningBalance.toLocaleString('en-IN')}
+                        {CURRENCY}{(led.runningBalance ?? 0).toLocaleString('en-IN')}
                       </td>
                     </tr>
                   ))

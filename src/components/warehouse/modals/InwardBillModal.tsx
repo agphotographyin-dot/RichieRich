@@ -61,10 +61,10 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPOManifestModal, setShowPOManifestModal] = useState(false);
 
-  const selectedPO = useMemo(() => purchaseOrders.find((p) => p.id === selectedPoId), [purchaseOrders, selectedPoId]);
-  const selectedSupplier = suppliers.find((s) => s.id === supplierId);
+  const selectedPO = useMemo(() => (purchaseOrders || []).find((p) => p && p.id === selectedPoId), [purchaseOrders, selectedPoId]);
+  const selectedSupplier = (suppliers || []).find((s) => s && s.id === supplierId);
   const supplierProducts = useMemo(() => {
-    return getSupplierProducts(selectedSupplier, inventory);
+    return getSupplierProducts(selectedSupplier, inventory || []);
   }, [selectedSupplier, inventory]);
 
   const [items, setItems] = useState<
@@ -83,20 +83,20 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
       expiryDate: string;
     }>
   >(() => {
-    if (initialPO && initialPO.items && initialPO.items.length > 0) {
+    if (initialPO && Array.isArray(initialPO.items) && initialPO.items.length > 0) {
       return initialPO.items.map((it, idx) => {
-        const inv = inventory.find((i) => i.id === it.itemId || i.sku === it.sku);
-        const isBox = (it.unit || '').toLowerCase().includes('box') || Boolean(inv?.piecesPerBox && inv.piecesPerBox > 1);
+        const inv = (inventory || []).find((i) => i && (i.id === it.itemId || i.sku === it.sku));
+        const isBox = String(it.unit || '').toLowerCase().includes('box') || Boolean(inv?.piecesPerBox && inv.piecesPerBox > 1);
         const ppb = inv?.piecesPerBox || (it as any).piecesPerBox || (isBox ? 10 : 1);
         return {
-          itemId: it.itemId,
-          name: it.name,
-          sku: it.sku,
+          itemId: it.itemId || `item-po-${idx}`,
+          name: it.name || 'Paan Product',
+          sku: it.sku || `SKU-${idx}`,
           category: it.category || 'Paan',
-          quantity: it.quantityOrdered, // Exact ordered units (e.g. 50 units)
+          quantity: Math.max(1, Number(it.quantityOrdered) || 1), // Exact ordered units
           inputUnit: isBox ? 'boxes' : 'pieces',
           piecesPerBox: ppb,
-          unitCost: it.unitPrice,
+          unitCost: Number(it.unitPrice) || 0,
           unit: it.unit || (isBox ? 'boxes' : 'pieces'),
           batchNumber: `BATCH-${it.sku ? it.sku.slice(0, 4) : 'PAN'}-${Date.now().toString().slice(-4)}`,
           mfgDate: new Date().toISOString().split('T')[0],
@@ -104,7 +104,7 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
         };
       });
     }
-    const defaultInv = inventory[0];
+    const defaultInv = (inventory || [])[0];
     const isBox = Boolean(defaultInv?.sellAsLoose || (defaultInv?.piecesPerBox && defaultInv.piecesPerBox > 1));
     const ppb = defaultInv?.piecesPerBox || (isBox ? 10 : 1);
     return [
@@ -344,7 +344,7 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
               <option value="">-- Direct Inward (Without PO) --</option>
               {purchaseOrders.map((po) => (
                 <option key={po.id} value={po.id}>
-                  {po.poNumber} • {po.supplierName} ({CURRENCY}{po.grandTotal.toLocaleString('en-IN')}) [{po.status.toUpperCase()}]
+                  {po.poNumber} • {po.supplierName} ({CURRENCY}{(po.grandTotal ?? 0).toLocaleString('en-IN')}) [{(po.status || 'draft').toUpperCase()}]
                 </option>
               ))}
             </select>
@@ -370,7 +370,7 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
                         : 'bg-amber-100 text-amber-800 border border-amber-300'
                     }`}
                   >
-                    {selectedPO.status.replace('_', ' ')}
+                    {(selectedPO.status || 'draft').replace('_', ' ')}
                   </span>
                 </div>
 
@@ -390,16 +390,16 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
                 <div>
                   <span className="text-[10px] text-slate-500 block uppercase font-medium">Order Date</span>
-                  <span className="font-semibold text-slate-800">{selectedPO.orderDate}</span>
+                  <span className="font-semibold text-slate-800">{selectedPO.orderDate || 'N/A'}</span>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-500 block uppercase font-medium">Expected Delivery</span>
-                  <span className="font-semibold text-slate-800">{selectedPO.expectedDeliveryDate}</span>
+                  <span className="font-semibold text-slate-800">{selectedPO.expectedDeliveryDate || 'N/A'}</span>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-500 block uppercase font-medium">PO Grand Total</span>
                   <span className="font-bold text-slate-900 font-mono">
-                    {CURRENCY}{selectedPO.grandTotal.toLocaleString('en-IN')}
+                    {CURRENCY}{(selectedPO.grandTotal ?? 0).toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div>
@@ -543,9 +543,10 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
               {items.map((row, idx) => {
                 const matchingPOItem = selectedPO?.items?.find(
                   (pi) =>
-                    pi.itemId === row.itemId ||
-                    (pi.sku && pi.sku === row.sku) ||
-                    pi.name.toLowerCase() === row.name.toLowerCase()
+                    pi &&
+                    (pi.itemId === row.itemId ||
+                      (pi.sku && row.sku && pi.sku === row.sku) ||
+                      String(pi.name || '').toLowerCase() === String(row.name || '').toLowerCase())
                 );
 
                 return (
@@ -722,15 +723,15 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
           {/* Valuation Summary Box */}
           <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
             <div className="font-sans text-slate-700 space-x-2">
-              <span>Taxable Subtotal: <strong>{CURRENCY}{subTotal.toLocaleString('en-IN')}</strong></span>
+              <span>Taxable Subtotal: <strong>{CURRENCY}{(subTotal || 0).toLocaleString('en-IN')}</strong></span>
               {includeGst ? (
-                <span className="text-emerald-700 font-semibold">• GST ({taxPercent}%): {CURRENCY}{gstAmount.toLocaleString('en-IN')}</span>
+                <span className="text-emerald-700 font-semibold">• GST ({taxPercent}%): {CURRENCY}{(gstAmount || 0).toLocaleString('en-IN')}</span>
               ) : (
                 <span className="text-slate-500 font-medium">• (No GST Applied)</span>
               )}
             </div>
             <span className="text-sm font-extrabold text-emerald-950">
-              Total Inward Bill: {CURRENCY}{grandTotal.toLocaleString('en-IN')}
+              Total Inward Bill: {CURRENCY}{(grandTotal || 0).toLocaleString('en-IN')}
             </span>
           </div>
 
