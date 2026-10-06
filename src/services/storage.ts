@@ -1966,19 +1966,6 @@ export class StorageService {
     return true;
   }
 
-  // Automated 12:00 AM daily backup scheduler simulation
-  checkDailyBackupScheduler() {
-    if (typeof window === 'undefined') return;
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    const lastBackup = safeStorage.getItem(STORAGE_KEYS.LAST_BACKUP_DATE);
-
-    if (lastBackup !== todayStr) {
-      this.createBackup('automated_daily', `Automated daily backup for ${todayStr} (12:00 AM Cycle)`);
-      safeStorage.setItem(STORAGE_KEYS.LAST_BACKUP_DATE, todayStr);
-    }
-  }
-
   // --- INVENTORY METHODS ---
 
   getInventory(): InventoryItem[] {
@@ -2523,6 +2510,108 @@ export class StorageService {
       setTimeout(() => soundEffects.playWarningChime(), 50);
     }
     return modified;
+  }
+
+  /**
+   * Applies a manual/physical stock audit to a store outlet's allocation with discrepancy tracking
+   * and immutable audit log entry.
+   */
+  auditStoreStock(
+    storeId: string,
+    audits: Array<{
+      itemId: string;
+      countedStock: number;
+      reason: string;
+      notes?: string;
+    }>,
+    auditorName: string = 'Store Admin'
+  ): { success: boolean; modifiedCount: number; auditReference: string; error?: string } {
+    if (!audits || audits.length === 0) {
+      return { success: false, modifiedCount: 0, auditReference: '', error: 'No items provided for stock audit.' };
+    }
+
+    const store = this.getStoreById(storeId);
+    const storeName = store ? store.name : storeId;
+    const items = this.getInventory();
+    const nowIso = new Date().toISOString();
+    const nowTs = Date.now();
+    const auditReference = `AUD-${storeId.toUpperCase()}-${nowTs.toString().slice(-6)}`;
+    const auditRecords: any[] = [];
+    let modifiedCount = 0;
+
+    audits.forEach((audit) => {
+      const item = items.find((i) => i.id === audit.itemId || (i.sku && i.sku.toUpperCase() === audit.itemId.toUpperCase()));
+      if (!item) return;
+
+      if (!item.storeAllocations) {
+        item.storeAllocations = {};
+      }
+
+      const prevStock = Math.max(0, Number(item.storeAllocations[storeId]) || 0);
+      const newStock = Math.max(0, Number(audit.countedStock) || 0);
+      const delta = newStock - prevStock;
+
+      // Update store allocation
+      item.storeAllocations[storeId] = newStock;
+
+      const isBoxUnit = isBoxDenominatedUnit(item.unit);
+      if (!item.storeBoxAllocations) item.storeBoxAllocations = {};
+      item.storeBoxAllocations[storeId] = {
+        fullBoxes: isBoxUnit ? newStock : 0,
+        loosePieces: 0,
+        totalPieces: newStock,
+        total_piece_equivalent: newStock,
+      };
+
+      (item as any).lastStockChange = nowTs;
+      item.updatedAt = nowIso;
+      modifiedCount++;
+
+      // Register Movement Audit Record
+      const isShortage = delta < 0;
+      const discrepancyReason = audit.reason || 'Physical Count Audit';
+
+      auditRecords.push({
+        transactionId: `TXN-${nowTs.toString().slice(-5)}${Math.floor(10 + Math.random() * 90)}`,
+        referenceNumber: auditReference,
+        itemId: item.id,
+        sku: item.sku,
+        itemName: item.name,
+        movementType: isShortage ? 'damage_scrap' : 'physical_adjustment',
+        fromLocation: isShortage ? `Store: ${storeName}` : `Stock Audit: ${discrepancyReason}`,
+        toLocation: isShortage ? `Write-off (${discrepancyReason})` : `Store: ${storeName}`,
+        quantity: Math.abs(delta),
+        quantityChanged: delta,
+        previousStock: prevStock,
+        newStock: newStock,
+        status: 'Completed',
+        unit: item.unit || 'units',
+        balanceAfter: newStock,
+        unitCost: item.costPrice || 0,
+        totalCostImpact: delta * (item.costPrice || 0),
+        performedBy: auditorName,
+        userRole: 'Store Admin',
+        notes: `[Physical Store Audit - ${storeName}] Counted: ${newStock} ${item.unit} (Prev: ${prevStock}, Diff: ${delta >= 0 ? '+' : ''}${delta}). Reason: ${discrepancyReason}. Remarks: ${audit.notes || 'None'}`,
+      });
+    });
+
+    if (modifiedCount > 0) {
+      this.saveInventory(items);
+      if (auditRecords.length > 0 && warehouseStorageRef && typeof warehouseStorageRef.addAuditRecords === 'function') {
+        warehouseStorageRef.addAuditRecords(auditRecords);
+      }
+
+      this.addNotification({
+        title: `📋 Physical Stock Audit Applied: ${store?.shortName || storeName}`,
+        message: `Audited ${modifiedCount} SKU(s) under Ref #${auditReference}. Verified by ${auditorName}.`,
+        type: 'low_stock',
+        targetRole: 'admin',
+        read: false,
+        linkTab: 'inventory',
+      });
+    }
+
+    return { success: true, modifiedCount, auditReference };
   }
 
   /**
@@ -3130,16 +3219,136 @@ export class StorageService {
     const orders = this.getOrders();
     const customers = this.getCustomers();
     const promotions = this.getPromotions();
+    const stores = this.getStores();
+    const storeExpenses = this.getStoreExpenses();
+
+    // Pull warehouse & supply chain data from warehouseStorageRef or safeStorage
+    let warehouses: any[] = [];
+    let suppliers: any[] = [];
+    let purchaseOrders: any[] = [];
+    let purchaseBills: any[] = [];
+    let batches: any[] = [];
+    let transfers: any[] = [];
+    let indents: any[] = [];
+    let adjustments: any[] = [];
+    let auditTrail: any[] = [];
+
+    if (warehouseStorageRef) {
+      if (typeof warehouseStorageRef.getWarehouses === 'function') warehouses = warehouseStorageRef.getWarehouses();
+      if (typeof warehouseStorageRef.getSuppliers === 'function') suppliers = warehouseStorageRef.getSuppliers();
+      if (typeof warehouseStorageRef.getPurchaseOrders === 'function') purchaseOrders = warehouseStorageRef.getPurchaseOrders();
+      if (typeof warehouseStorageRef.getPurchaseBills === 'function') purchaseBills = warehouseStorageRef.getPurchaseBills();
+      if (typeof warehouseStorageRef.getBatches === 'function') batches = warehouseStorageRef.getBatches();
+      if (typeof warehouseStorageRef.getStockTransfers === 'function') transfers = warehouseStorageRef.getStockTransfers();
+      if (typeof warehouseStorageRef.getStoreIndents === 'function') indents = warehouseStorageRef.getStoreIndents();
+      if (typeof warehouseStorageRef.getStockAdjustments === 'function') adjustments = warehouseStorageRef.getStockAdjustments();
+      if (typeof warehouseStorageRef.getAuditTrail === 'function') auditTrail = warehouseStorageRef.getAuditTrail();
+    } else {
+      try {
+        const rawWh = safeStorage.getItem('rr_wh_locations');
+        if (rawWh) warehouses = JSON.parse(rawWh);
+        const rawSup = safeStorage.getItem('rr_wh_suppliers');
+        if (rawSup) suppliers = JSON.parse(rawSup);
+        const rawPO = safeStorage.getItem('rr_wh_purchase_orders');
+        if (rawPO) purchaseOrders = JSON.parse(rawPO);
+        const rawPB = safeStorage.getItem('rr_wh_purchase_bills');
+        if (rawPB) purchaseBills = JSON.parse(rawPB);
+        const rawBatches = safeStorage.getItem('rr_wh_batches');
+        if (rawBatches) batches = JSON.parse(rawBatches);
+        const rawTr = safeStorage.getItem('rr_wh_transfers');
+        if (rawTr) transfers = JSON.parse(rawTr);
+        const rawInd = safeStorage.getItem('rr_wh_indents');
+        if (rawInd) indents = JSON.parse(rawInd);
+        const rawAdj = safeStorage.getItem('rr_wh_adjustments');
+        if (rawAdj) adjustments = JSON.parse(rawAdj);
+        const rawAud = safeStorage.getItem('rr_wh_audit_trail');
+        if (rawAud) auditTrail = JSON.parse(rawAud);
+      } catch {}
+    }
+
+    // Calculate store stock and inventory metrics
+    let centralWarehouseStockUnits = 0;
+    let storesTotalStockUnits = 0;
+    const storeStockBreakdown: Record<string, { fullBoxes: number; loosePieces: number; totalUnits: number }> = {};
+
+    stores.forEach((s) => {
+      storeStockBreakdown[s.id] = { fullBoxes: 0, loosePieces: 0, totalUnits: 0 };
+    });
+
+    inventory.forEach((item) => {
+      centralWarehouseStockUnits += (item.stockQuantity || 0);
+      if (item.storeAllocations) {
+        Object.entries(item.storeAllocations).forEach(([sId, qty]) => {
+          storesTotalStockUnits += (qty || 0);
+          if (storeStockBreakdown[sId]) {
+            storeStockBreakdown[sId].totalUnits += (qty || 0);
+          }
+        });
+      }
+      if (item.storeBoxAllocations) {
+        Object.entries(item.storeBoxAllocations).forEach(([sId, boxInfo]) => {
+          if (storeStockBreakdown[sId]) {
+            storeStockBreakdown[sId].fullBoxes += (boxInfo.fullBoxes || 0);
+            storeStockBreakdown[sId].loosePieces += (boxInfo.loosePieces || 0);
+          }
+        });
+      }
+    });
 
     const snapshotPayload = {
-      storeName: 'Richie Rich Pan House',
-      version: '2.5',
+      storeName: 'Richie Rich Pan House Enterprise',
+      system: 'RICHIE_RICH_POS_CLOUD',
+      version: '3.0',
       exportDate: new Date().toISOString(),
-      note: note || `${type === 'automated_daily' ? 'Daily 12:00 AM Scheduled' : 'Manual Admin'} Snapshot`,
+      note: note || `${type === 'automated_daily' ? 'Daily 12:00 AM Scheduled' : 'Manual Admin'} Full Snapshot`,
+      // 1. Core Products, Orders & Customer Data
       inventory,
       orders,
       customers,
       promotions,
+      stores,
+      storeExpenses,
+      // 2. Complete Warehouse, Batches & Logistics
+      warehouses,
+      suppliers,
+      purchaseOrders,
+      purchaseBills,
+      batches,
+      transfers,
+      indents,
+      adjustments,
+      auditTrail,
+      // 3. Complete PocketBase / Backend DB Collections Snapshot
+      pocketbase_collections: {
+        inventory,
+        orders,
+        customers,
+        promotions,
+        stores,
+        store_expenses: storeExpenses,
+        warehouses,
+        suppliers,
+        purchase_orders: purchaseOrders,
+        purchase_bills: purchaseBills,
+        batches,
+        stock_transfers: transfers,
+        store_indents: indents,
+        stock_adjustments: adjustments,
+        stock_audit_trail: auditTrail,
+      },
+      // 4. Store Stock & Inventory Aggregation Summary
+      storeStockAndInventorySummary: {
+        totalInventoryItems: inventory.length,
+        centralWarehouseStockUnits,
+        storesTotalStockUnits,
+        totalNetworkStockUnits: centralWarehouseStockUnits + storesTotalStockUnits,
+        storeStockBreakdown,
+        totalBatches: batches.length,
+        activeBatches: batches.filter((b: any) => (b.quantityInStock || 0) > 0).length,
+        totalTransfers: transfers.length,
+        inTransitTransfers: transfers.filter((t: any) => t.status === 'dispatched_in_transit').length,
+        totalPurchaseBills: purchaseBills.length,
+      },
     };
 
     const dataJson = JSON.stringify(snapshotPayload, null, 2);
@@ -3163,8 +3372,8 @@ export class StorageService {
     safeStorage.setItem(STORAGE_KEYS.BACKUPS, JSON.stringify(updatedBackups));
 
     this.addNotification({
-      title: `💾 Backup Created: ${type === 'automated_daily' ? 'Daily 12:00 AM Auto-Backup' : 'Manual Snapshot'}`,
-      message: `Archived ${inventory.length} products, ${orders.length} orders, ${customers.length} customer profiles (${sizeKb} KB).`,
+      title: `💾 Full Backup Created: ${type === 'automated_daily' ? 'Daily 12:00 AM Auto-Backup' : 'Manual Snapshot'}`,
+      message: `Archived ${inventory.length} SKUs, ${orders.length} orders, ${storesTotalStockUnits} store stock units & PocketBase collections (${sizeKb} KB).`,
       type: 'system_backup',
       targetRole: 'admin',
       read: false,
@@ -3209,12 +3418,37 @@ export class StorageService {
     }
   }
 
+  public checkDailyBackupScheduler(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const todayStr = getLocalDateString(new Date());
+      const lastBackupDate = safeStorage.getItem(STORAGE_KEYS.LAST_BACKUP_DATE);
+      if (lastBackupDate !== todayStr) {
+        // Automatically create daily 12:00 AM automated backup with full PocketBase collections, Store Stock and Inventory
+        this.createBackup('automated_daily', `Daily 12:00 AM Automated Snapshot [${todayStr}]`);
+        safeStorage.setItem(STORAGE_KEYS.LAST_BACKUP_DATE, todayStr);
+      }
+    } catch (e) {
+      console.warn('Daily auto-backup scheduler check error:', e);
+    }
+  }
+
   restoreSanitizedData(data: {
     inventory?: InventoryItem[];
     orders?: Order[];
     customers?: Customer[];
     promotions?: Promotion[];
     stores?: StoreLocation[];
+    storeExpenses?: any[];
+    warehouses?: any[];
+    suppliers?: any[];
+    purchaseOrders?: any[];
+    purchaseBills?: any[];
+    batches?: any[];
+    transfers?: any[];
+    indents?: any[];
+    adjustments?: any[];
+    auditTrail?: any[];
   }): void {
     this.invalidateCache();
     if (data.inventory && Array.isArray(data.inventory)) {
@@ -3231,6 +3465,40 @@ export class StorageService {
     }
     if (data.stores && Array.isArray(data.stores)) {
       safeStorage.setItem(STORAGE_KEYS.STORES, JSON.stringify(data.stores));
+    }
+    if (data.storeExpenses && Array.isArray(data.storeExpenses)) {
+      safeStorage.setItem('rr_store_expenses', JSON.stringify(data.storeExpenses));
+    }
+
+    // Restore warehouse collections if present
+    if (warehouseStorageRef) {
+      if (data.warehouses && Array.isArray(data.warehouses) && typeof warehouseStorageRef.saveWarehouses === 'function') {
+        warehouseStorageRef.saveWarehouses(data.warehouses);
+      }
+      if (data.suppliers && Array.isArray(data.suppliers) && typeof warehouseStorageRef.saveSuppliers === 'function') {
+        warehouseStorageRef.saveSuppliers(data.suppliers);
+      }
+      if (data.purchaseOrders && Array.isArray(data.purchaseOrders) && typeof warehouseStorageRef.savePurchaseOrders === 'function') {
+        warehouseStorageRef.savePurchaseOrders(data.purchaseOrders);
+      }
+      if (data.purchaseBills && Array.isArray(data.purchaseBills) && typeof warehouseStorageRef.savePurchaseBills === 'function') {
+        warehouseStorageRef.savePurchaseBills(data.purchaseBills);
+      }
+      if (data.batches && Array.isArray(data.batches) && typeof warehouseStorageRef.saveBatches === 'function') {
+        warehouseStorageRef.saveBatches(data.batches);
+      }
+      if (data.transfers && Array.isArray(data.transfers) && typeof warehouseStorageRef.saveStockTransfers === 'function') {
+        warehouseStorageRef.saveStockTransfers(data.transfers);
+      }
+      if (data.indents && Array.isArray(data.indents) && typeof warehouseStorageRef.saveStoreIndents === 'function') {
+        warehouseStorageRef.saveStoreIndents(data.indents);
+      }
+      if (data.adjustments && Array.isArray(data.adjustments) && typeof warehouseStorageRef.saveStockAdjustments === 'function') {
+        warehouseStorageRef.saveStockAdjustments(data.adjustments);
+      }
+      if (data.auditTrail && Array.isArray(data.auditTrail) && typeof warehouseStorageRef.saveAuditTrail === 'function') {
+        warehouseStorageRef.saveAuditTrail(data.auditTrail);
+      }
     }
     this.notify();
   }

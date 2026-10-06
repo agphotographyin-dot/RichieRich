@@ -145,7 +145,7 @@ export const WarehouseSidebar: React.FC<WarehouseSidebarProps> = ({
 
   return (
     <aside
-      className={`bg-[#0F172A] border-r border-slate-800/90 text-white flex flex-col justify-between transition-all duration-300 select-none z-30 shrink-0 sticky top-0 h-[calc(100vh-4rem)] overflow-hidden ${
+      className={`bg-[#0F172A] border-r border-slate-800/90 text-white flex flex-col justify-between transition-all duration-300 select-none z-30 shrink-0 sticky top-16 h-[calc(100vh-4rem)] overflow-hidden ${
         isCollapsed ? 'w-16 sm:w-18' : 'w-64 sm:w-68'
       }`}
     >

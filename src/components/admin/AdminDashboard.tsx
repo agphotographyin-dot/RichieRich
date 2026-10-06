@@ -301,65 +301,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* Global Action Toolbar */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Quick Issue PO */}
+          {/* Direct Link to Inventory Tab */}
           <button
-            id="btn-admin-issue-po"
+            id="btn-admin-inventory-tab"
             type="button"
-            onClick={() => setIsPOModalOpen(true)}
-            className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Issue PO</span>
-          </button>
-
-          {/* Quick Inward Bill */}
-          <button
-            id="btn-admin-inward-bill"
-            type="button"
-            onClick={() => setIsInwardModalOpen(true)}
-            className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+            onClick={() => onNavigateTab('inventory')}
+            className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-all cursor-pointer border border-amber-500/30"
           >
             <Package className="w-3.5 h-3.5" />
-            <span>Inward Bill</span>
+            <span>Inventory & Warehouse Hub</span>
           </button>
-
-          {/* Quick Transfer */}
-          <button
-            id="btn-admin-transfer-stock"
-            type="button"
-            onClick={() => {
-              setTransferInitialData(null);
-              setIsTransferModalOpen(true);
-            }}
-            className="bg-amber-600 hover:bg-amber-700 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
-          >
-            <Truck className="w-3.5 h-3.5" />
-            <span>Transfer Stock</span>
-          </button>
-
-          {onOpenScanner && (
-            <button
-              id="btn-admin-barcode-scanner"
-              type="button"
-              onClick={onOpenScanner}
-              className="bg-slate-900 hover:bg-slate-800 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
-            >
-              <Scan className="w-3.5 h-3.5 text-amber-400" />
-              <span>Barcode Scanner</span>
-            </button>
-          )}
-
-          {onOpenAddItem && (
-            <button
-              id="btn-admin-add-item"
-              type="button"
-              onClick={onOpenAddItem}
-              className="bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 border border-slate-200 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Item</span>
-            </button>
-          )}
 
           <button
             id="btn-admin-staff-counters"
@@ -368,7 +319,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             className="bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 border border-slate-200 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
           >
             <Users className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Staff & PINs</span>
+            <span>Stores & Staff ({stores.length})</span>
+          </button>
+
+          <button
+            id="btn-admin-analytics"
+            type="button"
+            onClick={() => onNavigateTab('analytics')}
+            className="bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 border border-slate-200 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+          >
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+            <span>P&L Analytics</span>
           </button>
 
           <button

@@ -107,64 +107,74 @@ export const ItemAutocompleteInput: React.FC<ItemAutocompleteInputProps> = ({
   }, []);
 
   // Filter matching inventory catalog items
-  const cleanQ = query.trim().toLowerCase();
+  const cleanQ = String(query || '').trim().toLowerCase();
+  const safeInventory = Array.isArray(inventory) ? inventory : [];
 
-  const matchingCatalog = inventory.filter((item) => {
+  const matchingCatalog = safeInventory.filter((item) => {
+    if (!item) return false;
     if (!cleanQ) return true;
+    const name = String(item.name || '').toLowerCase();
+    const sku = String(item.sku || '').toLowerCase();
+    const cat = String(item.category || '').toLowerCase();
+    const tagsMatch = Array.isArray(item.tags) && item.tags.some((t) => String(t || '').toLowerCase().includes(cleanQ));
     return (
-      item.name.toLowerCase().includes(cleanQ) ||
-      item.sku.toLowerCase().includes(cleanQ) ||
-      item.category.toLowerCase().includes(cleanQ) ||
-      (item.tags && item.tags.some((t) => t.toLowerCase().includes(cleanQ)))
+      name.includes(cleanQ) ||
+      sku.includes(cleanQ) ||
+      cat.includes(cleanQ) ||
+      tagsMatch
     );
   });
 
   // Filter matching previous history names
-  const matchingHistory = historyItems.filter((h) => {
+  const matchingHistory = (Array.isArray(historyItems) ? historyItems : []).filter((h) => {
+    if (!h) return false;
     if (!cleanQ) return true;
-    return h.toLowerCase().includes(cleanQ);
+    return String(h).toLowerCase().includes(cleanQ);
   });
 
   // Combine items for keyboard navigation
   const allSuggestions: Array<{ type: 'catalog' | 'history'; data: any }> = [
     ...matchingCatalog.map((c) => ({ type: 'catalog' as const, data: c })),
     ...matchingHistory
-      .filter((h) => !matchingCatalog.some((c) => c.name.toLowerCase() === h.toLowerCase()))
+      .filter((h) => !matchingCatalog.some((c) => String(c?.name || '').toLowerCase() === String(h || '').toLowerCase()))
       .map((h) => ({ type: 'history' as const, data: h })),
   ];
 
   const handleSelectCatalogItem = (item: InventoryItem) => {
-    setQuery(item.name);
-    saveToHistory(item.name);
+    if (!item) return;
+    const itemName = item.name || '';
+    setQuery(itemName);
+    saveToHistory(itemName);
     setIsOpen(false);
     onSelect({
-      itemId: item.id,
-      name: item.name,
-      sku: item.sku,
-      category: item.category,
-      unitPrice: item.sellingPrice,
-      costPrice: item.costPrice,
-      unit: item.unit,
-      stockQuantity: item.stockQuantity,
-      taxRate: item.taxRate,
+      itemId: item.id || `item-${Date.now()}`,
+      name: itemName,
+      sku: item.sku || 'SKU-GEN',
+      category: item.category || 'Paan',
+      unitPrice: item.sellingPrice !== undefined ? item.sellingPrice : 0,
+      costPrice: item.costPrice !== undefined ? item.costPrice : 0,
+      unit: item.unit || 'pieces',
+      stockQuantity: item.stockQuantity !== undefined ? item.stockQuantity : 0,
+      taxRate: item.taxRate !== undefined ? item.taxRate : 5,
     });
   };
 
   const handleSelectHistoryName = (histName: string) => {
-    setQuery(histName);
-    saveToHistory(histName);
+    const cleanHist = String(histName || '').trim();
+    setQuery(cleanHist);
+    saveToHistory(cleanHist);
     setIsOpen(false);
 
     // Check if matching in inventory
-    const found = inventory.find((i) => i.name.toLowerCase() === histName.toLowerCase());
+    const found = safeInventory.find((i) => i && String(i.name || '').toLowerCase() === cleanHist.toLowerCase());
     if (found) {
       handleSelectCatalogItem(found);
     } else {
       // Custom item based on history
-      const generatedSku = `SKU-${histName.slice(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}`;
+      const generatedSku = `SKU-${cleanHist.slice(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}`;
       onSelect({
         itemId: `custom-${Date.now()}`,
-        name: histName,
+        name: cleanHist,
         sku: generatedSku,
         category: 'Paan',
         costPrice: 25,
@@ -182,7 +192,7 @@ export const ItemAutocompleteInput: React.FC<ItemAutocompleteInputProps> = ({
     saveToHistory(trimmed);
     setIsOpen(false);
 
-    const found = inventory.find((i) => i.name.toLowerCase() === trimmed.toLowerCase());
+    const found = safeInventory.find((i) => i && String(i.name || '').toLowerCase() === trimmed.toLowerCase());
     if (found) {
       handleSelectCatalogItem(found);
     } else {
@@ -277,7 +287,7 @@ export const ItemAutocompleteInput: React.FC<ItemAutocompleteInputProps> = ({
 
           <div className="overflow-y-auto flex-1 divide-y divide-slate-100 p-1">
             {/* Custom Typed Option if user typed something new */}
-            {query.trim().length > 0 && !inventory.some((i) => i.name.toLowerCase() === query.trim().toLowerCase()) && (
+            {query.trim().length > 0 && !safeInventory.some((i) => i && String(i.name || '').toLowerCase() === query.trim().toLowerCase()) && (
               <button
                 type="button"
                 onClick={handleSelectCustomTyped}
@@ -309,7 +319,7 @@ export const ItemAutocompleteInput: React.FC<ItemAutocompleteInputProps> = ({
                 <div className="space-y-0.5 max-h-64 overflow-y-auto pr-1">
                   {matchingCatalog.map((item, idx) => {
                     const isHighlighted = highlightIndex === idx;
-                    const isSelected = item.name.toLowerCase() === query.trim().toLowerCase();
+                    const isSelected = String(item.name || '').toLowerCase() === query.trim().toLowerCase();
                     return (
                       <button
                         key={item.id}

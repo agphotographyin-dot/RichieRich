@@ -32,6 +32,7 @@ import * as XLSX from 'xlsx';
 import { StoreLocation, InventoryItem } from '../../../types';
 import { Warehouse, StockTransfer } from '../../../types/warehouse';
 import { CURRENCY, storage, getBoxLooseStockSummary } from '../../../services/storage';
+import { warehouseStorage } from '../../../services/warehouseStorage';
 import { pdfReportService } from '../../../services/pdfReportService';
 import { soundEffects } from '../../../services/audio';
 
@@ -92,6 +93,9 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
   const currentStore = useMemo(() => {
     return stores.find((s) => s.id === selectedStoreId) || stores[0];
   }, [stores, selectedStoreId]);
+
+  const allTransfers = useMemo(() => warehouseStorage.getStockTransfers(), [inventory]);
+  const allIndents = useMemo(() => warehouseStorage.getStoreIndents(), [inventory]);
 
   // Sync external search query
   useEffect(() => {
@@ -1357,22 +1361,26 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
                   <tr>
                     <th className="py-3 px-4">Item & SKU</th>
                     <th className="py-3 px-3">Cat</th>
-                    <th className="py-3 px-3 text-center bg-indigo-50/50 text-indigo-900 border-x border-indigo-100">
+                    <th className="py-3 px-3 text-center bg-indigo-50/70 text-indigo-900 border-x border-indigo-100 font-black">
                       Central WH
                     </th>
                     {stores.map((st) => (
                       <th key={st.id} className="py-3 px-3 text-center">
-                        {st.shortName || st.id}
+                        {st.shortName || st.name.split('-')[0].trim()}
                       </th>
                     ))}
-                    <th className="py-3 px-3 text-center font-bold">Network Total</th>
+                    <th className="py-3 px-3 text-center text-amber-800 bg-amber-50/50">Reserved (Pending)</th>
+                    <th className="py-3 px-3 text-center text-purple-800 bg-purple-50/50">In Transit</th>
+                    <th className="py-3 px-3 text-center font-black text-emerald-900 bg-emerald-50/60">
+                      Total Across Locations
+                    </th>
                     <th className="py-3 px-4 text-right">Total Valuation</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono">
                   {paginatedMatrixItems.length === 0 ? (
                     <tr>
-                      <td colSpan={5 + stores.length} className="py-12 text-center text-slate-400 font-sans text-xs">
+                      <td colSpan={7 + stores.length} className="py-12 text-center text-slate-400 font-sans text-xs">
                         No catalog items found matching the matrix filter.
                       </td>
                     </tr>
@@ -1381,8 +1389,25 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
                       const alloc = item.storeAllocations || {};
                       const centralStock = item.stockQuantity;
                       const storeTotal = stores.reduce((sum, s) => sum + (alloc[s.id] || 0), 0);
-                      const networkTotal = centralStock + storeTotal;
-                      const totalValuation = networkTotal * item.costPrice;
+
+                      // Reserved for pending store indents/purchase orders
+                      const reservedQty = allIndents
+                        .filter((ind) => ind.status === 'pending' || ind.status === 'approved')
+                        .reduce((sum, ind) => {
+                          const match = ind.items.find((i) => i.itemId === item.id || i.sku === item.sku);
+                          return sum + (match ? match.requestedQty : 0);
+                        }, 0);
+
+                      // In Transit across active shipments
+                      const inTransitQty = allTransfers
+                        .filter((tr) => tr.status === 'dispatched_in_transit')
+                        .reduce((sum, tr) => {
+                          const match = tr.items.find((i) => i.itemId === item.id || i.sku === item.sku);
+                          return sum + (match ? (match.dispatchedQty || match.requestedQty) : 0);
+                        }, 0);
+
+                      const totalAllLocations = centralStock + storeTotal + inTransitQty;
+                      const totalValuation = totalAllLocations * item.costPrice;
 
                       return (
                         <tr key={item.id} className="hover:bg-slate-50/80 transition-colors font-sans">
@@ -1400,7 +1425,7 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
                           </td>
 
                           {/* Central WH Stock */}
-                          <td className="py-3 px-3 text-center font-mono font-bold text-indigo-700 bg-indigo-50/30 border-x border-indigo-50">
+                          <td className="py-3 px-3 text-center font-mono font-black text-indigo-700 bg-indigo-50/30 border-x border-indigo-50">
                             {centralStock}
                           </td>
 
@@ -1427,9 +1452,31 @@ export const WarehouseStoreStockView: React.FC<WarehouseStoreStockViewProps> = (
                             );
                           })}
 
-                          {/* Total Network Units */}
-                          <td className="py-3 px-3 text-center font-mono font-bold text-slate-900 bg-slate-50/50">
-                            {networkTotal} {item.unit}
+                          {/* Reserved for Pending Orders */}
+                          <td className="py-3 px-3 text-center font-mono font-semibold bg-amber-50/30 text-amber-800">
+                            {reservedQty > 0 ? (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-100 font-bold">
+                                {reservedQty}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">0</span>
+                            )}
+                          </td>
+
+                          {/* Quantity In Transit */}
+                          <td className="py-3 px-3 text-center font-mono font-semibold bg-purple-50/30 text-purple-800">
+                            {inTransitQty > 0 ? (
+                              <span className="px-1.5 py-0.5 rounded bg-purple-100 font-bold">
+                                {inTransitQty}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">0</span>
+                            )}
+                          </td>
+
+                          {/* Total Stock Across All Locations */}
+                          <td className="py-3 px-3 text-center font-mono font-black text-emerald-900 bg-emerald-50/50">
+                            {totalAllLocations} {item.unit}
                           </td>
 
                           {/* Total Valuation */}

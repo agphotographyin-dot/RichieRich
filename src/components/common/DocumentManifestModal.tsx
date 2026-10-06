@@ -589,7 +589,7 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
                               </button>
                             </div>
                             <div className="text-[10px] text-slate-500 mt-0.5">
-                              PO Val: {CURRENCY}{linkedPO.grandTotal.toLocaleString('en-IN')} • Status: {linkedPO.status.toUpperCase()}
+                              PO Val: {CURRENCY}{Number(linkedPO.grandTotal || 0).toLocaleString('en-IN')} • Status: {(linkedPO.status || 'approved').toUpperCase()}
                             </div>
                           </div>
                         ) : pb.poNumber ? (
@@ -611,16 +611,16 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
                         <div className="inline-block text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded">
                           Central WH Stock Only
                         </div>
-                        <div className="text-slate-600 pt-1">Received Date: <strong>{pb.receivedDate}</strong></div>
+                        <div className="text-slate-600 pt-1">Received Date: <strong>{pb.receivedDate || 'N/A'}</strong></div>
                         <div className="text-slate-500">Received By: {pb.receivedBy || 'GRN Clerk'}</div>
                       </div>
 
                       {/* QC & Payment Status */}
                       <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-200 space-y-1">
                         <span className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider block">QC & GRN Status</span>
-                        <div className="font-bold text-emerald-900 uppercase text-xs">{pb.grnStatus.replace('_', ' ')}</div>
-                        <div className="text-slate-600">Payment Status: <strong className="uppercase">{pb.paymentStatus}</strong></div>
-                        <div className="text-rose-600 font-bold">Due: {CURRENCY}{pb.dueAmount.toFixed(2)}</div>
+                        <div className="font-bold text-emerald-900 uppercase text-xs">{(pb.grnStatus || 'verified_stocked').replace(/_/g, ' ')}</div>
+                        <div className="text-slate-600">Payment Status: <strong className="uppercase">{pb.paymentStatus || 'due'}</strong></div>
+                        <div className="text-rose-600 font-bold">Due: {CURRENCY}{Number(pb.dueAmount || 0).toFixed(2)}</div>
                       </div>
                     </div>
 
@@ -639,19 +639,19 @@ export const DocumentManifestModal: React.FC<DocumentManifestModalProps> = ({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 font-mono text-slate-800">
-                          {pb.items.map((it, idx) => (
+                          {(pb.items || []).map((it, idx) => (
                             <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
                               <td className="py-2.5 px-3 text-slate-500 font-sans">{idx + 1}</td>
                               <td className="py-2.5 px-3 font-sans">
                                 <div className="font-bold text-slate-900">{it.name}</div>
                                 <div className="text-[10px] text-slate-400 font-mono">{it.sku}</div>
                               </td>
-                              <td className="py-2.5 px-2 text-center text-slate-600">{it.batchNumber}</td>
+                              <td className="py-2.5 px-2 text-center text-slate-600">{it.batchNumber || 'BATCH-STD'}</td>
                               <td className="py-2.5 px-2 text-center text-slate-600">{it.expiryDate || 'N/A'}</td>
                               <td className="py-2.5 px-3 text-right font-bold text-slate-900">{it.quantity}</td>
-                              <td className="py-2.5 px-3 text-right">{CURRENCY}{it.unitCost.toFixed(2)}</td>
+                              <td className="py-2.5 px-3 text-right">{CURRENCY}{Number(it.unitCost || 0).toFixed(2)}</td>
                               <td className="py-2.5 px-3 text-right font-bold text-slate-900">
-                                {CURRENCY}{it.totalCost.toFixed(2)}
+                                {CURRENCY}{Number(it.totalCost || 0).toFixed(2)}
                               </td>
                             </tr>
                           ))}

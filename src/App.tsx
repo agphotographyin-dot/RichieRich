@@ -34,12 +34,18 @@ import { StoreAdminLogin } from './components/auth/StoreAdminLogin';
 
 // Admin views
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { AdminInventoryView } from './components/admin/AdminInventoryView';
 import { AdminStaffCounters } from './components/admin/AdminStaffCounters';
 import { AddItemModal } from './components/admin/AddItemModal';
 import { AdminAnalytics } from './components/admin/AdminAnalytics';
 import { AdminOrders } from './components/admin/AdminOrders';
 import { AdminLoyaltyPromos } from './components/admin/AdminLoyaltyPromos';
 import { AdminBackupsSecurity } from './components/admin/AdminBackupsSecurity';
+import { RegisterBarcodeModal } from './components/admin/RegisterBarcodeModal';
+import { CreatePOModal } from './components/warehouse/modals/CreatePOModal';
+import { InwardBillModal } from './components/warehouse/modals/InwardBillModal';
+import { CreateTransferModal } from './components/warehouse/modals/CreateTransferModal';
+import { StockTransfer } from './types/warehouse';
 
 // Store Admin view (NEW)
 import { StoreAdminDashboard } from './components/storeAdmin/StoreAdminDashboard';
@@ -104,6 +110,12 @@ export const App: React.FC = () => {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] = useState(false);
+  const [isPOModalOpen, setIsPOModalOpen] = useState(false);
+  const [isInwardModalOpen, setIsInwardModalOpen] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferInitialData, setTransferInitialData] = useState<Partial<StockTransfer> | null>(null);
+  const [isRegisterBarcodeOpen, setIsRegisterBarcodeOpen] = useState(false);
+  const [selectedItemForBarcode, setSelectedItemForBarcode] = useState<InventoryItem | null>(null);
 
   // Warehouse Layout mode ('modern' | 'classic')
   const [warehouseLayoutMode, setWarehouseLayoutMode] = useState<'modern' | 'classic'>(() => {
@@ -418,7 +430,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
-      {/* Universal Portal Header */}
+      {/* Universal Portal Header (Master Admin, Store Admin, POS, Warehouse, Landing, Customer) */}
       <Header
         currentRole={currentRole}
         activeAdminTab={activeAdminTab}
@@ -437,7 +449,13 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area: Expands sideways responsively to fit device size, screen, and resolution */}
-      <main className="flex-1 w-full max-w-[2400px] 2xl:max-w-none mx-auto px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 sm:py-6">
+      <main
+        className={`flex-1 w-full ${
+          currentRole === 'store_admin' || currentRole === 'warehouse'
+            ? 'max-w-none px-0 py-0'
+            : 'max-w-[2400px] 2xl:max-w-none mx-auto px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 sm:py-6'
+        }`}
+      >
         {/* ================================================================= */}
         {/* LANDING PAGE: 4 Operational Portals Grid + Customer Portal        */}
         {/* ================================================================= */}
@@ -478,6 +496,30 @@ export const App: React.FC = () => {
                     onOpenAddItem={() => setIsAddItemOpen(true)}
                     onNavigateTab={handleAdminTabSelect}
                     onNavigateRole={(role) => navigateToRole(role)}
+                  />
+                )}
+
+                {activeAdminTab === 'inventory' && (
+                  <AdminInventoryView
+                    inventory={inventory}
+                    categories={categories}
+                    stores={storage.getStores()}
+                    onOpenAddItem={() => setIsAddItemOpen(true)}
+                    onOpenScanner={() => setIsScannerOpen(true)}
+                    onOpenPO={() => setIsPOModalOpen(true)}
+                    onOpenInwardBill={() => setIsInwardModalOpen(true)}
+                    onOpenTransferStock={(initial) => {
+                      setTransferInitialData(initial || null);
+                      setIsTransferModalOpen(true);
+                    }}
+                    onOpenRegisterBarcode={(item) => {
+                      setSelectedItemForBarcode(item || null);
+                      setIsRegisterBarcodeOpen(true);
+                    }}
+                    onRefresh={() => {
+                      setInventory(storage.getInventory());
+                      setOrders(storage.getOrders());
+                    }}
                   />
                 )}
 

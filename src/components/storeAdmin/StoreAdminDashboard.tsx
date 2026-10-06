@@ -34,6 +34,7 @@ import {
   Phone,
   BarChart3,
   Truck,
+  ClipboardCheck,
 } from 'lucide-react';
 import {
   StoreLocation,
@@ -43,6 +44,7 @@ import {
   Order,
   InventoryItem,
 } from '../../types';
+import { PurchaseOrder, Supplier } from '../../types/warehouse';
 import { storage, getBoxLooseStockSummary, isBoxDenominatedUnit } from '../../services/storage';
 import { warehouseStorage } from '../../services/warehouseStorage';
 import { authService } from '../../services/auth';
@@ -51,12 +53,20 @@ import { pdfReportService } from '../../services/pdfReportService';
 import { StoreStatementModal } from './StoreStatementModal';
 import { StoreIndentsView } from './StoreIndentsView';
 import { CreateStoreIndentModal } from './CreateStoreIndentModal';
+import { DirectStorePurchasesView } from './DirectStorePurchasesView';
+import { CreateDirectStorePOModal } from './CreateDirectStorePOModal';
+import { ReceiveDirectStoreGoodsModal } from './ReceiveDirectStoreGoodsModal';
+import { StoreStockAuditModal } from './StoreStockAuditModal';
+import { StoreSuppliersView } from './StoreSuppliersView';
+import { SupplierModal } from './SupplierModal';
+import { StoreAdminSidebar, StoreAdminTabId } from './StoreAdminSidebar';
+import { StoreAdminHeader } from './StoreAdminHeader';
 import { isToday, getLocalDateString } from '../../utils/dateUtils';
 
 interface StoreAdminDashboardProps {
   initialStoreId?: string;
   initialTab?: string;
-  onTabChange?: (tab: 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents') => void;
+  onTabChange?: (tab: 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents' | 'manage_stock' | 'suppliers') => void;
   onLogout: () => void;
   onNavigateToWarehouse?: () => void;
   onNavigateToAdmin?: () => void;
@@ -96,17 +106,40 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
     return authState.storeId || initialStoreId || stores[0]?.id || 'bopal';
   });
 
-  const mapPropToTab = (tab?: string): 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents' => {
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('rr_store_admin_sidebar_collapsed');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebarCollapse = () => {
+    const next = !isSidebarCollapsed;
+    setIsSidebarCollapsed(next);
+    try {
+      localStorage.setItem('rr_store_admin_sidebar_collapsed', String(next));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const [globalSearch, setGlobalSearch] = useState('');
+
+  const mapPropToTab = (tab?: string): 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents' | 'manage_stock' | 'suppliers' => {
     if (!tab) return 'financials';
     if (tab === 'expenses') return 'expenses';
     if (tab === 'sales_orders' || tab === 'orders') return 'sales_orders';
     if (tab === 'staff_counters' || tab === 'staff') return 'staff_counters';
     if (tab === 'store_inventory' || tab === 'inventory') return 'store_inventory';
     if (tab === 'stock_indents' || tab === 'indents' || tab === 'store_indents') return 'stock_indents';
+    if (tab === 'manage_stock' || tab === 'direct_purchases' || tab === 'purchases' || tab === 'direct_po') return 'manage_stock';
+    if (tab === 'suppliers' || tab === 'vendors' || tab === 'supplier_management') return 'suppliers';
     return 'financials';
   };
 
-  const [activeTab, setActiveTab] = useState<'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents'>(() => mapPropToTab(initialTab));
+  const [activeTab, setActiveTab] = useState<'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents' | 'manage_stock' | 'suppliers'>(() => mapPropToTab(initialTab));
 
   useEffect(() => {
     if (initialTab) {
@@ -114,7 +147,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
     }
   }, [initialTab]);
 
-  const handleTabSelect = (tab: 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents') => {
+  const handleTabSelect = (tab: 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents' | 'manage_stock' | 'suppliers') => {
     setActiveTab(tab);
     onTabChange?.(tab);
   };
@@ -156,6 +189,21 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
   const [isCreateIndentOpen, setIsCreateIndentOpen] = useState(false);
   const [indentPreselectedItem, setIndentPreselectedItem] = useState<InventoryItem | null>(null);
 
+  // Direct Store Purchasing (Manage Stock) State
+  const [isCreateDirectPOOpen, setIsCreateDirectPOOpen] = useState(false);
+  const [directPOPreselectedItem, setDirectPOPreselectedItem] = useState<InventoryItem | null>(null);
+  const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
+  const [selectedPOForReceive, setSelectedPOForReceive] = useState<PurchaseOrder | null>(null);
+
+  // Store Stock Audit State (Physical Stock Count & Discrepancy Adjustment)
+  const [isStockAuditOpen, setIsStockAuditOpen] = useState(false);
+  const [auditPreselectedItem, setAuditPreselectedItem] = useState<InventoryItem | null>(null);
+
+  // Supplier Management State
+  const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false);
+  const [supplierToEdit, setSupplierToEdit] = useState<Supplier | null>(null);
+  const [preselectedSupplierForPO, setPreselectedSupplierForPO] = useState<string | undefined>(undefined);
+
   const currentStore = stores.find((s) => s.id === activeStoreId) || stores[0];
 
   // Count pending indents for this store
@@ -163,6 +211,13 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
     return warehouseStorage
       .getStoreIndents()
       .filter((ind) => ind.storeId === activeStoreId && ind.status === 'pending').length;
+  }, [activeStoreId, refreshKey]);
+
+  // Count active direct store POs (sent to supplier or partially received)
+  const activeDirectPOCount = useMemo(() => {
+    return warehouseStorage
+      .getDirectStorePOs(activeStoreId)
+      .filter((po) => po.status === 'sent_to_supplier' || po.status === 'partially_received').length;
   }, [activeStoreId, refreshKey]);
 
   // Fetch Financials, Orders, Expenses, and Stock for current store
@@ -180,6 +235,10 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
 
   const storeInventory: InventoryItem[] = useMemo(() => {
     return storage.getInventory();
+  }, [refreshKey]);
+
+  const allSuppliers: Supplier[] = useMemo(() => {
+    return warehouseStorage.getSuppliers();
   }, [refreshKey]);
 
   const triggerRefresh = () => {
@@ -420,307 +479,286 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
     );
   };
 
+  // Low stock calculation for current store
+  const lowStockItemsCount = useMemo(() => {
+    return storeInventory.filter((item) => {
+      const allocatedStock = item.storeAllocations?.[activeStoreId] ?? 0;
+      return allocatedStock <= (item.lowStockThreshold || 10);
+    }).length;
+  }, [storeInventory, activeStoreId]);
+
   return (
-    <div className="bg-slate-50 text-slate-900 pb-16">
-      {/* Main Container */}
-      <div className="space-y-6">
-        {/* Store Banner Info */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-800 border border-slate-200 flex items-center justify-center shrink-0">
-              <Building2 className="w-6 h-6 text-amber-600" />
-            </div>
+    <div className="w-full min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
+      {/* Body Container: Sidebar + Main Content (Full-Screen Workspace matching Warehouse) */}
+      <div className="flex-1 flex flex-col md:flex-row w-full relative min-h-[calc(100vh-4rem)]">
+        {/* Collapsible Dark Enterprise Sidebar */}
+        <StoreAdminSidebar
+          activeTab={activeTab as StoreAdminTabId}
+          onSelectTab={(t) => handleTabSelect(t)}
+          activeStore={currentStore}
+          stores={stores}
+          onSelectStore={(sId) => setActiveStoreId(sId)}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapse}
+          onOpenAddExpense={() => setIsAddExpenseOpen(true)}
+          onOpenDirectPO={() => {
+            setDirectPOPreselectedItem(null);
+            setIsCreateDirectPOOpen(true);
+          }}
+          onOpenReceiveGoods={() => {
+            setSelectedPOForReceive(null);
+            setIsReceiveModalOpen(true);
+          }}
+          onOpenIndent={() => {
+            setIndentPreselectedItem(null);
+            setIsCreateIndentOpen(true);
+          }}
+          onOpenAuditStock={() => {
+            setAuditPreselectedItem(null);
+            setIsStockAuditOpen(true);
+          }}
+          activeDirectPOCount={activeDirectPOCount}
+          pendingIndentsCount={pendingIndentsCount}
+          lowStockCount={lowStockItemsCount}
+          totalExpensesCount={allExpenses.length}
+          totalOrdersCount={allOrders.length}
+          suppliersCount={allSuppliers.length}
+          adminName={authState.adminName}
+          onLogout={onLogout}
+        />
+
+        {/* Main Content Viewport: Edge-to-edge full width maximizing table and dashboard space */}
+        <main className="flex-1 min-w-0 p-3 sm:p-5 lg:p-6 space-y-5 overflow-x-hidden bg-[#F8FAFC]">
+          {/* Breadcrumb & View Header */}
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xl font-black text-slate-900">{currentStore.name}</h2>
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 text-[11px] font-extrabold border border-amber-200">
-                  {currentStore.counters.length} POS Stations Active
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                <span>Store Outlets</span>
+                <span>/</span>
+                <span className="text-amber-600 font-extrabold">{currentStore.name}</span>
+                <span>/</span>
+                <span className="text-slate-800 capitalize font-extrabold">
+                  {activeTab.replace(/_/g, ' ')}
                 </span>
-                <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-xs font-mono">
-                  Outlet Code: {currentStore.id}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                  {activeTab === 'financials' && 'Store Financial Statement & P&L Calculation'}
+                  {activeTab === 'expenses' && 'Store Expenses & Outflow Ledger'}
+                  {activeTab === 'sales_orders' && 'Store Sales Orders & POS Register'}
+                  {activeTab === 'staff_counters' && 'Staff & Active Counter Stations'}
+                  {activeTab === 'store_inventory' && 'Store Stock Inventory & Catalog'}
+                  {activeTab === 'manage_stock' && 'Direct Store Purchasing & Goods Receipt'}
+                  {activeTab === 'suppliers' && 'Supplier & Vendor Directory for Direct Purchasing'}
+                  {activeTab === 'stock_indents' && 'Warehouse Indents & Requisitions'}
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-black border border-emerald-200 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Outlet Live</span>
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-mono">
+                  {currentStore.timings || (currentStore.is24x7 ? '24x7 Active' : '10 AM - 12 AM')}
                 </span>
               </div>
-              <p className="text-xs text-slate-600 mt-1">
-                📍 {currentStore.address} • 📞 {currentStore.phone} • Timings: {currentStore.timings || (currentStore.is24x7 ? '24x7 Open' : '10:00 AM - 12:00 AM')}
-              </p>
             </div>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => setIsAddExpenseOpen(true)}
-              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Expense</span>
-            </button>
-            <button
-              onClick={printStoreFinancialReport}
-              className="px-3 py-2 bg-[#1E293B] hover:bg-slate-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
-              title="Print Store Financial Statement & P&L"
-            >
-              <Printer className="w-3.5 h-3.5 text-amber-400" />
-              <span>Print Statement</span>
-            </button>
-            <button
-              onClick={handleExportPDF}
-              className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer border border-slate-200 shadow-xs transition-colors"
-              title="Download Statement as PDF"
-            >
-              <Download className="w-3.5 h-3.5 text-amber-600" />
-              <span>Export PDF</span>
-            </button>
-            <button
-              onClick={triggerRefresh}
-              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer border border-slate-200"
-              title="Refresh Real-time Sales & Expenses"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Refresh</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* CORE FINANCIAL SCORECARDS */}
-        {/* ========================================================================= */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1: Total Sales (Credit Amount from POS Orders) */}
-          <div className="bg-white border border-slate-200 hover:border-amber-500 rounded-2xl p-5 shadow-xs relative overflow-hidden group transition-all">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Total Store Sales (Credit)
-              </span>
-              <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center">
-                <ArrowUpRight className="w-4 h-4 text-amber-600" />
-              </div>
-            </div>
-            <div className="mt-3">
-              <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                ₹{financialSummary.totalSales.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <p className="text-xs text-amber-700 font-bold mt-1 flex items-center gap-1">
-                <span>{financialSummary.orderCount} Orders Billed</span>
-                <span className="text-slate-400">•</span>
-                <span className="text-slate-500">Incoming Revenue</span>
-              </p>
-            </div>
-          </div>
-
-          {/* Card 2: Total Store Expenses (Debit Amount) */}
-          <div className="bg-white border border-slate-200 hover:border-red-300 rounded-2xl p-5 shadow-xs relative overflow-hidden group transition-all">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Store Expenses (Debit)
-              </span>
-              <div className="w-8 h-8 rounded-lg bg-red-100 text-red-700 flex items-center justify-center">
-                <ArrowDownRight className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="mt-3">
-              <div className="text-2xl sm:text-3xl font-black text-red-600 tracking-tight">
-                ₹{financialSummary.totalExpenses.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <p className="text-xs text-red-600 font-bold mt-1 flex items-center gap-1">
-                <span>{financialSummary.expenseCount} Expense Entries</span>
-                <span className="text-slate-400">•</span>
-                <span className="text-slate-500">Outflows</span>
-              </p>
-            </div>
-          </div>
-
-          {/* Card 3: Net Store Balance / Net Profit */}
-          <div className="bg-white border-2 border-amber-500 rounded-2xl p-5 shadow-xs relative overflow-hidden bg-gradient-to-br from-amber-50/40 via-white to-amber-50/40">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
-                Net Store Profit / Balance
-              </span>
-              <div className="w-8 h-8 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center font-black">
-                <IndianRupee className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="mt-3">
-              <div
-                className={`text-2xl sm:text-3xl font-black tracking-tight ${
-                  financialSummary.netStoreBalance >= 0 ? 'text-slate-900' : 'text-red-600'
-                }`}
+            {/* Quick action shortcuts */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => handleTabSelect('manage_stock')}
+                className="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 active:scale-95 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all border border-amber-500/40"
               >
-                ₹{financialSummary.netStoreBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <p className="text-xs text-slate-600 font-bold mt-1">
-                (Sales - Expenses) • Profit Margin: {financialSummary.profitMarginPercent.toFixed(1)}%
-              </p>
+                <Truck className="w-3.5 h-3.5 text-white" />
+                <span>Manage Stock</span>
+                {activeDirectPOCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-slate-950 text-amber-300 text-[10px] font-black">
+                    {activeDirectPOCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => setIsAddExpenseOpen(true)}
+                className="px-3 py-2 bg-[#1E293B] hover:bg-slate-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5 text-amber-400" />
+                <span>Record Expense</span>
+              </button>
+
+              <button
+                onClick={printStoreFinancialReport}
+                className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-800 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer border border-slate-200 shadow-xs transition-colors"
+                title="Print Store Statement"
+              >
+                <Printer className="w-3.5 h-3.5 text-amber-600" />
+                <span>Statement</span>
+              </button>
+
+              <button
+                onClick={triggerRefresh}
+                className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer border border-slate-200"
+                title="Refresh Real-time Data"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
             </div>
           </div>
-
-          {/* Card 4: Expected Cash in Drawer */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Expected Cash In Drawer
-              </span>
-              <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center">
-                <Wallet className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="mt-3">
-              <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                ₹{financialSummary.expectedCashInDrawer.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <p className="text-xs text-slate-500 font-medium mt-1">
-                Cash Sales (₹{financialSummary.salesByMode.cash.toFixed(0)}) - Cash Expenses (₹{financialSummary.expensesByMode.cash.toFixed(0)})
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Payment & Sales Channel Breakdown */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center font-bold">
-                💵
-              </div>
-              <div>
-                <span className="text-xs text-slate-500 font-semibold block">Cash Sales Inflow</span>
-                <span className="text-base font-black text-slate-900">
-                  ₹{financialSummary.salesByMode.cash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
-            <span className="text-[11px] font-mono font-bold bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">
-              {financialSummary.totalSales > 0
-                ? `${((financialSummary.salesByMode.cash / financialSummary.totalSales) * 100).toFixed(0)}%`
-                : '0%'}
-            </span>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center font-bold">
-                📱
-              </div>
-              <div>
-                <span className="text-xs text-slate-500 font-semibold block">UPI & QR Digital Inflow</span>
-                <span className="text-base font-black text-slate-900">
-                  ₹{financialSummary.salesByMode.upi.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
-            <span className="text-[11px] font-mono font-bold bg-amber-50 text-amber-800 px-2 py-0.5 rounded border border-amber-200">
-              {financialSummary.totalSales > 0
-                ? `${((financialSummary.salesByMode.upi / financialSummary.totalSales) * 100).toFixed(0)}%`
-                : '0%'}
-            </span>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-800 flex items-center justify-center font-bold">
-                💳
-              </div>
-              <div>
-                <span className="text-xs text-slate-500 font-semibold block">Card / POS Machine</span>
-                <span className="text-base font-black text-slate-900">
-                  ₹{financialSummary.salesByMode.card.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
-            <span className="text-[11px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
-              {financialSummary.totalSales > 0
-                ? `${((financialSummary.salesByMode.card / financialSummary.totalSales) * 100).toFixed(0)}%`
-                : '0%'}
-            </span>
-          </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* TAB NAVIGATION */}
-        {/* ========================================================================= */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-slate-200">
-          <button
-            onClick={() => handleTabSelect('financials')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === 'financials'
-                ? 'bg-[#1E293B] text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <IndianRupee className="w-4 h-4 text-amber-400" />
-            <span>Store Financial Statement & Calculations</span>
-          </button>
-
-          <button
-            onClick={() => handleTabSelect('expenses')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === 'expenses'
-                ? 'bg-[#1E293B] text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Receipt className="w-4 h-4 text-amber-400" />
-            <span>Store Expenses Ledger ({allExpenses.length})</span>
-          </button>
-
-          <button
-            onClick={() => handleTabSelect('sales_orders')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === 'sales_orders'
-                ? 'bg-[#1E293B] text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <ArrowUpRight className="w-4 h-4 text-amber-400" />
-            <span>Store Sales & Billed Orders ({allOrders.length})</span>
-          </button>
-
-          <button
-            onClick={() => handleTabSelect('staff_counters')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === 'staff_counters'
-                ? 'bg-[#1E293B] text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Users className="w-4 h-4 text-amber-400" />
-            <span>Staff & Counter Stations</span>
-          </button>
-
-          <button
-            onClick={() => handleTabSelect('store_inventory')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === 'store_inventory'
-                ? 'bg-[#1E293B] text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Package className="w-4 h-4 text-amber-400" />
-            <span>Store Stock Inventory ({storeInventory.length})</span>
-          </button>
-
-          <button
-            onClick={() => handleTabSelect('stock_indents')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 ${
-              activeTab === 'stock_indents'
-                ? 'bg-[#1E293B] text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Truck className="w-4 h-4 text-amber-400" />
-            <span>Warehouse Stock Indents</span>
-            {pendingIndentsCount > 0 && (
-              <span className="bg-amber-500 text-slate-950 text-[10px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
-                {pendingIndentsCount}
-              </span>
-            )}
-          </button>
-        </div>
 
         {/* ========================================================================= */}
         {/* TAB CONTENT 1: STORE FINANCIAL STATEMENT & CALCULATIONS */}
         {/* ========================================================================= */}
         {activeTab === 'financials' && (
           <div className="space-y-6">
+            {/* CORE FINANCIAL SCORECARDS (FINANCIAL STATEMENT TAB ONLY) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Card 1: Total Sales (Credit Amount from POS Orders) */}
+              <div className="bg-white border border-slate-200 hover:border-amber-500 rounded-2xl p-5 shadow-xs relative overflow-hidden group transition-all">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Total Store Sales (Credit)
+                  </span>
+                  <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center">
+                    <ArrowUpRight className="w-4 h-4 text-amber-600" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                    ₹{financialSummary.totalSales.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <p className="text-xs text-amber-700 font-bold mt-1 flex items-center gap-1">
+                    <span>{financialSummary.orderCount} Orders Billed</span>
+                    <span className="text-slate-400">•</span>
+                    <span className="text-slate-500">Incoming Revenue</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Card 2: Total Store Expenses (Debit Amount) */}
+              <div className="bg-white border border-slate-200 hover:border-red-300 rounded-2xl p-5 shadow-xs relative overflow-hidden group transition-all">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Store Expenses (Debit)
+                  </span>
+                  <div className="w-8 h-8 rounded-lg bg-red-100 text-red-700 flex items-center justify-center">
+                    <ArrowDownRight className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="text-2xl sm:text-3xl font-black text-red-600 tracking-tight">
+                    ₹{financialSummary.totalExpenses.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <p className="text-xs text-red-600 font-bold mt-1 flex items-center gap-1">
+                    <span>{financialSummary.expenseCount} Expense Entries</span>
+                    <span className="text-slate-400">•</span>
+                    <span className="text-slate-500">Outflows</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Card 3: Net Store Balance / Net Profit */}
+              <div className="bg-white border-2 border-amber-500 rounded-2xl p-5 shadow-xs relative overflow-hidden bg-gradient-to-br from-amber-50/40 via-white to-amber-50/40">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
+                    Net Store Profit / Balance
+                  </span>
+                  <div className="w-8 h-8 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center font-black">
+                    <IndianRupee className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div
+                    className={`text-2xl sm:text-3xl font-black tracking-tight ${
+                      financialSummary.netStoreBalance >= 0 ? 'text-slate-900' : 'text-red-600'
+                    }`}
+                  >
+                    ₹{financialSummary.netStoreBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <p className="text-xs text-slate-600 font-bold mt-1">
+                    (Sales - Expenses) • Profit Margin: {financialSummary.profitMarginPercent.toFixed(1)}%
+                  </p>
+                </div>
+              </div>
+
+              {/* Card 4: Expected Cash in Drawer */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Expected Cash In Drawer
+                  </span>
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center">
+                    <Wallet className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                    ₹{financialSummary.expectedCashInDrawer.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium mt-1">
+                    Cash Sales (₹{financialSummary.salesByMode.cash.toFixed(0)}) - Cash Expenses (₹{financialSummary.expensesByMode.cash.toFixed(0)})
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment & Sales Channel Breakdown */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center font-bold">
+                    💵
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-500 font-semibold block">Cash Sales Inflow</span>
+                    <span className="text-base font-black text-slate-900">
+                      ₹{financialSummary.salesByMode.cash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+                <span className="text-[11px] font-mono font-bold bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">
+                  {financialSummary.totalSales > 0
+                    ? `${((financialSummary.salesByMode.cash / financialSummary.totalSales) * 100).toFixed(0)}%`
+                    : '0%'}
+                </span>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center font-bold">
+                    📱
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-500 font-semibold block">UPI & QR Digital Inflow</span>
+                    <span className="text-base font-black text-slate-900">
+                      ₹{financialSummary.salesByMode.upi.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+                <span className="text-[11px] font-mono font-bold bg-amber-50 text-amber-800 px-2 py-0.5 rounded border border-amber-200">
+                  {financialSummary.totalSales > 0
+                    ? `${((financialSummary.salesByMode.upi / financialSummary.totalSales) * 100).toFixed(0)}%`
+                    : '0%'}
+                </span>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-800 flex items-center justify-center font-bold">
+                    💳
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-500 font-semibold block">Card / POS Machine</span>
+                    <span className="text-base font-black text-slate-900">
+                      ₹{financialSummary.salesByMode.card.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+                <span className="text-[11px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
+                  {financialSummary.totalSales > 0
+                    ? `${((financialSummary.salesByMode.card / financialSummary.totalSales) * 100).toFixed(0)}%`
+                    : '0%'}
+                </span>
+              </div>
+            </div>
             {/* Calculation Audit Sheet */}
             <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
               <div className="p-5 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1220,17 +1258,40 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                   Store outlet inventory is synchronized with Central Warehouse dispatches and real-time POS billings.
                 </span>
               </div>
-              <div className="flex items-center gap-2.5 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuditPreselectedItem(null);
+                    setIsStockAuditOpen(true);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 active:scale-95 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer border border-amber-500/40"
+                  title="Physically count and audit store stock (Store Admin Password Required)"
+                >
+                  <ClipboardCheck className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Audit Store Stock</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDirectPOPreselectedItem(null);
+                    setIsCreateDirectPOOpen(true);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-[#1E293B] hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Direct PO</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => {
                     setIndentPreselectedItem(null);
                     setIsCreateIndentOpen(true);
                   }}
-                  className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer border border-slate-200"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Order Stock from Warehouse</span>
+                  <Truck className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Order from WH</span>
                 </button>
                 <span className="font-bold whitespace-nowrap bg-amber-200/50 px-2 py-1 rounded-lg">
                   {filteredInventory.length} of {storeInventory.length} Items
@@ -1345,22 +1406,50 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                               </span>
                             </td>
                             <td className="py-3 px-4 text-right">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setIndentPreselectedItem(item);
-                                  setIsCreateIndentOpen(true);
-                                }}
-                                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 ${
-                                  isLowStock
-                                    ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-2xs'
-                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                                }`}
-                                title={`Order ${item.name} from Central Warehouse`}
-                              >
-                                <Truck className="w-3.5 h-3.5" />
-                                <span>Indent</span>
-                              </button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAuditPreselectedItem(item);
+                                    setIsStockAuditOpen(true);
+                                  }}
+                                  className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                                  title={`Perform physical count audit for ${item.name}`}
+                                >
+                                  <ClipboardCheck className="w-3.5 h-3.5 text-amber-700" />
+                                  <span>Audit</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDirectPOPreselectedItem(item);
+                                    setIsCreateDirectPOOpen(true);
+                                  }}
+                                  className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                                  title={`Direct PO for ${item.name} directly from supplier`}
+                                >
+                                  <Plus className="w-3 h-3" />
+                                  <span>Direct PO</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIndentPreselectedItem(item);
+                                    setIsCreateIndentOpen(true);
+                                  }}
+                                  className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                                    isLowStock
+                                      ? 'bg-slate-800 hover:bg-slate-900 text-white shadow-2xs'
+                                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                  }`}
+                                  title={`Order ${item.name} from Central Warehouse`}
+                                >
+                                  <Truck className="w-3.5 h-3.5" />
+                                  <span>Indent</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1456,7 +1545,54 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
         )}
 
         {/* ========================================================================= */}
-        {/* TAB CONTENT 6: STORE INVENTORY INDENTS (WAREHOUSE ORDERS)                */}
+        {/* TAB CONTENT 6: MANAGE STOCK (DIRECT STORE PURCHASING & POs)              */}
+        {/* ========================================================================= */}
+        {activeTab === 'manage_stock' && (
+          <DirectStorePurchasesView
+            currentStore={currentStore}
+            inventory={storeInventory}
+            adminName={authState.adminName}
+            onRefresh={triggerRefresh}
+            onOpenCreatePO={(preselected) => {
+              setDirectPOPreselectedItem(preselected || null);
+              setPreselectedSupplierForPO(undefined);
+              setIsCreateDirectPOOpen(true);
+            }}
+          />
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB CONTENT 7: SUPPLIER & VENDOR MANAGEMENT                              */}
+        {/* ========================================================================= */}
+        {activeTab === 'suppliers' && (
+          <StoreSuppliersView
+            currentStore={currentStore}
+            inventory={storeInventory}
+            adminName={authState.adminName}
+            onOpenCreatePOForSupplier={(sup) => {
+              setDirectPOPreselectedItem(null);
+              setPreselectedSupplierForPO(sup?.id);
+              setIsCreateDirectPOOpen(true);
+            }}
+            onOpenReceiveGoods={(po) => {
+              setSelectedPOForReceive(po || null);
+              setIsReceiveModalOpen(true);
+            }}
+            onOpenAddSupplier={() => {
+              setSupplierToEdit(null);
+              setIsAddSupplierOpen(true);
+            }}
+            onOpenEditSupplier={(sup) => {
+              setSupplierToEdit(sup);
+              setIsAddSupplierOpen(true);
+            }}
+            refreshKey={refreshKey}
+            triggerRefresh={triggerRefresh}
+          />
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB CONTENT 8: STORE INVENTORY INDENTS (WAREHOUSE ORDERS)                */}
         {/* ========================================================================= */}
         {activeTab === 'stock_indents' && (
           <StoreIndentsView
@@ -1469,6 +1605,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
             onRefresh={triggerRefresh}
           />
         )}
+        </main>
       </div>
 
       {/* ========================================================================= */}
@@ -1804,6 +1941,74 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
         onSuccess={() => {
           triggerRefresh();
           handleTabSelect('stock_indents');
+        }}
+      />
+
+      {/* Create Direct Store Purchase Order Modal */}
+      <CreateDirectStorePOModal
+        isOpen={isCreateDirectPOOpen}
+        onClose={() => {
+          setIsCreateDirectPOOpen(false);
+          setDirectPOPreselectedItem(null);
+          setPreselectedSupplierForPO(undefined);
+        }}
+        currentStore={currentStore}
+        inventory={storeInventory}
+        adminName={authState.adminName}
+        preselectedItem={directPOPreselectedItem}
+        preselectedSupplierId={preselectedSupplierForPO}
+        onSuccess={() => {
+          triggerRefresh();
+          handleTabSelect('manage_stock');
+        }}
+      />
+
+      {/* Receive Direct Store Goods Modal */}
+      <ReceiveDirectStoreGoodsModal
+        isOpen={isReceiveModalOpen}
+        onClose={() => {
+          setIsReceiveModalOpen(false);
+          setSelectedPOForReceive(null);
+        }}
+        currentStore={currentStore}
+        inventory={storeInventory}
+        adminName={authState.adminName}
+        preselectedPO={selectedPOForReceive}
+        onSuccess={() => {
+          triggerRefresh();
+          handleTabSelect('manage_stock');
+        }}
+      />
+
+      {/* Physical Store Stock Audit Modal (Store Admin Password Required) */}
+      <StoreStockAuditModal
+        isOpen={isStockAuditOpen}
+        onClose={() => {
+          setIsStockAuditOpen(false);
+          setAuditPreselectedItem(null);
+        }}
+        currentStore={currentStore}
+        inventory={storeInventory}
+        adminName={authState.adminName}
+        preselectedItem={auditPreselectedItem}
+        onSuccess={() => {
+          triggerRefresh();
+          handleTabSelect('store_inventory');
+        }}
+      />
+
+      {/* Register / Edit Supplier & Vendor Modal */}
+      <SupplierModal
+        isOpen={isAddSupplierOpen}
+        onClose={() => {
+          setIsAddSupplierOpen(false);
+          setSupplierToEdit(null);
+        }}
+        supplierToEdit={supplierToEdit}
+        inventory={storeInventory}
+        currentStore={currentStore}
+        onSuccess={() => {
+          triggerRefresh();
         }}
       />
     </div>

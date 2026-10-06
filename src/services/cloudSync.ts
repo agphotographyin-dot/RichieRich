@@ -540,6 +540,67 @@ class PocketBaseTwoWayRealtimeSyncService {
         } catch {}
       }
 
+      // Normalize remote documents by collection type to guarantee reliable numbers
+      if (Array.isArray(resolvedDocs)) {
+        if (storageKey === STORAGE_KEYS.INWARD_BILLS) {
+          resolvedDocs = resolvedDocs.map((b: any) => ({
+            ...b,
+            id: b.id || `pb-${Date.now()}`,
+            billNumber: b.billNumber || 'PB-RECORD',
+            supplierName: b.supplierName || 'Unknown Supplier',
+            supplierInvoiceNo: b.supplierInvoiceNo || 'N/A',
+            warehouseName: b.warehouseName || 'Central Warehouse',
+            grandTotal: Number(b.grandTotal) || 0,
+            dueAmount: Number(b.dueAmount) || 0,
+            paidAmount: Number(b.paidAmount) || 0,
+            subtotal: Number(b.subtotal) || 0,
+            gstAmount: Number(b.gstAmount) || 0,
+            paymentStatus: b.paymentStatus || (Number(b.dueAmount) > 0 ? 'due' : 'paid'),
+            grnStatus: b.grnStatus || 'verified_stocked',
+            items: Array.isArray(b.items)
+              ? b.items.map((it: any) => ({
+                  ...it,
+                  sku: it.sku || 'SKU',
+                  name: it.name || 'Product',
+                  quantity: Number(it.quantity) || 1,
+                  unitCost: Number(it.unitCost) || 0,
+                  totalCost: Number(it.totalCost) || 0,
+                }))
+              : [],
+          }));
+        } else if (storageKey === STORAGE_KEYS.PURCHASE_ORDERS) {
+          resolvedDocs = resolvedDocs.map((po: any) => ({
+            ...po,
+            id: po.id || `po-${Date.now()}`,
+            poNumber: po.poNumber || 'PO-RECORD',
+            supplierName: po.supplierName || 'Supplier',
+            status: po.status || 'approved',
+            grandTotal: Number(po.grandTotal) || 0,
+            subtotal: Number(po.subtotal) || 0,
+            taxTotal: Number(po.taxTotal) || 0,
+            freightCharge: Number(po.freightCharge) || 0,
+            items: Array.isArray(po.items)
+              ? po.items.map((it: any) => ({
+                  ...it,
+                  sku: it.sku || 'SKU',
+                  name: it.name || 'Product',
+                  quantityOrdered: Number(it.quantityOrdered) || 1,
+                  quantityReceived: Number(it.quantityReceived) || 0,
+                  unitPrice: Number(it.unitPrice) || 0,
+                  totalAmount: Number(it.totalAmount) || 0,
+                }))
+              : [],
+          }));
+        } else if (storageKey === STORAGE_KEYS.SUPPLIERS) {
+          resolvedDocs = resolvedDocs.map((s: any) => ({
+            ...s,
+            currentOutstanding: Number(s.currentOutstanding) || 0,
+            totalPurchases: Number(s.totalPurchases) || 0,
+            totalPaid: Number(s.totalPaid) || 0,
+          }));
+        }
+      }
+
       // 1. Immediately update in-memory cache for zero-latency UI response
       if (this.onStorageCacheUpdate) {
         this.onStorageCacheUpdate(storageKey, resolvedDocs);
