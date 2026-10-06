@@ -393,7 +393,7 @@ export const CreateDirectStorePOModal: React.FC<CreateDirectStorePOModalProps> =
                             {item.taxPercent}% GST
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono font-black text-slate-900">
-                            ₹{lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            ₹{Number(lineTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="py-2.5 px-2 text-center">
                             <button
@@ -533,7 +533,7 @@ export const CreateDirectStorePOModal: React.FC<CreateDirectStorePOModalProps> =
                   Grand Total PO Value:
                 </span>
                 <span className="text-xl font-black font-mono text-white">
-                  ₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  ₹{Number(grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>

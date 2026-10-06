@@ -523,7 +523,7 @@ export const ReceiveDirectStoreGoodsModal: React.FC<ReceiveDirectStoreGoodsModal
               <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-400">Inward Valuation:</span>
                 <span className="text-base font-black font-mono text-white">
-                  ₹{totalInwardValuation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  ₹{Number(totalInwardValuation || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
