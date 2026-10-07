@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, IndianRupee, CreditCard, Building2 } from 'lucide-react';
 import { Supplier } from '../../../types/warehouse';
 import { CURRENCY } from '../../../services/storage';
@@ -22,11 +22,22 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   const [selectedSupId, setSelectedSupId] = useState(supplierId || suppliers[0]?.id || '');
   const supplier = suppliers.find((s) => s.id === selectedSupId) || suppliers[0];
 
-  const [amount, setAmount] = useState<number>(supplier?.currentOutstanding || 50000);
+  const [amount, setAmount] = useState<number>(supplier?.currentOutstanding || 0);
   const [paymentMode, setPaymentMode] = useState<'NEFT' | 'RTGS' | 'UPI' | 'Cheque' | 'Cash'>('NEFT');
   const [refNumber, setRefNumber] = useState(`UTR-${Math.floor(10000000 + Math.random() * 90000000)}`);
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      const targetId = supplierId || suppliers[0]?.id || '';
+      setSelectedSupId(targetId);
+      const targetSup = suppliers.find((s) => s.id === targetId) || suppliers[0];
+      setAmount(targetSup?.currentOutstanding || 0);
+      setRefNumber(`UTR-${Math.floor(10000000 + Math.random() * 90000000)}`);
+      setNotes('');
+    }
+  }, [isOpen, supplierId, suppliers]);
 
   if (!isOpen) return null;
 

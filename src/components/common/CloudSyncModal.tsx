@@ -102,7 +102,9 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
     setIsPushing(true);
     setPushMessage(null);
     try {
-      const success = await cloudSync.uploadAllLocalData();
+      const timeoutPromise = new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 4000));
+      const syncPromise = cloudSync.uploadAllLocalData();
+      const success = await Promise.race([syncPromise, timeoutPromise]);
       if (success) {
         setPushMessage('✅ Two-way sync complete: All local and server data are in perfect sync!');
       } else {

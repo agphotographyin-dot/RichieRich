@@ -571,13 +571,23 @@ export const warehouseStorage = {
     return true;
   },
 
-  recordSupplierPayment(supplierId: string, amount: number, paymentMode: 'bank_neft' | 'upi_qr' | 'cheque' | 'cash', refNo: string, notes?: string): boolean {
+  recordSupplierPayment(
+    supplierId: string,
+    amount: number,
+    paymentMode: 'bank_neft' | 'upi_qr' | 'cheque' | 'cash',
+    refNo: string,
+    notes?: string,
+    specificBillId?: string
+  ): boolean {
     const suppliers = this.getSuppliers();
-    const supplier = suppliers.find((s) => s.id === supplierId);
+    const supplier = suppliers.find((s) => s.id === supplierId || (s.name && s.name.trim().toLowerCase() === supplierId.trim().toLowerCase()));
     if (!supplier) return false;
 
-    supplier.currentOutstanding = Math.max(0, (Number(supplier.currentOutstanding) || 0) - amount);
-    supplier.totalPaid = (Number(supplier.totalPaid) || 0) + amount;
+    const actualAmount = Math.max(0, Number(amount) || 0);
+    if (actualAmount <= 0) return false;
+
+    supplier.currentOutstanding = Math.max(0, (Number(supplier.currentOutstanding) || 0) - actualAmount);
+    supplier.totalPaid = (Number(supplier.totalPaid) || 0) + actualAmount;
     supplier.updatedAt = new Date().toISOString();
     this.saveSuppliers(suppliers);
     cloudSync.syncDocument('suppliers', supplier.id, supplier);
@@ -591,7 +601,7 @@ export const warehouseStorage = {
       date: new Date().toISOString().split('T')[0],
       type: 'payment_made',
       referenceNo: refNo || `PAY-${Date.now().toString().slice(-4)}`,
-      debit: amount,
+      debit: actualAmount,
       credit: 0,
       runningBalance: supplier.currentOutstanding,
       paymentMode,
@@ -600,25 +610,65 @@ export const warehouseStorage = {
     this.saveSupplierLedger([newEntry, ...ledgers]);
     cloudSync.syncDocument('supplier_ledger', newEntry.id, newEntry);
 
-    // Update Purchase bills if applicable
+    // Update Purchase Bills
     const bills = this.getPurchaseBills();
-    let remainingPayment = amount;
+    let remainingPayment = actualAmount;
+
     const updatedBills = bills.map((b) => {
-      if (b.supplierId === supplierId && Number(b.dueAmount) > 0 && remainingPayment > 0) {
-        const payForThisBill = Math.min(Number(b.dueAmount), remainingPayment);
-        b.paidAmount = (Number(b.paidAmount) || 0) + payForThisBill;
-        b.dueAmount = Math.max(0, (Number(b.dueAmount) || 0) - payForThisBill);
-        remainingPayment -= payForThisBill;
-        b.paymentStatus = b.dueAmount === 0 ? 'paid' : 'partial';
-        b.updatedAt = new Date().toISOString();
-        cloudSync.syncDocument('inward_bills', b.id, b);
+      const isMatchingSupplier =
+        b.supplierId === supplier.id ||
+        (b.supplierName && b.supplierName.trim().toLowerCase() === supplier.name.trim().toLowerCase());
+
+      if (isMatchingSupplier) {
+        if (specificBillId && b.id === specificBillId && remainingPayment > 0) {
+          const payForThisBill = Math.min(Number(b.dueAmount) || 0, remainingPayment);
+          b.paidAmount = (Number(b.paidAmount) || 0) + payForThisBill;
+          b.dueAmount = Math.max(0, (Number(b.dueAmount) || 0) - payForThisBill);
+          remainingPayment -= payForThisBill;
+          b.paymentStatus = b.dueAmount <= 0 ? 'paid' : 'partial';
+          b.updatedAt = new Date().toISOString();
+          cloudSync.syncDocument('inward_bills', b.id, b);
+        } else if (!specificBillId && Number(b.dueAmount) > 0 && remainingPayment > 0) {
+          const payForThisBill = Math.min(Number(b.dueAmount) || 0, remainingPayment);
+          b.paidAmount = (Number(b.paidAmount) || 0) + payForThisBill;
+          b.dueAmount = Math.max(0, (Number(b.dueAmount) || 0) - payForThisBill);
+          remainingPayment -= payForThisBill;
+          b.paymentStatus = b.dueAmount <= 0 ? 'paid' : 'partial';
+          b.updatedAt = new Date().toISOString();
+          cloudSync.syncDocument('inward_bills', b.id, b);
+        } else if (supplier.currentOutstanding === 0) {
+          // If vendor balance is completely cleared to zero, mark all their bills settled
+          b.dueAmount = 0;
+          b.paidAmount = Number(b.grandTotal) || 0;
+          b.paymentStatus = 'paid';
+          b.updatedAt = new Date().toISOString();
+          cloudSync.syncDocument('inward_bills', b.id, b);
+        }
       }
       return b;
     });
     this.savePurchaseBills(updatedBills);
 
+    // Update linked Purchase Orders payment status
+    const orders = this.getPurchaseOrders();
+    const updatedOrders = orders.map((po) => {
+      const isMatchingSupplier =
+        po.supplierId === supplier.id ||
+        (po.supplierName && po.supplierName.trim().toLowerCase() === supplier.name.trim().toLowerCase());
+
+      if (isMatchingSupplier) {
+        if (supplier.currentOutstanding === 0) {
+          po.paymentStatus = 'paid';
+          po.updatedAt = new Date().toISOString();
+          cloudSync.syncDocument('purchase_orders', po.id, po);
+        }
+      }
+      return po;
+    });
+    this.savePurchaseOrders(updatedOrders);
+
     storage.addNotification({
-      title: `Supplier Payment Made: ₹${amount.toLocaleString('en-IN')}`,
+      title: `Supplier Payment Made: ₹${actualAmount.toLocaleString('en-IN')}`,
       message: `Paid to ${supplier.name} via ${paymentMode.toUpperCase()}. Outstanding: ₹${supplier.currentOutstanding.toLocaleString('en-IN')}`,
       type: 'system_backup',
       targetRole: 'admin',
