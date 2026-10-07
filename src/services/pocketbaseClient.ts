@@ -249,6 +249,8 @@ export const autoProvisionPocketBaseCollections = async (
       'stock_transfers',
       'store_indents',
       'suppliers',
+      'supplier_ledger',
+      'warehouse_batches',
       'system_metadata',
     ];
 
