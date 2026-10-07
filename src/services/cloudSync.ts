@@ -37,6 +37,7 @@ export const STORAGE_KEYS = {
   TRANSFERS: 'rr_wh_transfers',
   INDENTS: 'rr_wh_indents',
   SUPPLIERS: 'rr_wh_suppliers',
+  SUPPLIER_LEDGER: 'rr_wh_supplier_ledger',
   AUDIT_TRAIL: 'rr_wh_audit_trail',
   BATCHES: 'rr_wh_batches',
   SYNC_QUEUE: 'rr_pocketbase_sync_queue',
@@ -54,6 +55,7 @@ export const COLLECTIONS = {
   TRANSFERS: 'stock_transfers',
   INDENTS: 'store_indents',
   SUPPLIERS: 'suppliers',
+  SUPPLIER_LEDGER: 'supplier_ledger',
   AUDIT_TRAIL: 'stock_audit_trail',
   BATCHES: 'warehouse_batches',
   META: 'system_metadata',
@@ -70,6 +72,7 @@ const COLLECTION_STORAGE_MAP: Record<string, { storageKey: string; isWarehouse: 
   [COLLECTIONS.TRANSFERS]: { storageKey: STORAGE_KEYS.TRANSFERS, isWarehouse: true },
   [COLLECTIONS.INDENTS]: { storageKey: STORAGE_KEYS.INDENTS, isWarehouse: true },
   [COLLECTIONS.SUPPLIERS]: { storageKey: STORAGE_KEYS.SUPPLIERS, isWarehouse: true },
+  [COLLECTIONS.SUPPLIER_LEDGER]: { storageKey: STORAGE_KEYS.SUPPLIER_LEDGER, isWarehouse: true },
   [COLLECTIONS.AUDIT_TRAIL]: { storageKey: STORAGE_KEYS.AUDIT_TRAIL, isWarehouse: true },
   [COLLECTIONS.BATCHES]: { storageKey: STORAGE_KEYS.BATCHES, isWarehouse: true },
 };
@@ -457,14 +460,18 @@ class PocketBaseTwoWayRealtimeSyncService {
   private fastItemHash(item: any): string {
     if (!item) return '';
     if (typeof item === 'object') {
-      const stock = item.stockQuantity !== undefined ? item.stockQuantity : (item.stock !== undefined ? item.stock : '');
-      const storeAlloc = item.storeAllocations ? JSON.stringify(item.storeAllocations) : '';
-      const boxStock = item.fullBoxStock !== undefined ? item.fullBoxStock : '';
-      const looseStock = item.loosePieceStock !== undefined ? item.loosePieceStock : '';
-      const storeBoxes = item.storeBoxAllocations ? JSON.stringify(item.storeBoxAllocations) : '';
-      const transferItems = Array.isArray(item.items) ? item.items.map((i: any) => `${i.itemId}:${i.dispatchedQty || 0}:${i.receivedQty || 0}`).join(',') : '';
-      const lastMod = item.lastStockChange || item.updatedAt || item.lastUpdated || '';
-      return `${item.id || item.sku || item.transferNumber || ''}_${lastMod}_${stock}_${storeAlloc}_${boxStock}_${looseStock}_${storeBoxes}_${transferItems}_${item.status || ''}_${item.total || item.totalValuation || ''}_${item.paymentStatus || ''}`;
+      try {
+        return JSON.stringify(item);
+      } catch {
+        const id = item.id || item.sku || item.transferNumber || item.poNumber || item.billNumber || '';
+        const outstanding = item.currentOutstanding !== undefined ? item.currentOutstanding : '';
+        const due = item.dueAmount !== undefined ? item.dueAmount : '';
+        const paid = item.paidAmount !== undefined ? item.paidAmount : (item.totalPaid !== undefined ? item.totalPaid : '');
+        const payStatus = item.paymentStatus || '';
+        const stock = item.stockQuantity !== undefined ? item.stockQuantity : '';
+        const lastMod = item.lastStockChange || item.updatedAt || item.lastUpdated || '';
+        return `${id}_${lastMod}_${outstanding}_${due}_${paid}_${payStatus}_${stock}`;
+      }
     }
     return String(item);
   }
@@ -531,6 +538,13 @@ class PocketBaseTwoWayRealtimeSyncService {
             currentOutstanding: Number(s.currentOutstanding) || 0,
             totalPurchases: Number(s.totalPurchases) || 0,
             totalPaid: Number(s.totalPaid) || 0,
+          }));
+        } else if (storageKey === STORAGE_KEYS.SUPPLIER_LEDGER) {
+          resolvedDocs = resolvedDocs.map((l: any) => ({
+            ...l,
+            debit: Number(l.debit) || 0,
+            credit: Number(l.credit) || 0,
+            runningBalance: Number(l.runningBalance) || 0,
           }));
         }
       }

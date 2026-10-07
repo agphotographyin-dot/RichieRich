@@ -576,9 +576,11 @@ export const warehouseStorage = {
     const supplier = suppliers.find((s) => s.id === supplierId);
     if (!supplier) return false;
 
-    supplier.currentOutstanding = Math.max(0, supplier.currentOutstanding - amount);
-    supplier.totalPaid = (supplier.totalPaid || 0) + amount;
+    supplier.currentOutstanding = Math.max(0, (Number(supplier.currentOutstanding) || 0) - amount);
+    supplier.totalPaid = (Number(supplier.totalPaid) || 0) + amount;
+    supplier.updatedAt = new Date().toISOString();
     this.saveSuppliers(suppliers);
+    cloudSync.syncDocument('suppliers', supplier.id, supplier);
 
     // Record in ledger
     const ledgers = this.getSupplierLedger();
@@ -596,17 +598,20 @@ export const warehouseStorage = {
       notes: notes || `Payment recorded via ${paymentMode.toUpperCase()}`,
     };
     this.saveSupplierLedger([newEntry, ...ledgers]);
+    cloudSync.syncDocument('supplier_ledger', newEntry.id, newEntry);
 
     // Update Purchase bills if applicable
     const bills = this.getPurchaseBills();
     let remainingPayment = amount;
     const updatedBills = bills.map((b) => {
-      if (b.supplierId === supplierId && b.dueAmount > 0 && remainingPayment > 0) {
-        const payForThisBill = Math.min(b.dueAmount, remainingPayment);
-        b.paidAmount += payForThisBill;
-        b.dueAmount -= payForThisBill;
+      if (b.supplierId === supplierId && Number(b.dueAmount) > 0 && remainingPayment > 0) {
+        const payForThisBill = Math.min(Number(b.dueAmount), remainingPayment);
+        b.paidAmount = (Number(b.paidAmount) || 0) + payForThisBill;
+        b.dueAmount = Math.max(0, (Number(b.dueAmount) || 0) - payForThisBill);
         remainingPayment -= payForThisBill;
         b.paymentStatus = b.dueAmount === 0 ? 'paid' : 'partial';
+        b.updatedAt = new Date().toISOString();
+        cloudSync.syncDocument('inward_bills', b.id, b);
       }
       return b;
     });
@@ -646,6 +651,7 @@ export const warehouseStorage = {
       setWhCached(WH_KEYS.SUPPLIER_LEDGER, list);
       safeStorage.setItem(WH_KEYS.SUPPLIER_LEDGER, JSON.stringify(list));
       this.notifySubscribers();
+      cloudSync.debouncedSyncCollection('supplier_ledger', list);
     } catch (e) {
       console.error(e);
     }

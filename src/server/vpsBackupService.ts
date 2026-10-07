@@ -37,6 +37,8 @@ export const BACKUP_COLLECTIONS = [
   'stock_transfers',
   'store_indents',
   'suppliers',
+  'supplier_ledger',
+  'warehouse_batches',
   'system_metadata',
 ];
 
