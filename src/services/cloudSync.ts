@@ -83,7 +83,7 @@ class PocketBaseTwoWayRealtimeSyncService {
     lastSyncedAt: null,
     itemsSynced: 0,
     activeListenersCount: 0,
-    autoFetchIntervalSeconds: 30,
+    autoFetchIntervalSeconds: 0,
     nextAutoFetchAt: null,
   };
 
@@ -92,7 +92,7 @@ class PocketBaseTwoWayRealtimeSyncService {
   private isInitialized = false;
   private isApplyingRemoteUpdate = false;
   private reconnectTimer: any = null;
-  private autoFetchIntervalSeconds = 30;
+  private autoFetchIntervalSeconds = 0;
   private autoFetchTimer: any = null;
   private nextAutoFetchAt: Date | null = null;
   private onVisibilityChangeHandler?: () => void;

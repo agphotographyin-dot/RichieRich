@@ -387,13 +387,15 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
                   const sec = Number(e.target.value);
                   cloudSync.setAutoFetchInterval(sec);
                 }}
-                className="px-2.5 py-1 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800 font-medium cursor-pointer"
+                className="px-2.5 py-1 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800 font-semibold cursor-pointer"
               >
+                <option value={0}>⚡ Realtime (Continuous SSE Stream)</option>
+                <option value={5}>⚡ Every 5 Seconds (Ultra-Fast Realtime)</option>
+                <option value={10}>⚡ Every 10 Seconds (Fast Realtime)</option>
                 <option value={15}>Every 15 Seconds (Rapid POS)</option>
-                <option value={30}>Every 30 Seconds (Recommended)</option>
+                <option value={30}>Every 30 Seconds (Balanced)</option>
                 <option value={60}>Every 60 Seconds (1 Minute)</option>
                 <option value={120}>Every 120 Seconds (2 Minutes)</option>
-                <option value={0}>Real-Time SSE Only (Instant Push)</option>
               </select>
             </div>
           </div>

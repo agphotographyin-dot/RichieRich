@@ -58,7 +58,7 @@ export const CloudSyncBadge: React.FC = () => {
         title={`PocketBase Live Sync • ${
           syncState.autoFetchIntervalSeconds > 0
             ? `Auto-fetch every ${syncState.autoFetchIntervalSeconds}s`
-            : 'Instant Realtime Push'
+            : '⚡ Realtime (Instant SSE Push)'
         } • Last Synced: ${syncState.lastSyncedAt ? syncState.lastSyncedAt.toLocaleTimeString() : 'Connecting...'}`}
         className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/80 transition-all cursor-pointer shadow-xs"
       >

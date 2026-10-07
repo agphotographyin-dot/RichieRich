@@ -41,6 +41,14 @@ const STORAGE_KEYS = {
 
 export const CURRENCY = '₹';
 
+let warehouseStorageRef: any = null;
+export function setWarehouseStorageRef(ref: any) {
+  warehouseStorageRef = ref;
+}
+export function getWarehouseStorageRef() {
+  return warehouseStorageRef;
+}
+
 /**
  * Normalizes any category string:
  * - If category is Paan (or pan, cat-paan, etc.) -> 'Paan'
@@ -454,9 +462,6 @@ export class StorageService {
     if (!safeStorage.getItem(STORAGE_KEYS.STORE_EXPENSES)) {
       safeStorage.setItem(STORAGE_KEYS.STORE_EXPENSES, JSON.stringify([]));
     }
-
-    // Run active purge of legacy dummy mock entries
-    this.purgeAllDummyData();
   }
 
   /**
@@ -2982,14 +2987,6 @@ export class StorageService {
 }
 
 export const storage = StorageService.getInstance();
-
-let warehouseStorageRef: any = null;
-export function setWarehouseStorageRef(ref: any) {
-  warehouseStorageRef = ref;
-}
-export function getWarehouseStorageRef() {
-  return warehouseStorageRef;
-}
 
 /**
  * Calculates current stock for a single inventory item across Central Warehouse and Retail Stores

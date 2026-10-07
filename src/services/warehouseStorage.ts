@@ -261,7 +261,6 @@ export function cleanWarehouseDummyData(): void {
     console.error('Error in warehouse clean data', e);
   }
 }
-cleanWarehouseDummyData();
 
 const warehouseListeners: Set<() => void> = new Set();
 const whMemoryCache: Map<string, any> = new Map();
