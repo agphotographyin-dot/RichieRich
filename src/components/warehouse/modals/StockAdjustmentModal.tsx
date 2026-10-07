@@ -33,11 +33,11 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
   const [locationType, setLocationType] = useState<'warehouse' | 'store'>('warehouse');
   const [storeId, setStoreId] = useState(stores[0]?.id || 'bopal');
 
-  const [selectedItemName, setSelectedItemName] = useState(inventory[0]?.name || 'Royal Maghai Meetha Paan');
-  const [itemId, setItemId] = useState(inventory[0]?.id || 'item-101');
-  const [itemSku, setItemSku] = useState(inventory[0]?.sku || 'PAN-MAG-01');
+  const [selectedItemName, setSelectedItemName] = useState(inventory[0]?.name || '');
+  const [itemId, setItemId] = useState(inventory[0]?.id || '');
+  const [itemSku, setItemSku] = useState(inventory[0]?.sku || '');
   const [itemCategory, setItemCategory] = useState(inventory[0]?.category || 'Paan');
-  const [itemCost, setItemCost] = useState(inventory[0]?.costPrice || 20);
+  const [itemCost, setItemCost] = useState(inventory[0]?.costPrice || 0);
   const [itemUnit, setItemUnit] = useState(inventory[0]?.unit || 'pieces');
 
   const [batchNumber, setBatchNumber] = useState('');

@@ -96,18 +96,21 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
     const defaultInv = inventory[0];
     const isBox = Boolean(defaultInv?.sellAsLoose || (defaultInv?.piecesPerBox && defaultInv.piecesPerBox > 1));
     const ppb = defaultInv?.piecesPerBox || (isBox ? 10 : 1);
+    if (!defaultInv) {
+      return [];
+    }
     return [
       {
-        itemId: defaultInv?.id || 'item-101',
-        name: defaultInv?.name || 'Royal Maghai Meetha Paan',
-        sku: defaultInv?.sku || 'PAN-MAG-01',
-        category: defaultInv?.category || 'Paan',
-        batchNumber: batches[0]?.batchNumber || 'BATCH-AMD-01',
-        quantity: 20,
+        itemId: defaultInv.id,
+        name: defaultInv.name,
+        sku: defaultInv.sku,
+        category: defaultInv.category,
+        batchNumber: batches.find(b => b.itemId === defaultInv.id)?.batchNumber || '',
+        quantity: 1,
         transferUnit: isBox ? 'boxes' : 'pieces',
         piecesPerBox: ppb,
-        unit: defaultInv?.unit || (isBox ? 'boxes' : 'pieces'),
-        unitCost: defaultInv?.costPrice || 20,
+        unit: defaultInv.unit || (isBox ? 'boxes' : 'pieces'),
+        unitCost: defaultInv.costPrice || 0,
       },
     ];
   });
@@ -151,15 +154,8 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
   if (!isOpen) return null;
 
   const handleAddItem = () => {
-    const defaultItem = inventory[0] || {
-      id: `item-${Date.now()}`,
-      name: '',
-      sku: 'SKU-TRF',
-      category: 'Paan',
-      costPrice: 20,
-      unit: 'units',
-      piecesPerBox: 1,
-    };
+    const defaultItem = inventory[0];
+    if (!defaultItem) return;
     const isBox = (defaultItem.unit || '').toLowerCase().includes('box');
     const ppb = defaultItem.piecesPerBox || 1;
     setItems([
@@ -169,12 +165,12 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
         name: defaultItem.name,
         sku: defaultItem.sku,
         category: defaultItem.category,
-        batchNumber: 'BATCH-AMD-01',
-        quantity: 15,
+        batchNumber: batches.find(b => b.itemId === defaultItem.id)?.batchNumber || '',
+        quantity: 1,
         transferUnit: isBox ? 'boxes' : 'pieces',
         piecesPerBox: ppb,
         unit: defaultItem.unit || (isBox ? 'boxes' : 'units'),
-        unitCost: defaultItem.costPrice || 20,
+        unitCost: defaultItem.costPrice || 0,
       },
     ]);
   };

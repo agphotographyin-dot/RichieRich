@@ -42,29 +42,27 @@ export const CreateIndentModal: React.FC<CreateIndentModalProps> = ({
       unit: string;
       threshold: number;
     }>
-  >([
-    {
-      itemId: inventory[0]?.id || 'item-101',
-      name: inventory[0]?.name || 'Royal Maghai Meetha Paan',
-      sku: inventory[0]?.sku || 'PAN-MAG-01',
-      category: inventory[0]?.category || 'Paan',
-      quantity: 50,
-      unit: inventory[0]?.unit || 'pieces',
-      threshold: inventory[0]?.lowStockThreshold || 15,
-    },
-  ]);
+  >(() => {
+    const first = inventory[0];
+    if (!first) return [];
+    return [
+      {
+        itemId: first.id,
+        name: first.name,
+        sku: first.sku,
+        category: first.category,
+        quantity: 10,
+        unit: first.unit || 'pieces',
+        threshold: first.lowStockThreshold || 10,
+      },
+    ];
+  });
 
   if (!isOpen) return null;
 
   const handleAddItem = () => {
-    const defaultItem = inventory[0] || {
-      id: `item-${Date.now()}`,
-      name: '',
-      sku: 'SKU-IND',
-      category: 'Paan',
-      unit: 'pieces',
-      lowStockThreshold: 10,
-    };
+    const defaultItem = inventory[0];
+    if (!defaultItem) return;
     setItems([
       ...items,
       {
@@ -72,7 +70,7 @@ export const CreateIndentModal: React.FC<CreateIndentModalProps> = ({
         name: defaultItem.name,
         sku: defaultItem.sku,
         category: defaultItem.category,
-        quantity: 30,
+        quantity: 10,
         unit: defaultItem.unit || 'pieces',
         threshold: defaultItem.lowStockThreshold || 10,
       },

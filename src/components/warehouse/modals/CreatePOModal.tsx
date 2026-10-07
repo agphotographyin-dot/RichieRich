@@ -96,15 +96,16 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
     }>
   >(() => {
     const firstItem = displayedCatalog[0] || activeInventory[0];
+    if (!firstItem) return [];
     return [
       {
-        itemId: firstItem?.id || 'item-101',
-        name: firstItem?.name || 'Royal Maghai Meetha Paan',
-        sku: firstItem?.sku || 'PAN-MAG-01',
-        category: firstItem?.category || 'Paan',
-        quantity: 50,
-        unitPrice: firstItem?.costPrice || 20,
-        unit: firstItem?.unit || 'pieces',
+        itemId: firstItem.id,
+        name: firstItem.name,
+        sku: firstItem.sku,
+        category: firstItem.category,
+        quantity: 10,
+        unitPrice: firstItem.costPrice || 0,
+        unit: firstItem.unit || 'pieces',
       },
     ];
   });
@@ -117,7 +118,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
     const newSup = suppliers.find((s) => s.id === newSupId);
     const newProducts = getSupplierProducts(newSup, activeInventory);
     if (newProducts.length > 0) {
-      if (items.length === 1 && (!items[0].name || items[0].name === activeInventory[0]?.name || items[0].name === 'Royal Maghai Meetha Paan')) {
+      if (items.length === 1 && (!items[0].name || items[0].name === activeInventory[0]?.name)) {
         const first = newProducts[0];
         setItems([
           {

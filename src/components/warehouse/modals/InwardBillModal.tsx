@@ -107,18 +107,21 @@ export const InwardBillModal: React.FC<InwardBillModalProps> = ({
     const defaultInv = inventory?.[0];
     const isBox = Boolean(defaultInv?.sellAsLoose || (defaultInv?.piecesPerBox && defaultInv.piecesPerBox > 1));
     const ppb = defaultInv?.piecesPerBox || (isBox ? 10 : 1);
+    if (!defaultInv) {
+      return [];
+    }
     return [
       {
-        itemId: defaultInv?.id || 'item-101',
-        name: defaultInv?.name || 'Royal Maghai Meetha Paan',
-        sku: defaultInv?.sku || 'PAN-MAG-01',
-        category: defaultInv?.category || 'Paan',
-        quantity: 50,
+        itemId: defaultInv.id,
+        name: defaultInv.name,
+        sku: defaultInv.sku,
+        category: defaultInv.category,
+        quantity: 1,
         inputUnit: isBox ? 'boxes' : 'pieces',
         piecesPerBox: ppb,
-        unitCost: defaultInv?.costPrice || 20,
-        unit: defaultInv?.unit || (isBox ? 'boxes' : 'pieces'),
-        batchNumber: `BATCH-${Date.now().toString().slice(-4)}`,
+        unitCost: defaultInv.costPrice || 0,
+        unit: defaultInv.unit || (isBox ? 'boxes' : 'pieces'),
+        batchNumber: `BATCH-${defaultInv.sku ? defaultInv.sku.slice(0, 4) : 'PAN'}-${Date.now().toString().slice(-4)}`,
         mfgDate: new Date().toISOString().split('T')[0],
         expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       },

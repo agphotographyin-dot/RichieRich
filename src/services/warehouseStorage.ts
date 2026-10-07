@@ -168,7 +168,12 @@ export function cleanWarehouseDummyData(): void {
             (b) =>
               b &&
               !['bat-101', 'bat-102', 'bat-103', 'bat-104', 'bat-105'].includes(b.id) &&
-              !['BATCH-BETEL-01', 'BATCH-SUP-01', 'BATCH-ESPR-01', 'BATCH-CHAI-01', 'BATCH-MUKH-01'].includes(b.batchNumber)
+              !['BATCH-BETEL-01', 'BATCH-SUP-01', 'BATCH-ESPR-01', 'BATCH-CHAI-01', 'BATCH-MUKH-01'].includes(b.batchNumber) &&
+              !String(b.id).startsWith('bat-opening-') &&
+              !String(b.id).startsWith('bat-auto-') &&
+              !String(b.batchNumber).startsWith('BATCH-OPENING-') &&
+              b.supplierName !== 'Opening Balance Inventory' &&
+              b.supplierName !== 'Central Warehouse Hub'
           );
           safeStorage.setItem(WH_KEYS.BATCHES, JSON.stringify(cleanBatches));
         }
@@ -1418,74 +1423,9 @@ export const warehouseStorage = {
         if (data) {
           list = JSON.parse(data);
         }
-        if (!Array.isArray(list) || list.length === 0) {
-          list = INITIAL_BATCHES;
-        }
-
-        // Automatic opening batch reconciliation: Ensure all catalog inventory is represented in batches
-        const inventory = storage.getInventory();
-        let batchesModified = false;
-        const nowIso = new Date().toISOString();
-
-        inventory.forEach((item, idx) => {
-          const itemBatches = list.filter(
-            (b) => b.itemId === item.id || (b.sku && b.sku.toLowerCase() === item.sku.toLowerCase())
-          );
-          if (itemBatches.length === 0 && ((item.stockQuantity || 0) > 0 || Object.values(item.storeAllocations || {}).some((q) => q > 0))) {
-            // Create an initial opening batch for existing catalog stock
-            const centralQty = Math.max(0, Math.floor(Number(item.stockQuantity) || 0));
-            const locationQuantities: Record<string, number> = {
-              central: centralQty,
-              'wh-central-amd': centralQty,
-            };
-            if (item.storeAllocations) {
-              Object.entries(item.storeAllocations).forEach(([sId, sQty]) => {
-                locationQuantities[sId] = Math.max(0, Math.floor(Number(sQty) || 0));
-              });
-            }
-            const totalStock = Object.entries(locationQuantities).reduce(
-              (sum, [k, v]) => (k === 'wh-central-amd' ? sum : sum + v),
-              0
-            );
-
-            const openingBatch: BatchRecord = {
-              id: `bat-opening-${item.id}-${idx}`,
-              itemId: item.id,
-              sku: item.sku,
-              name: item.name,
-              category: item.category,
-              batchNumber: `BATCH-OPENING-${item.sku.slice(0, 4)}-01`,
-              warehouseId: 'wh-central-amd',
-              warehouseName: 'Central Warehouse',
-              mfgDate: nowIso.split('T')[0],
-              expiryDate: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString().split('T')[0],
-              initialQuantity: totalStock,
-              originalQuantity: totalStock,
-              currentQuantity: totalStock,
-              quantityInStock: centralQty,
-              consumedQuantity: 0,
-              locationQuantities,
-              unit: item.unit || 'pieces',
-              unitCost: item.costPrice || 50,
-              purchaseBillRef: 'OPENING-STOCK',
-              supplierName: 'Opening Balance Inventory',
-              daysToExpiry: 180,
-              status: totalStock > 0 ? 'active' : 'depleted',
-              createdAt: nowIso,
-              updatedAt: nowIso,
-            };
-            list.push(openingBatch);
-            batchesModified = true;
-          }
-        });
-
-        if (batchesModified) {
-          this.saveBatches(list);
-        }
-
-        return list;
+        return Array.isArray(list) ? list : [];
       } catch {
-        return INITIAL_BATCHES;
+        return [];
       }
     });
   },
@@ -1561,60 +1501,9 @@ export const warehouseStorage = {
       })
       .sort((a, b) => new Date(a.expiryDate || 0).getTime() - new Date(b.expiryDate || 0).getTime());
 
-    let totalAvailable = matchingBatches.reduce((sum, b) => {
+    const totalAvailable = matchingBatches.reduce((sum, b) => {
       return sum + Math.max(0, Math.floor(Number(b.locationQuantities?.[sourceKey] ?? (sourceKey === 'central' ? b.quantityInStock : 0)) || 0));
     }, 0);
-
-    // If source is Central and batch stock is lower than requested, check master inventory to auto-provision standard batch
-    if (totalAvailable < requestedQty && sourceKey === 'central') {
-      const inventory = storage.getInventory();
-      const invItem = inventory.find((i) => i.id === itemId || (i.sku && i.sku.toLowerCase() === cleanId));
-      const deficit = requestedQty - totalAvailable;
-
-      if (invItem) {
-        const nowIso = new Date().toISOString();
-        const autoBatchId = `bat-${invItem.id}-${Date.now()}`;
-        const autoBatch: BatchRecord = {
-          id: autoBatchId,
-          itemId: invItem.id,
-          sku: invItem.sku,
-          name: invItem.name,
-          category: invItem.category || 'General',
-          batchNumber: `BATCH-${invItem.sku.slice(0, 4).toUpperCase()}-${Date.now().toString().slice(-4)}`,
-          warehouseId: 'wh-central-amd',
-          warehouseName: 'Central Warehouse',
-          mfgDate: nowIso.split('T')[0],
-          expiryDate: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
-          initialQuantity: Math.max(deficit, Number(invItem.stockQuantity) || deficit),
-          originalQuantity: Math.max(deficit, Number(invItem.stockQuantity) || deficit),
-          originalUnit: invItem.unit || 'units',
-          piecesPerBox: invItem.piecesPerBox || 1,
-          originalBaseQuantity: Math.max(deficit, Number(invItem.stockQuantity) || deficit),
-          currentBaseQuantity: Math.max(deficit, Number(invItem.stockQuantity) || deficit),
-          currentQuantity: Math.max(deficit, Number(invItem.stockQuantity) || deficit),
-          quantityInStock: Math.max(deficit, Number(invItem.stockQuantity) || deficit),
-          consumedQuantity: 0,
-          consumedBaseQuantity: 0,
-          locationQuantities: {
-            central: Math.max(deficit, Number(invItem.stockQuantity) || deficit),
-            'wh-central-amd': Math.max(deficit, Number(invItem.stockQuantity) || deficit),
-          },
-          locationUnit: 'UNIT',
-          unit: invItem.unit,
-          unitCost: invItem.costPrice || 20,
-          purchaseBillRef: 'CENTRAL-STOCK',
-          supplierName: 'Central Warehouse Hub',
-          daysToExpiry: 365,
-          status: 'active',
-          createdAt: nowIso,
-          updatedAt: nowIso,
-        };
-
-        batches.unshift(autoBatch);
-        matchingBatches.unshift(autoBatch);
-        totalAvailable += autoBatch.quantityInStock;
-      }
-    }
 
     if (totalAvailable < requestedQty) {
       return {
@@ -1728,69 +1617,24 @@ export const warehouseStorage = {
         return sum + Math.max(0, Math.floor(Number(b.locationQuantities?.['central'] ?? (b.quantityInStock || 0)) || 0));
       }, 0);
 
-      if (totalBatchCentral !== centralStock) {
+      if (totalBatchCentral !== centralStock && itemBatches.length > 0) {
         adjustedCount++;
-        if (itemBatches.length === 0 && centralStock > 0) {
-          const newBatchId = `bat-auto-${inv.id}-${Date.now()}`;
-          batches.unshift({
-            id: newBatchId,
-            itemId: inv.id,
-            sku: inv.sku,
-            name: inv.name,
-            category: inv.category || 'General',
-            batchNumber: `BATCH-${inv.sku.slice(0, 4).toUpperCase()}-01`,
-            warehouseId: 'wh-central-amd',
-            warehouseName: 'Central Warehouse',
-            mfgDate: nowIso.split('T')[0],
-            expiryDate: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
-            initialQuantity: centralStock,
-            originalQuantity: centralStock,
-            originalUnit: inv.unit || 'units',
-            piecesPerBox: inv.piecesPerBox || 1,
-            originalBaseQuantity: centralStock,
-            currentBaseQuantity: centralStock,
-            currentQuantity: centralStock,
-            quantityInStock: centralStock,
-            consumedQuantity: 0,
-            consumedBaseQuantity: 0,
-            locationQuantities: {
-              central: centralStock,
-              'wh-central-amd': centralStock,
-            },
-            locationUnit: 'UNIT',
-            unit: inv.unit || 'units',
-            unitCost: inv.costPrice || 20,
-            purchaseBillRef: 'CENTRAL-STOCK',
-            supplierName: 'Central Warehouse Hub',
-            daysToExpiry: 365,
-            status: 'active',
-            createdAt: nowIso,
-            updatedAt: nowIso,
-          });
-        } else if (itemBatches.length > 0) {
-          const delta = centralStock - totalBatchCentral;
-          const target = itemBatches[0];
-          if (!target.locationQuantities) target.locationQuantities = {};
-          const curCentral = Math.max(0, Math.floor(Number(target.locationQuantities['central'] ?? target.quantityInStock ?? 0)));
-          const newCentral = Math.max(0, curCentral + delta);
-          target.locationQuantities['central'] = newCentral;
-          target.locationQuantities['wh-central-amd'] = newCentral;
-          target.quantityInStock = newCentral;
-          target.currentQuantity = Math.max(0, (Number(target.currentQuantity) || 0) + delta);
-          target.currentBaseQuantity = target.currentQuantity;
-          target.updatedAt = nowIso;
-        }
+        const delta = centralStock - totalBatchCentral;
+        const target = itemBatches[0];
+        if (!target.locationQuantities) target.locationQuantities = {};
+        const curCentral = Math.max(0, Math.floor(Number(target.locationQuantities['central'] ?? target.quantityInStock ?? 0)));
+        const newCentral = Math.max(0, curCentral + delta);
+        target.locationQuantities['central'] = newCentral;
+        target.locationQuantities['wh-central-amd'] = newCentral;
+        target.quantityInStock = newCentral;
+        target.currentQuantity = Math.max(0, (Number(target.currentQuantity) || 0) + delta);
+        target.currentBaseQuantity = target.currentQuantity;
+        target.updatedAt = nowIso;
       }
     });
 
     if (adjustedCount > 0) {
       this.saveBatches(batches);
-      // Trigger backend reconciliation endpoint if available
-      try {
-        fetch('/api/batches/reconcile', { method: 'POST' }).catch(() => {});
-      } catch {
-        // Non-critical
-      }
     }
 
     return { adjustedCount, totalBatches: batches.length };
