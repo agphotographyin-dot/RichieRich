@@ -589,10 +589,49 @@ export class StorageService {
         } catch {}
       }
 
+      if (typeof warehouseStorageRef !== 'undefined' && warehouseStorageRef) {
+        try {
+          if (typeof (warehouseStorageRef as any).cleanDummyData === 'function') {
+            (warehouseStorageRef as any).cleanDummyData();
+          }
+        } catch {}
+      }
+
       this.memoryCache.clear();
       this.notify(true);
     } catch (err) {
       console.warn('Error purging dummy data:', err);
+    }
+  }
+
+  /**
+   * Complete transactional data wipe for live production deployment.
+   * Keeps store master settings, catalog configuration, and admin credentials,
+   * while completely clearing out sales, expense vouchers, and warehouse operational history.
+   */
+  public wipeAllTransactionalData(): void {
+    if (typeof window === 'undefined') return;
+
+    try {
+      this.saveOrders([]);
+      this.saveStoreExpenses([]);
+      this.saveNotifications([]);
+      safeStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify([]));
+      safeStorage.setItem(STORAGE_KEYS.STORE_EXPENSES, JSON.stringify([]));
+      safeStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify([]));
+
+      if (typeof warehouseStorageRef !== 'undefined' && warehouseStorageRef) {
+        try {
+          if (typeof (warehouseStorageRef as any).wipeAllWarehouseTransactions === 'function') {
+            (warehouseStorageRef as any).wipeAllWarehouseTransactions();
+          }
+        } catch {}
+      }
+
+      this.memoryCache.clear();
+      this.notify(true);
+    } catch (err) {
+      console.error('Failed to wipe transactional data:', err);
     }
   }
 

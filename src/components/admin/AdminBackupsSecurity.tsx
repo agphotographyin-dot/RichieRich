@@ -17,9 +17,13 @@ import {
   ShieldAlert,
   FileCheck2,
   AlertTriangle,
+  Trash2,
+  Sparkles,
+  RefreshCw,
 } from 'lucide-react';
 import { BackupSnapshot } from '../../types';
 import { storage } from '../../services/storage';
+import { warehouseStorage, cleanWarehouseDummyData } from '../../services/warehouseStorage';
 import {
   createSignedBackupEnvelope,
   verifyAndSanitizeImportFile,
@@ -113,6 +117,27 @@ export const AdminBackupsSecurity: React.FC<AdminBackupsSecurityProps> = ({ back
     setRawFileContent(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     setTimeout(() => setSuccessMessage(null), 5000);
+  };
+
+  const handlePurgeDummyData = () => {
+    if (window.confirm('Purge all legacy mock, sample, and dummy test entries from local database and sync storage?')) {
+      storage.purgeAllDummyData();
+      cleanWarehouseDummyData();
+      setSuccessMessage('All dummy test data, mock accounts, dummy stock records, and sample transactions purged successfully!');
+      setTimeout(() => setSuccessMessage(null), 5000);
+    }
+  };
+
+  const handleWipeAllTransactions = () => {
+    if (
+      window.confirm(
+        '⚠️ RESET FOR REAL PRODUCTION USE: This will clear all sales orders, expense vouchers, purchase bills, GRNs, transfers, indents, and supplier ledger entries while preserving your store outlets, catalog inventory definitions, and master credentials. Proceed?'
+      )
+    ) {
+      storage.wipeAllTransactionalData();
+      setSuccessMessage('System operational ledger reset! Ready for live store transactions.');
+      setTimeout(() => setSuccessMessage(null), 5000);
+    }
   };
 
   return (
@@ -470,6 +495,41 @@ export const AdminBackupsSecurity: React.FC<AdminBackupsSecurityProps> = ({ back
               onChange={(e) => setMaskCustomerData(e.target.checked)}
               className="w-4 h-4 accent-slate-800 rounded-sm cursor-pointer"
             />
+          </div>
+        </div>
+      </div>
+
+      {/* Production Readiness & Real Use Data Controls */}
+      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-200 shrink-0">
+              <Sparkles className="w-5 h-5 text-amber-500" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800 text-sm">Production Readiness & Data Cleanup</h3>
+              <p className="text-xs text-slate-500">
+                Purge mock/dummy records or reset operational transactions to deploy live for real business operations.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handlePurgeDummyData}
+              className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold rounded-lg border border-amber-200 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <RefreshCw className="w-4 h-4 text-amber-700" />
+              <span>Purge All Mock / Dummy Records</span>
+            </button>
+
+            <button
+              onClick={handleWipeAllTransactions}
+              className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg border border-rose-200 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <Trash2 className="w-4 h-4 text-rose-600" />
+              <span>Reset Operational Ledger (Day 1 Live Start)</span>
+            </button>
           </div>
         </div>
       </div>

@@ -60,22 +60,7 @@ export const ItemAutocompleteInput: React.FC<ItemAutocompleteInputProps> = ({
       if (saved) {
         setHistoryItems(JSON.parse(saved));
       } else {
-        // Seed default popular history items
-        const initialHist = [
-          'Royal Maghai Meetha Paan',
-          'Signature Chocolate Fire Paan',
-          'Sub-Zero Ice Smoke Paan',
-          'Kesar Kasturi Gold Vark Paan',
-          'Calcutta Sada Paan (100% Tobacco-Free)',
-          'Royal Dark Roast Espresso Double Shot',
-          'Richie Rich Chilled Hazelnut Cold Coffee (350ml)',
-          'Royal Karak Saffron Masala Chai (Kulhad)',
-          'Royal Rajwadi Shahi Mukhwas (200g Jar)',
-          'Cool Mint Pocket Mouth Freshener Spray (15ml)',
-          'Himalayan Natural Mineral Water (500ml Chilled)',
-        ];
-        safeStorage.setItem(HISTORY_KEY, JSON.stringify(initialHist));
-        setHistoryItems(initialHist);
+        setHistoryItems([]);
       }
     } catch {
       setHistoryItems([]);

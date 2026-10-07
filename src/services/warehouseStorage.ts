@@ -74,64 +74,186 @@ export const INITIAL_INDENTS: StoreStockIndent[] = [];
 export const INITIAL_ADJUSTMENTS: StockAdjustment[] = [];
 export const INITIAL_AUDIT_TRAIL: StockMovementAudit[] = [];
 
-// Automatic one-time cleanup and self-healing schema migration of warehouse data
+// Automatic cleanup and self-healing schema migration of warehouse data
 export function cleanWarehouseDummyData(): void {
   try {
-    const cleanFlag = safeStorage.getItem('rr_wh_grn_clean_v4');
-    if (!cleanFlag) {
-      // 1. Sanitize or initialize suppliers
-      const rawSuppliers = safeStorage.getItem(WH_KEYS.SUPPLIERS);
-      if (!rawSuppliers) {
-        safeStorage.setItem(WH_KEYS.SUPPLIERS, JSON.stringify([]));
-      }
+    // 1. Purge dummy suppliers
+    const rawSuppliers = safeStorage.getItem(WH_KEYS.SUPPLIERS);
+    if (rawSuppliers) {
+      try {
+        const parsed = JSON.parse(rawSuppliers);
+        if (Array.isArray(parsed)) {
+          const clean = parsed.filter(
+            (s) =>
+              s &&
+              !['sup-101', 'sup-102', 'sup-103', 'sup-104'].includes(s.id) &&
+              !['Gujarat Betel Traders', 'Shreeji Spices & Supari', 'Apex Cafe & Beverage Distributors', 'Royal Luxury Packaging & Vark'].includes(s.name)
+          );
+          safeStorage.setItem(WH_KEYS.SUPPLIERS, JSON.stringify(clean));
+        }
+      } catch {}
+    } else {
+      safeStorage.setItem(WH_KEYS.SUPPLIERS, JSON.stringify([]));
+    }
 
-      // 2. Sanitize purchase orders
-      const rawPOs = safeStorage.getItem(WH_KEYS.PURCHASE_ORDERS);
-      if (!rawPOs || rawPOs === '[]') {
-        safeStorage.setItem(WH_KEYS.PURCHASE_ORDERS, JSON.stringify(INITIAL_PURCHASE_ORDERS));
-      } else {
-        try {
-          const parsedPOs = JSON.parse(rawPOs);
-          if (Array.isArray(parsedPOs)) {
-            const sanitized = parsedPOs.map((po) => ({
-              ...po,
-              grandTotal: Number(po.grandTotal) || 0,
-              subtotal: Number(po.subtotal) || 0,
-              status: po.status || 'approved',
-              items: Array.isArray(po.items) ? po.items : [],
-            }));
-            safeStorage.setItem(WH_KEYS.PURCHASE_ORDERS, JSON.stringify(sanitized));
-          }
-        } catch {}
-      }
+    // 2. Purge dummy purchase orders
+    const rawPOs = safeStorage.getItem(WH_KEYS.PURCHASE_ORDERS);
+    if (rawPOs) {
+      try {
+        const parsedPOs = JSON.parse(rawPOs);
+        if (Array.isArray(parsedPOs)) {
+          const cleanPOs = parsedPOs.filter(
+            (po) =>
+              po &&
+              !['po-101', 'po-102', 'po-103', 'po-104', 'po-105'].includes(po.id) &&
+              !['PO-2026-001', 'PO-2026-002', 'PO-2026-003', 'PO-2026-004'].includes(po.poNumber) &&
+              po.supplierId !== 'sup-101' &&
+              po.supplierId !== 'sup-102'
+          );
+          safeStorage.setItem(WH_KEYS.PURCHASE_ORDERS, JSON.stringify(cleanPOs));
+        }
+      } catch {}
+    } else {
+      safeStorage.setItem(WH_KEYS.PURCHASE_ORDERS, JSON.stringify([]));
+    }
 
-      // 3. Sanitize purchase bills
-      const rawBills = safeStorage.getItem(WH_KEYS.PURCHASE_BILLS);
-      if (!rawBills || rawBills === '[]') {
-        safeStorage.setItem(WH_KEYS.PURCHASE_BILLS, JSON.stringify(INITIAL_PURCHASE_BILLS));
-      } else {
-        try {
-          const parsedBills = JSON.parse(rawBills);
-          if (Array.isArray(parsedBills)) {
-            const sanitized = parsedBills.map((b) => ({
-              ...b,
-              grandTotal: Number(b.grandTotal) || 0,
-              dueAmount: Number(b.dueAmount) || 0,
-              paidAmount: Number(b.paidAmount) || 0,
-              subtotal: Number(b.subtotal) || 0,
-              paymentStatus: b.paymentStatus || 'due',
-              grnStatus: b.grnStatus || 'verified_stocked',
-              items: Array.isArray(b.items) ? b.items : [],
-            }));
-            safeStorage.setItem(WH_KEYS.PURCHASE_BILLS, JSON.stringify(sanitized));
-          }
-        } catch {}
-      }
+    // 3. Purge dummy purchase bills
+    const rawBills = safeStorage.getItem(WH_KEYS.PURCHASE_BILLS);
+    if (rawBills) {
+      try {
+        const parsedBills = JSON.parse(rawBills);
+        if (Array.isArray(parsedBills)) {
+          const cleanBills = parsedBills.filter(
+            (b) =>
+              b &&
+              !['pb-101', 'pb-102', 'pb-103', 'pb-104', 'pb-105'].includes(b.id) &&
+              !['BILL-2026-001', 'BILL-2026-002', 'BILL-2026-003'].includes(b.billNumber) &&
+              b.supplierId !== 'sup-101' &&
+              b.supplierId !== 'sup-102'
+          );
+          safeStorage.setItem(WH_KEYS.PURCHASE_BILLS, JSON.stringify(cleanBills));
+        }
+      } catch {}
+    } else {
+      safeStorage.setItem(WH_KEYS.PURCHASE_BILLS, JSON.stringify([]));
+    }
 
-      safeStorage.setItem('rr_wh_grn_clean_v4', 'true');
+    // 4. Purge dummy supplier ledger
+    const rawLedger = safeStorage.getItem(WH_KEYS.SUPPLIER_LEDGER);
+    if (rawLedger) {
+      try {
+        const parsedLedger = JSON.parse(rawLedger);
+        if (Array.isArray(parsedLedger)) {
+          const cleanLedger = parsedLedger.filter(
+            (l) =>
+              l &&
+              !['led-101', 'led-102', 'led-103', 'led-104', 'led-105'].includes(l.id) &&
+              l.supplierId !== 'sup-101' &&
+              l.supplierId !== 'sup-102'
+          );
+          safeStorage.setItem(WH_KEYS.SUPPLIER_LEDGER, JSON.stringify(cleanLedger));
+        }
+      } catch {}
+    } else {
+      safeStorage.setItem(WH_KEYS.SUPPLIER_LEDGER, JSON.stringify([]));
+    }
+
+    // 5. Purge dummy batches
+    const rawBatches = safeStorage.getItem(WH_KEYS.BATCHES);
+    if (rawBatches) {
+      try {
+        const parsedBatches = JSON.parse(rawBatches);
+        if (Array.isArray(parsedBatches)) {
+          const cleanBatches = parsedBatches.filter(
+            (b) =>
+              b &&
+              !['bat-101', 'bat-102', 'bat-103', 'bat-104', 'bat-105'].includes(b.id) &&
+              !['BATCH-BETEL-01', 'BATCH-SUP-01', 'BATCH-ESPR-01', 'BATCH-CHAI-01', 'BATCH-MUKH-01'].includes(b.batchNumber)
+          );
+          safeStorage.setItem(WH_KEYS.BATCHES, JSON.stringify(cleanBatches));
+        }
+      } catch {}
+    } else {
+      safeStorage.setItem(WH_KEYS.BATCHES, JSON.stringify([]));
+    }
+
+    // 6. Purge dummy transfers
+    const rawTransfers = safeStorage.getItem(WH_KEYS.TRANSFERS);
+    if (rawTransfers) {
+      try {
+        const parsedTr = JSON.parse(rawTransfers);
+        if (Array.isArray(parsedTr)) {
+          const cleanTr = parsedTr.filter(
+            (t) =>
+              t &&
+              !['tr-101', 'tr-102', 'tr-103', 'tr-104'].includes(t.id) &&
+              !['TR-2026-001', 'TR-2026-002', 'TR-2026-003'].includes(t.transferNumber)
+          );
+          safeStorage.setItem(WH_KEYS.TRANSFERS, JSON.stringify(cleanTr));
+        }
+      } catch {}
+    } else {
+      safeStorage.setItem(WH_KEYS.TRANSFERS, JSON.stringify([]));
+    }
+
+    // 7. Purge dummy store indents
+    const rawIndents = safeStorage.getItem(WH_KEYS.INDENTS);
+    if (rawIndents) {
+      try {
+        const parsedInd = JSON.parse(rawIndents);
+        if (Array.isArray(parsedInd)) {
+          const cleanInd = parsedInd.filter(
+            (i) =>
+              i &&
+              !['ind-101', 'ind-102', 'ind-103'].includes(i.id) &&
+              !['IND-2026-001', 'IND-2026-002', 'IND-2026-003'].includes(i.indentNumber)
+          );
+          safeStorage.setItem(WH_KEYS.INDENTS, JSON.stringify(cleanInd));
+        }
+      } catch {}
+    } else {
+      safeStorage.setItem(WH_KEYS.INDENTS, JSON.stringify([]));
+    }
+
+    // 8. Purge dummy stock adjustments
+    const rawAdj = safeStorage.getItem(WH_KEYS.ADJUSTMENTS);
+    if (rawAdj) {
+      try {
+        const parsedAdj = JSON.parse(rawAdj);
+        if (Array.isArray(parsedAdj)) {
+          const cleanAdj = parsedAdj.filter(
+            (a) =>
+              a &&
+              !['adj-101', 'adj-102', 'adj-103'].includes(a.id) &&
+              !['ADJ-2026-001', 'ADJ-2026-002'].includes(a.adjustmentNumber)
+          );
+          safeStorage.setItem(WH_KEYS.ADJUSTMENTS, JSON.stringify(cleanAdj));
+        }
+      } catch {}
+    } else {
+      safeStorage.setItem(WH_KEYS.ADJUSTMENTS, JSON.stringify([]));
+    }
+
+    // 9. Purge dummy stock audit movements
+    const rawAudit = safeStorage.getItem(WH_KEYS.AUDIT_TRAIL);
+    if (rawAudit) {
+      try {
+        const parsedAudit = JSON.parse(rawAudit);
+        if (Array.isArray(parsedAudit)) {
+          const cleanAudit = parsedAudit.filter(
+            (a) =>
+              a &&
+              !['aud-101', 'aud-102', 'aud-103', 'aud-104', 'aud-105'].includes(a.id) &&
+              !['AUD-2026-001', 'AUD-2026-002', 'AUD-2026-003'].includes(a.referenceNumber || '')
+          );
+          safeStorage.setItem(WH_KEYS.AUDIT_TRAIL, JSON.stringify(cleanAudit));
+        }
+      } catch {}
+    } else {
+      safeStorage.setItem(WH_KEYS.AUDIT_TRAIL, JSON.stringify([]));
     }
   } catch (e) {
-    console.error('Error in self-healing warehouse data migration', e);
+    console.error('Error in warehouse clean data', e);
   }
 }
 cleanWarehouseDummyData();
@@ -505,12 +627,12 @@ export const warehouseStorage = {
       try {
         const data = safeStorage.getItem(WH_KEYS.SUPPLIER_LEDGER);
         if (!data) {
-          this.saveSupplierLedger(INITIAL_LEDGER_ENTRIES);
-          return INITIAL_LEDGER_ENTRIES;
+          return [];
         }
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) ? parsed : [];
       } catch {
-        return INITIAL_LEDGER_ENTRIES;
+        return [];
       }
     });
   },
@@ -1734,12 +1856,12 @@ export const warehouseStorage = {
       try {
         const data = safeStorage.getItem(WH_KEYS.TRANSFERS);
         if (!data) {
-          this.saveStockTransfers(INITIAL_TRANSFERS);
-          return INITIAL_TRANSFERS;
+          return [];
         }
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) ? parsed : [];
       } catch {
-        return INITIAL_TRANSFERS;
+        return [];
       }
     });
   },
@@ -2409,12 +2531,12 @@ export const warehouseStorage = {
       try {
         const data = safeStorage.getItem(WH_KEYS.INDENTS);
         if (!data) {
-          this.saveStoreIndents(INITIAL_INDENTS);
-          return INITIAL_INDENTS;
+          return [];
         }
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) ? parsed : [];
       } catch {
-        return INITIAL_INDENTS;
+        return [];
       }
     });
   },
@@ -2526,12 +2648,12 @@ export const warehouseStorage = {
       try {
         const data = safeStorage.getItem(WH_KEYS.ADJUSTMENTS);
         if (!data) {
-          this.saveStockAdjustments(INITIAL_ADJUSTMENTS);
-          return INITIAL_ADJUSTMENTS;
+          return [];
         }
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) ? parsed : [];
       } catch {
-        return INITIAL_ADJUSTMENTS;
+        return [];
       }
     });
   },
@@ -2682,12 +2804,12 @@ export const warehouseStorage = {
       try {
         const data = safeStorage.getItem(WH_KEYS.AUDIT_TRAIL);
         if (!data) {
-          this.saveAuditTrail(INITIAL_AUDIT_TRAIL);
-          return INITIAL_AUDIT_TRAIL;
+          return [];
         }
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) ? parsed : [];
       } catch {
-        return INITIAL_AUDIT_TRAIL;
+        return [];
       }
     });
   },
@@ -2815,6 +2937,20 @@ export const warehouseStorage = {
       totalSupplierOutstanding,
       overdueBillsCount,
     };
+  },
+
+  wipeAllWarehouseTransactions(): void {
+    this.saveSuppliers([]);
+    this.savePurchaseOrders([]);
+    this.savePurchaseBills([]);
+    this.saveSupplierLedger([]);
+    this.saveBatches([]);
+    this.saveStockTransfers([]);
+    this.saveStoreIndents([]);
+    this.saveStockAdjustments([]);
+    this.saveAuditTrail([]);
+    clearWhCache();
+    this.notifySubscribers();
   },
 };
 
