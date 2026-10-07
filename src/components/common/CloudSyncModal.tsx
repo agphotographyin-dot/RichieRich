@@ -315,7 +315,11 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
                 ) : (
                   <Database className="w-3.5 h-3.5" />
                 )}
-                <span>{isProvisioning ? 'Provisioning Collections...' : 'Auto-Create 11 Collections Now'}</span>
+                <span>
+                  {isProvisioning
+                    ? 'Provisioning Collections...'
+                    : `Auto-Create All ${Object.values(COLLECTIONS).length} Collections Now`}
+                </span>
               </button>
 
               {provisionMessage && (
@@ -418,7 +422,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
             <div className="flex items-center justify-between text-slate-700">
               <span className="text-slate-500">Live Channels:</span>
               <span className="font-medium text-emerald-600 font-mono">
-                {syncState.activeListenersCount} / 11 collections streaming
+                {syncState.activeListenersCount} / {Object.values(COLLECTIONS).length} live streams (All {Object.values(COLLECTIONS).length} collections connected)
               </span>
             </div>
             <div className="flex items-center justify-between text-slate-700">
