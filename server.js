@@ -23,6 +23,8 @@ var storeData = {
   stock_transfers: {},
   store_indents: {},
   suppliers: {},
+  warehouse_batches: {},
+  stock_audit_trail: {},
   system_metadata: {}
 };
 try {
@@ -168,6 +170,123 @@ app.post("/api/sync/batch/:collection", (req, res) => {
     senderId
   });
   res.json({ success: true, collection: colName, syncedCount: updated.length });
+});
+app.post("/api/batches/allocate", (req, res) => {
+  const { itemId, sku, sourceLocationId, requestedQty } = req.body;
+  const qty = Math.max(0, Math.floor(Number(requestedQty) || 0));
+  if (qty <= 0) {
+    return res.status(400).json({ success: false, error: "Requested quantity must be greater than zero." });
+  }
+  const batches = Object.values(storeData["warehouse_batches"] || {});
+  const sourceKey = sourceLocationId === "warehouse" || sourceLocationId === "wh-central-amd" ? "central" : sourceLocationId || "central";
+  const cleanId = String(itemId || "").trim().toLowerCase();
+  const cleanSku = String(sku || "").trim().toLowerCase();
+  const matchingBatches = batches.filter((b) => {
+    const isMatch = b.itemId === itemId || b.sku && b.sku.toLowerCase() === cleanSku || b.id === itemId;
+    const avail = Math.max(0, Math.floor(Number(b.locationQuantities?.[sourceKey] ?? (sourceKey === "central" ? b.quantityInStock : 0)) || 0));
+    return isMatch && avail > 0 && b.status !== "depleted";
+  }).sort((a, b) => new Date(a.expiryDate || 0).getTime() - new Date(b.expiryDate || 0).getTime());
+  let remaining = qty;
+  const allocations = [];
+  for (const b of matchingBatches) {
+    if (remaining <= 0) break;
+    if (!b.locationQuantities) b.locationQuantities = {};
+    const cur = Math.max(0, Math.floor(Number(b.locationQuantities[sourceKey] ?? (sourceKey === "central" ? b.quantityInStock : 0)) || 0));
+    const take = Math.min(remaining, cur);
+    b.locationQuantities[sourceKey] = cur - take;
+    if (sourceKey === "central") {
+      b.locationQuantities["wh-central-amd"] = b.locationQuantities[sourceKey];
+      b.quantityInStock = b.locationQuantities[sourceKey];
+    }
+    b.currentQuantity = Math.max(0, (Number(b.currentQuantity) || 0) - take);
+    b.currentBaseQuantity = b.currentQuantity;
+    b.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    storeData["warehouse_batches"][b.id] = b;
+    allocations.push({ batchId: b.id, batchNumber: b.batchNumber, quantity: take });
+    remaining -= take;
+  }
+  schedulePersist();
+  broadcastChange({ collection: "warehouse_batches", action: "batch", data: Object.values(storeData["warehouse_batches"]) });
+  res.json({ success: true, allocated: qty - remaining, remainingUnallocated: remaining, allocations });
+});
+app.post("/api/batches/reconcile", (req, res) => {
+  const inventory = Object.values(storeData["inventory"] || {});
+  const batches = Object.values(storeData["warehouse_batches"] || {});
+  let adjustmentsCount = 0;
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  for (const inv of inventory) {
+    const invId = inv.id;
+    const invSku = (inv.sku || "").toLowerCase();
+    const centralStock = Math.max(0, Math.floor(Number(inv.stockQuantity) || 0));
+    const itemBatches = batches.filter(
+      (b) => b.itemId === invId || b.sku && b.sku.toLowerCase() === invSku
+    );
+    const totalBatchCentral = itemBatches.reduce((sum, b) => {
+      return sum + Math.max(0, Math.floor(Number(b.locationQuantities?.["central"] ?? (b.quantityInStock || 0)) || 0));
+    }, 0);
+    if (totalBatchCentral !== centralStock) {
+      adjustmentsCount++;
+      if (itemBatches.length === 0 && centralStock > 0) {
+        const newBatchId = `bat-auto-${invId}-${Date.now().toString().slice(-4)}`;
+        const newBatch = {
+          id: newBatchId,
+          itemId: invId,
+          sku: inv.sku || "SKU-STD",
+          name: inv.name,
+          category: inv.category || "General",
+          batchNumber: `BATCH-${(inv.sku || "STD").slice(0, 4).toUpperCase()}-01`,
+          warehouseId: "wh-central-amd",
+          warehouseName: "Central Warehouse",
+          mfgDate: now.split("T")[0],
+          expiryDate: new Date(Date.now() + 365 * 864e5).toISOString().split("T")[0],
+          initialQuantity: centralStock,
+          originalQuantity: centralStock,
+          originalUnit: inv.unit || "units",
+          piecesPerBox: inv.piecesPerBox || 1,
+          originalBaseQuantity: centralStock,
+          currentBaseQuantity: centralStock,
+          currentQuantity: centralStock,
+          quantityInStock: centralStock,
+          consumedQuantity: 0,
+          consumedBaseQuantity: 0,
+          locationQuantities: {
+            central: centralStock,
+            "wh-central-amd": centralStock
+          },
+          locationUnit: "UNIT",
+          unit: inv.unit || "units",
+          unitCost: inv.costPrice || 20,
+          supplierName: "Authoritative Central Hub",
+          daysToExpiry: 365,
+          status: "active",
+          createdAt: now,
+          updatedAt: now
+        };
+        storeData["warehouse_batches"][newBatchId] = newBatch;
+      } else if (itemBatches.length > 0) {
+        const delta = centralStock - totalBatchCentral;
+        const targetBatch = itemBatches[0];
+        const curCentral = Math.max(0, Math.floor(Number(targetBatch.locationQuantities?.["central"] ?? targetBatch.quantityInStock ?? 0)));
+        const newCentral = Math.max(0, curCentral + delta);
+        if (!targetBatch.locationQuantities) targetBatch.locationQuantities = {};
+        targetBatch.locationQuantities["central"] = newCentral;
+        targetBatch.locationQuantities["wh-central-amd"] = newCentral;
+        targetBatch.quantityInStock = newCentral;
+        targetBatch.currentQuantity = Math.max(0, (Number(targetBatch.currentQuantity) || 0) + delta);
+        targetBatch.currentBaseQuantity = targetBatch.currentQuantity;
+        targetBatch.updatedAt = now;
+        storeData["warehouse_batches"][targetBatch.id] = targetBatch;
+      }
+    }
+  }
+  schedulePersist();
+  broadcastChange({ collection: "warehouse_batches", action: "batch", data: Object.values(storeData["warehouse_batches"]) });
+  res.json({
+    success: true,
+    message: `Reconciliation complete. ${adjustmentsCount} items synchronized between Central Hub and Batch Tracking.`,
+    adjustmentsCount,
+    totalBatches: Object.keys(storeData["warehouse_batches"]).length
+  });
 });
 app.delete("/api/sync/:collection/:id", (req, res) => {
   const { collection: colName, id } = req.params;

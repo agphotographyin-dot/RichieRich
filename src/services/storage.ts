@@ -1893,30 +1893,75 @@ export class StorageService {
         }
 
         // Record sale in audit log
-        auditRecords.push({
-          transactionId: `TXN-${Date.now().toString().slice(-5)}${Math.floor(10 + Math.random() * 90)}`,
-          referenceNumber: orderNumber,
-          itemId: invItem.id,
-          sku: invItem.sku,
-          itemName: invItem.name,
-          movementType: 'pos_sales_consumption',
-          fromLocation: locName,
-          toLocation: `Customer (${orderData.customerName || 'Walk-in Guest'})`,
-          quantity: isLooseSale ? -qtyToDeduct : -qtyToDeduct,
-          quantityChanged: isLooseSale ? -qtyToDeduct : -qtyToDeduct,
-          previousStock: prevStock,
-          newStock: finalStock,
-          status: 'Completed',
-          unit: isLooseSale ? 'pieces' : (invItem.unit || 'units'),
-          balanceAfter: finalStock,
-          unitCost: invItem.costPrice || 0,
-          totalCostImpact: -(item.costPrice * qtyToDeduct),
-          performedBy: orderData.cashierName || 'POS Cashier',
-          userRole: 'POS Cashier',
-          notes: isLooseSale
-            ? `POS Sale: Sold ${qtyToDeduct} Single Piece(s) (1 Box = ${ppb} Pcs). Remaining Store Stock: ${finalStock} Box(es) + ${invItem.storeBoxAllocations?.[orderData.storeId || '']?.loosePieces || 0} Loose Pcs = ${totalPiecesAfter} Total Pcs${batchNote}.`
-            : `POS Sale: Sold ${qtyToDeduct} Unit(s)/Box(es) (${qtyToDeduct * ppb} Pcs). Remaining Stock: ${finalStock} ${invItem.unit || 'units'}${batchNote}.`,
-        });
+        if (isLooseSale) {
+          auditRecords.push({
+            transactionId: `TXN-${Date.now().toString().slice(-5)}${Math.floor(10 + Math.random() * 90)}`,
+            referenceNumber: orderNumber,
+            itemId: invItem.id,
+            sku: invItem.sku,
+            itemName: `${invItem.name} (Loose Piece Sale)`,
+            movementType: 'pos_sales_consumption',
+            fromLocation: locName,
+            toLocation: `Customer (${orderData.customerName || 'Walk-in Guest'})`,
+            quantity: -qtyToDeduct,
+            quantityChanged: -qtyToDeduct,
+            previousStock: prevStock,
+            newStock: finalStock,
+            status: 'Completed',
+            unit: 'pieces',
+            balanceAfter: finalStock,
+            unitCost: (invItem.costPrice || 0) / ppb,
+            totalCostImpact: -(item.costPrice * qtyToDeduct),
+            performedBy: orderData.cashierName || 'POS Cashier',
+            userRole: 'POS Cashier',
+            notes: `POS Sale: Sold ${qtyToDeduct} Single Piece(s) (1 Box = ${ppb} Pcs). Remaining Store Stock: ${finalStock} Box(es) + ${invItem.storeBoxAllocations?.[orderData.storeId || '']?.loosePieces || 0} Loose Pcs = ${totalPiecesAfter} Total Pcs${batchNote}.`,
+          });
+          auditRecords.push({
+            transactionId: `TXN-${Date.now().toString().slice(-5)}${Math.floor(10 + Math.random() * 90)}`,
+            referenceNumber: orderNumber,
+            itemId: invItem.id,
+            sku: invItem.sku,
+            itemName: `${invItem.name} (Box-Equivalent Consumption)`,
+            movementType: 'pos_sales_consumption',
+            fromLocation: locName,
+            toLocation: `Store Floor Consumption`,
+            quantity: -Math.max(1, Math.ceil(qtyToDeduct / ppb)),
+            quantityChanged: -Math.max(1, Math.ceil(qtyToDeduct / ppb)),
+            previousStock: prevStock,
+            newStock: finalStock,
+            status: 'Completed',
+            unit: 'boxes',
+            balanceAfter: finalStock,
+            unitCost: invItem.costPrice || 0,
+            totalCostImpact: -(invItem.costPrice || 0),
+            performedBy: orderData.cashierName || 'POS Cashier',
+            userRole: 'POS Cashier',
+            notes: `Box-Equivalent Consumption for ${qtyToDeduct} loose piece(s).`,
+          });
+        } else {
+          auditRecords.push({
+            transactionId: `TXN-${Date.now().toString().slice(-5)}${Math.floor(10 + Math.random() * 90)}`,
+            referenceNumber: orderNumber,
+            itemId: invItem.id,
+            sku: invItem.sku,
+            itemName: invItem.name,
+            movementType: 'pos_sales_consumption',
+            fromLocation: locName,
+            toLocation: `Customer (${orderData.customerName || 'Walk-in Guest'})`,
+            quantity: -qtyToDeduct,
+            quantityChanged: -qtyToDeduct,
+            previousStock: prevStock,
+            newStock: finalStock,
+            status: 'Completed',
+            unit: invItem.unit || 'units',
+            balanceAfter: finalStock,
+            unitCost: invItem.costPrice || 0,
+            totalCostImpact: -(item.costPrice * qtyToDeduct),
+            performedBy: orderData.cashierName || 'POS Cashier',
+            userRole: 'POS Cashier',
+            notes: `POS Sale: Sold ${qtyToDeduct} Unit(s)/Box(es) (${qtyToDeduct * ppb} Pcs). Remaining Stock: ${finalStock} ${invItem.unit || 'units'}${batchNote}.`,
+          });
+        }
       }
     });
 
@@ -3279,13 +3324,20 @@ export function getBoxLooseStockSummary(item: InventoryItem, storeId?: string): 
     ? Math.max(0, Math.floor(Number(item.storeAllocations?.[storeId]) || 0))
     : Math.max(0, Math.floor(Number(item.stockQuantity) || 0));
 
+  const storeBox = storeId && item.storeBoxAllocations?.[storeId];
+  const fullBoxes = storeBox !== undefined ? storeBox.fullBoxes : (isBoxUnit ? rawQty : 0);
+  const loosePieces = storeBox !== undefined ? storeBox.loosePieces : 0;
+  const totalEquivalent = (item.sellAsLoose || piecesPerBox > 1)
+    ? fullBoxes * piecesPerBox + loosePieces
+    : rawQty;
+
   return {
-    fullBoxes: isBoxUnit ? rawQty : 0,
-    loosePieces: 0,
+    fullBoxes,
+    loosePieces,
     piecesPerBox,
-    totalPieces: rawQty,
-    totalPieceEquivalent: rawQty,
-    total_piece_equivalent: rawQty,
+    totalPieces: totalEquivalent,
+    totalPieceEquivalent: totalEquivalent,
+    total_piece_equivalent: totalEquivalent,
     isBoxLoose: Boolean(item.sellAsLoose || piecesPerBox > 1),
     isLooseOnly: isLooseUnit,
     isBoxOnly: isBoxUnit,

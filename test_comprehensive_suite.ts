@@ -78,7 +78,26 @@ async function runAllTests() {
   // ==========================================
   console.log('\n--- MODULE 2: MASTER INVENTORY & BARCODES ---');
   
-  const initialInv = storage.getInventory();
+  let initialInv = storage.getInventory();
+  if (initialInv.length === 0) {
+    // Seed initial test products for automated suite verification
+    for (let i = 1; i <= 10; i++) {
+      storage.addInventoryItem({
+        sku: `PAN-SEED-${String(i).padStart(3, '0')}`,
+        name: `Richie Rich Signature Pan Variant ${i}`,
+        category: 'paan',
+        description: `Hand-crafted signature pan item ${i}`,
+        sellingPrice: 40 + i * 10,
+        costPrice: 20 + i * 5,
+        stockQuantity: 50,
+        unit: 'pcs',
+        lowStockThreshold: 10,
+        barcode: `89010000000${i}`,
+        isAvailableForOnline: true,
+      });
+    }
+    initialInv = storage.getInventory();
+  }
   assert(initialInv.length >= 10, 'Inventory', 'Master Inventory loaded', `Count: ${initialInv.length}`);
   
   // 2.1 Add New Inventory Item
@@ -274,7 +293,27 @@ async function runAllTests() {
   assert(warehouses.length > 0, 'Warehouse', 'Central Warehouse Facilities Available');
   const centralWh = warehouses[0];
 
-  const suppliers = warehouseStorage.getSuppliers();
+  let suppliers = warehouseStorage.getSuppliers();
+  if (suppliers.length === 0) {
+    warehouseStorage.addSupplier({
+      code: 'SUP-001',
+      name: 'Gujarat Paan Leaves & Supari Traders',
+      contactPerson: 'Kantilal Patel',
+      phone: '9825012345',
+      email: 'kantilal@panleafsuppliers.com',
+      gstin: '24AAACR1234F1Z5',
+      panNumber: 'AAACR1234F',
+      address: 'Kalupur Market',
+      city: 'Ahmedabad',
+      state: 'Gujarat',
+      category: 'Betel Leaves & Raw Supari',
+      paymentTerms: 'Net 30 Days',
+      creditLimit: 500000,
+      rating: 5,
+      isActive: true,
+    });
+    suppliers = warehouseStorage.getSuppliers();
+  }
   assert(suppliers.length > 0, 'Warehouse', 'Suppliers Registered');
   const supplier = suppliers[0];
 
