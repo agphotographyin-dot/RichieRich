@@ -78,7 +78,24 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     cachedUser = result.user;
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
-    console.error('Google Workspace sign in error:', error);
+    const errorCode = error?.code || '';
+    const errorMessage = error?.message || '';
+
+    // User dismissed or closed the sign-in popup - normal user cancellation flow
+    if (
+      errorCode === 'auth/popup-closed-by-user' ||
+      errorCode === 'auth/cancelled-popup-request' ||
+      errorMessage.includes('popup-closed-by-user') ||
+      errorMessage.includes('cancelled-popup-request')
+    ) {
+      return null;
+    }
+
+    if (errorCode === 'auth/popup-blocked') {
+      throw new Error('Sign-in popup was blocked by your browser. Please allow popups for this site and try again.');
+    }
+
+    console.warn('Google Workspace sign in notice:', errorMessage || error);
     throw error;
   } finally {
     isSigningIn = false;
@@ -208,7 +225,7 @@ export const uploadBackupToGoogleDrive = async (
       name: file.name || filename,
     };
   } catch (err: any) {
-    console.error('Google Drive backup error:', err);
+    console.warn('Google Drive backup issue:', err?.message || err);
     return { success: false, name: filename, error: err.message || 'Failed to upload backup to Google Drive' };
   }
 };
@@ -385,7 +402,7 @@ export const sendBackupEmailViaGmail = async (
 
     return { success: true, messageId: sentData.id };
   } catch (err: any) {
-    console.error('Gmail backup dispatch error:', err);
+    console.warn('Gmail backup dispatch issue:', err?.message || err);
     return { success: false, error: err.message || 'Failed to send backup email via Gmail' };
   }
 };

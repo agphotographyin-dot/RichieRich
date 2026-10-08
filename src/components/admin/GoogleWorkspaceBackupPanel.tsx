@@ -115,6 +115,14 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
         setTimeout(() => setActionSuccess(null), 4000);
       }
     } catch (err: any) {
+      if (
+        err?.code === 'auth/popup-closed-by-user' ||
+        err?.code === 'auth/cancelled-popup-request' ||
+        err?.message?.includes('popup-closed-by-user') ||
+        err?.message?.includes('cancelled-popup-request')
+      ) {
+        return;
+      }
       setActionError(err.message || 'Failed to sign in with Google');
     } finally {
       setIsSigningIn(false);

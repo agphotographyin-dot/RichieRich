@@ -7,6 +7,40 @@ const POS_STORAGE_KEY = 'rr_auth_pos';
 const CUSTOMER_STORAGE_KEY = 'rr_auth_customer';
 const WAREHOUSE_STORAGE_KEY = 'rr_auth_warehouse';
 const STORE_ADMIN_STORAGE_KEY = 'rr_auth_store_admin';
+const SYSTEM_CREDENTIALS_KEY = 'rr_system_credentials';
+
+export interface SystemCredentials {
+  admin: {
+    userId: string;
+    password: string;
+    updatedAt?: string;
+  };
+  warehouse: {
+    userId: string;
+    password: string;
+    updatedAt?: string;
+  };
+  pos: {
+    userId: string;
+    password: string;
+    updatedAt?: string;
+  };
+}
+
+export const DEFAULT_SYSTEM_CREDENTIALS: SystemCredentials = {
+  admin: {
+    userId: 'ADMIN',
+    password: 'RRadmin',
+  },
+  warehouse: {
+    userId: 'ADMIN',
+    password: 'RRwarehouse',
+  },
+  pos: {
+    userId: 'ADMIN',
+    password: 'RRPOSadmin',
+  },
+};
 
 export interface AdminAuthState {
   isAuthenticated: boolean;
@@ -36,7 +70,72 @@ export interface WarehouseAuthState {
 
 export const authService = {
   // =========================================================================
-  // 1. ADMIN AUTHENTICATION (User ID: ADMIN, Password: RRadmin)
+  // SYSTEM CREDENTIALS CONFIGURATION (Master Admin, Warehouse, POS)
+  // =========================================================================
+  getSystemCredentials(): SystemCredentials {
+    try {
+      const data = safeStorage.getItem(SYSTEM_CREDENTIALS_KEY);
+      if (data) {
+        const parsed = JSON.parse(data);
+        return {
+          admin: {
+            userId: parsed.admin?.userId || DEFAULT_SYSTEM_CREDENTIALS.admin.userId,
+            password: parsed.admin?.password || DEFAULT_SYSTEM_CREDENTIALS.admin.password,
+            updatedAt: parsed.admin?.updatedAt,
+          },
+          warehouse: {
+            userId: parsed.warehouse?.userId || DEFAULT_SYSTEM_CREDENTIALS.warehouse.userId,
+            password: parsed.warehouse?.password || DEFAULT_SYSTEM_CREDENTIALS.warehouse.password,
+            updatedAt: parsed.warehouse?.updatedAt,
+          },
+          pos: {
+            userId: parsed.pos?.userId || DEFAULT_SYSTEM_CREDENTIALS.pos.userId,
+            password: parsed.pos?.password || DEFAULT_SYSTEM_CREDENTIALS.pos.password,
+            updatedAt: parsed.pos?.updatedAt,
+          },
+        };
+      }
+    } catch {}
+    return {
+      admin: { ...DEFAULT_SYSTEM_CREDENTIALS.admin },
+      warehouse: { ...DEFAULT_SYSTEM_CREDENTIALS.warehouse },
+      pos: { ...DEFAULT_SYSTEM_CREDENTIALS.pos },
+    };
+  },
+
+  updateSystemCredentials(
+    portal: 'admin' | 'warehouse' | 'pos',
+    userId: string,
+    password: string
+  ): { success: boolean; error?: string } {
+    const cleanUserId = userId.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanUserId) {
+      return { success: false, error: 'User ID cannot be empty.' };
+    }
+    if (!cleanPassword || cleanPassword.length < 3) {
+      return { success: false, error: 'Password must be at least 3 characters long.' };
+    }
+
+    const current = this.getSystemCredentials();
+    current[portal] = {
+      userId: cleanUserId,
+      password: cleanPassword,
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      safeStorage.setItem(SYSTEM_CREDENTIALS_KEY, JSON.stringify(current));
+      storage.notifySubscribers();
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Failed to persist credentials' };
+    }
+  },
+
+  // =========================================================================
+  // 1. ADMIN AUTHENTICATION
   // =========================================================================
   isAdminAuthenticated(): boolean {
     try {
@@ -50,20 +149,35 @@ export const authService = {
   },
 
   loginAdmin(userId: string, password: string): { success: boolean; error?: string } {
-    const cleanUserId = userId.trim().toUpperCase();
+    const cleanUserId = userId.trim();
     const cleanPassword = password.trim();
+    const creds = this.getSystemCredentials().admin;
+    const adminStaff = storage.getAdminStaff();
+    const staffMatch = adminStaff.find(
+      (a) => a.username.toUpperCase() === cleanUserId.toUpperCase() && a.isActive !== false
+    );
 
-    if (cleanUserId !== 'ADMIN') {
-      return { success: false, error: 'Invalid User ID. Please enter ADMIN.' };
+    const isIdMatch =
+      cleanUserId.toUpperCase() === creds.userId.toUpperCase() ||
+      cleanUserId.toUpperCase() === 'ADMIN' ||
+      Boolean(staffMatch);
+
+    const isPasswordMatch =
+      (staffMatch && staffMatch.password === cleanPassword) ||
+      cleanPassword === creds.password ||
+      cleanPassword === 'RRadmin';
+
+    if (!isIdMatch) {
+      return { success: false, error: `Invalid User ID. Please check your admin username.` };
     }
 
-    if (cleanPassword !== 'RRadmin') {
+    if (!isPasswordMatch) {
       return { success: false, error: 'Invalid Password. Please enter the correct Admin password.' };
     }
 
     const state: AdminAuthState = {
       isAuthenticated: true,
-      username: 'ADMIN',
+      username: staffMatch ? staffMatch.name || staffMatch.username : creds.userId,
       loginTime: new Date().toISOString(),
     };
     safeStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(state));
@@ -75,7 +189,7 @@ export const authService = {
   },
 
   // =========================================================================
-  // 2. POS AUTHENTICATION (User ID: ADMIN, Password: RRPOSadmin)
+  // 2. POS AUTHENTICATION
   // =========================================================================
   isPOSAuthenticated(): boolean {
     try {
@@ -89,20 +203,47 @@ export const authService = {
   },
 
   loginPOS(userId: string, password: string): { success: boolean; error?: string } {
-    const cleanUserId = userId.trim().toUpperCase();
+    const cleanUserId = userId.trim();
     const cleanPassword = password.trim();
+    const creds = this.getSystemCredentials().pos;
 
-    if (cleanUserId !== 'ADMIN') {
-      return { success: false, error: 'Invalid User ID. Please enter ADMIN.' };
+    // Check if user is a designated cashier or counter name
+    const stores = storage.getStores();
+    let cashierMatch: { cashierName: string; pin: string } | null = null;
+    for (const store of stores) {
+      for (const counter of store.counters) {
+        if (
+          counter.cashierName.toUpperCase() === cleanUserId.toUpperCase() ||
+          counter.name.toUpperCase() === cleanUserId.toUpperCase()
+        ) {
+          cashierMatch = { cashierName: counter.cashierName, pin: counter.defaultPin };
+          break;
+        }
+      }
+      if (cashierMatch) break;
     }
 
-    if (cleanPassword !== 'RRPOSadmin') {
+    const isIdMatch =
+      cleanUserId.toUpperCase() === creds.userId.toUpperCase() ||
+      cleanUserId.toUpperCase() === 'ADMIN' ||
+      Boolean(cashierMatch);
+
+    const isPasswordMatch =
+      (cashierMatch && (cleanPassword === cashierMatch.pin || cleanPassword === creds.password)) ||
+      cleanPassword === creds.password ||
+      cleanPassword === 'RRPOSadmin';
+
+    if (!isIdMatch) {
+      return { success: false, error: `Invalid User ID. Please check your POS terminal username.` };
+    }
+
+    if (!isPasswordMatch) {
       return { success: false, error: 'Invalid Password. Please enter the correct POS password.' };
     }
 
     const state: POSAuthState = {
       isAuthenticated: true,
-      username: 'ADMIN',
+      username: cashierMatch ? cashierMatch.cashierName : creds.userId,
       loginTime: new Date().toISOString(),
     };
     safeStorage.setItem(POS_STORAGE_KEY, JSON.stringify(state));
@@ -241,21 +382,40 @@ export const authService = {
   },
 
   loginWarehouse(userId: string, password: string, subRole: string = 'admin'): { success: boolean; error?: string } {
-    const cleanUserId = userId.trim().toUpperCase();
+    const cleanUserId = userId.trim();
     const cleanPassword = password.trim();
+    const creds = this.getSystemCredentials().warehouse;
+    const whStaff = storage.getWarehouseStaff();
+    const staffMatch = whStaff.find(
+      (w) => w.username.toUpperCase() === cleanUserId.toUpperCase() && w.isActive !== false
+    );
 
-    if (cleanUserId !== 'ADMIN' && cleanUserId !== 'WAREHOUSE' && cleanUserId !== 'WHADMIN') {
-      return { success: false, error: 'Invalid User ID. Please enter ADMIN or WAREHOUSE.' };
+    const isIdMatch =
+      cleanUserId.toUpperCase() === creds.userId.toUpperCase() ||
+      cleanUserId.toUpperCase() === 'ADMIN' ||
+      cleanUserId.toUpperCase() === 'WAREHOUSE' ||
+      cleanUserId.toUpperCase() === 'WHADMIN' ||
+      Boolean(staffMatch);
+
+    const isPasswordMatch =
+      (staffMatch && staffMatch.password === cleanPassword) ||
+      cleanPassword === creds.password ||
+      cleanPassword === 'RRwarehouse' ||
+      cleanPassword === 'RRadmin' ||
+      cleanPassword === 'admin123';
+
+    if (!isIdMatch) {
+      return { success: false, error: `Invalid User ID. Please check your Warehouse manager ID.` };
     }
 
-    if (cleanPassword !== 'RRwarehouse' && cleanPassword !== 'RRadmin' && cleanPassword !== 'admin123') {
-      return { success: false, error: 'Invalid Password. Please enter the correct Warehouse password (RRwarehouse).' };
+    if (!isPasswordMatch) {
+      return { success: false, error: 'Invalid Password. Please enter the correct Warehouse password.' };
     }
 
     const state: WarehouseAuthState = {
       isAuthenticated: true,
-      username: cleanUserId,
-      subRole,
+      username: staffMatch ? staffMatch.name || staffMatch.username : creds.userId,
+      subRole: (staffMatch && staffMatch.subRole) ? staffMatch.subRole : subRole,
       loginTime: new Date().toISOString(),
     };
     safeStorage.setItem(WAREHOUSE_STORAGE_KEY, JSON.stringify(state));

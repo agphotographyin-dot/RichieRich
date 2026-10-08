@@ -20,6 +20,32 @@ export interface StoreAdminCredential {
   lastLoginAt?: string;
 }
 
+export interface WarehouseStaffCredential {
+  id: string;
+  username: string;
+  password: string;
+  name: string;
+  subRole: string;
+  phone?: string;
+  email?: string;
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+export interface AdminStaffCredential {
+  id: string;
+  username: string;
+  password: string;
+  name: string;
+  roleTitle?: string;
+  phone?: string;
+  email?: string;
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
 export interface StoreAdminAuthState {
   isAuthenticated: boolean;
   username: string;

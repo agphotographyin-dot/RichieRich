@@ -11,6 +11,8 @@ import {
   CounterInfo,
   POSSession,
   StoreAdminCredential,
+  WarehouseStaffCredential,
+  AdminStaffCredential,
   StoreExpense,
   StoreExpenseCategory,
   StoreFinancialSummary,
@@ -36,6 +38,8 @@ const STORAGE_KEYS = {
   POS_SESSION: 'rr_panhouse_pos_session',
   STORES: 'rr_panhouse_stores',
   STORE_ADMINS: 'rr_panhouse_store_admins',
+  WAREHOUSE_STAFF: 'rr_panhouse_warehouse_staff',
+  ADMIN_STAFF: 'rr_panhouse_admin_staff',
   STORE_EXPENSES: 'rr_panhouse_store_expenses',
   CURRENCY_SYMBOL: '₹',
 };
@@ -195,6 +199,47 @@ export const INITIAL_STORE_ADMINS: StoreAdminCredential[] = [
     phone: '+91 98250 11204',
     email: 'sg.admin@richierich.in',
     roleTitle: 'Highway Express Supervisor',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+];
+
+// Initial Warehouse Staff Accounts
+export const INITIAL_WAREHOUSE_STAFF: WarehouseStaffCredential[] = [
+  {
+    id: 'wh-lead',
+    username: 'wh_manager',
+    password: 'RRwarehouse',
+    name: 'Vikram Solanki',
+    subRole: 'warehouse_manager',
+    phone: '+91 98250 88701',
+    email: 'vikram.wh@richierich.in',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'wh-inward',
+    username: 'wh_inward',
+    password: 'RRwarehouse',
+    name: 'Rakesh Dave',
+    subRole: 'inward_supervisor',
+    phone: '+91 98250 88702',
+    email: 'rakesh.inward@richierich.in',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+];
+
+// Initial Master Admin Staff Accounts
+export const INITIAL_ADMIN_STAFF: AdminStaffCredential[] = [
+  {
+    id: 'adm-director',
+    username: 'director_hq',
+    password: 'RRadmin',
+    name: 'Ashok Gupta',
+    roleTitle: 'Managing Director / HQ Admin',
+    phone: '+91 98250 99001',
+    email: 'ashok.hq@richierich.in',
     isActive: true,
     createdAt: new Date().toISOString(),
   },
@@ -2719,6 +2764,110 @@ export class StorageService {
     const filtered = admins.filter((a) => a.id !== id);
     if (filtered.length === admins.length) return false;
     this.saveStoreAdmins(filtered);
+    return true;
+  }
+
+  // =========================================================================
+  // WAREHOUSE STAFF CREDENTIALS MANAGEMENT
+  // =========================================================================
+  getWarehouseStaff(): WarehouseStaffCredential[] {
+    try {
+      const data = safeStorage.getItem(STORAGE_KEYS.WAREHOUSE_STAFF);
+      if (!data) return INITIAL_WAREHOUSE_STAFF;
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_WAREHOUSE_STAFF;
+    } catch {
+      return INITIAL_WAREHOUSE_STAFF;
+    }
+  }
+
+  saveWarehouseStaff(staff: WarehouseStaffCredential[]): void {
+    try {
+      safeStorage.setItem(STORAGE_KEYS.WAREHOUSE_STAFF, JSON.stringify(staff));
+      this.notifySubscribers();
+    } catch (e) {
+      console.error('Failed to save warehouse staff:', e);
+    }
+  }
+
+  addWarehouseStaff(data: Omit<WarehouseStaffCredential, 'id' | 'createdAt'>): WarehouseStaffCredential {
+    const staff = this.getWarehouseStaff();
+    const newStaff: WarehouseStaffCredential = {
+      ...data,
+      id: `wh-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    staff.push(newStaff);
+    this.saveWarehouseStaff(staff);
+    return newStaff;
+  }
+
+  updateWarehouseStaff(id: string, updates: Partial<WarehouseStaffCredential>): boolean {
+    const staff = this.getWarehouseStaff();
+    const idx = staff.findIndex((s) => s.id === id);
+    if (idx === -1) return false;
+    staff[idx] = { ...staff[idx], ...updates };
+    this.saveWarehouseStaff(staff);
+    return true;
+  }
+
+  deleteWarehouseStaff(id: string): boolean {
+    const staff = this.getWarehouseStaff();
+    const filtered = staff.filter((s) => s.id !== id);
+    if (filtered.length === staff.length) return false;
+    this.saveWarehouseStaff(filtered);
+    return true;
+  }
+
+  // =========================================================================
+  // MASTER ADMIN STAFF CREDENTIALS MANAGEMENT
+  // =========================================================================
+  getAdminStaff(): AdminStaffCredential[] {
+    try {
+      const data = safeStorage.getItem(STORAGE_KEYS.ADMIN_STAFF);
+      if (!data) return INITIAL_ADMIN_STAFF;
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_ADMIN_STAFF;
+    } catch {
+      return INITIAL_ADMIN_STAFF;
+    }
+  }
+
+  saveAdminStaff(staff: AdminStaffCredential[]): void {
+    try {
+      safeStorage.setItem(STORAGE_KEYS.ADMIN_STAFF, JSON.stringify(staff));
+      this.notifySubscribers();
+    } catch (e) {
+      console.error('Failed to save admin staff:', e);
+    }
+  }
+
+  addAdminStaff(data: Omit<AdminStaffCredential, 'id' | 'createdAt'>): AdminStaffCredential {
+    const staff = this.getAdminStaff();
+    const newStaff: AdminStaffCredential = {
+      ...data,
+      id: `adm-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    staff.push(newStaff);
+    this.saveAdminStaff(staff);
+    return newStaff;
+  }
+
+  updateAdminStaff(id: string, updates: Partial<AdminStaffCredential>): boolean {
+    const staff = this.getAdminStaff();
+    const idx = staff.findIndex((s) => s.id === id);
+    if (idx === -1) return false;
+    staff[idx] = { ...staff[idx], ...updates };
+    this.saveAdminStaff(staff);
+    return true;
+  }
+
+  deleteAdminStaff(id: string): boolean {
+    const staff = this.getAdminStaff();
+    const filtered = staff.filter((s) => s.id !== id);
+    if (filtered.length === staff.length) return false;
+    this.saveAdminStaff(filtered);
     return true;
   }
 
