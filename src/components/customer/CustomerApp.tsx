@@ -317,6 +317,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({
       totalProfit: profit,
       paymentMethod: 'upi_qr',
       paymentStatus: 'paid',
+      sync_transaction_id: `SYNC-TXN-ORD-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
       status: 'preparing',
       notes: `${orderType === 'dine_in' ? `Dine-in (${tableNumber})` : 'Express Takeaway'} • Store: ${activeStore.shortName}`,
     });

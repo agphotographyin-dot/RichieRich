@@ -266,8 +266,10 @@ export interface Order {
   paymentStatus: 'paid' | 'pending' | 'refunded';
   status: OrderStatus;
   createdAt: string;
+  updatedAt?: string;
   cashierName?: string;
   notes?: string;
+  sync_transaction_id?: string;
 }
 
 export interface Promotion {

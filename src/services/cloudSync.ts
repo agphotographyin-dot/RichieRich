@@ -25,6 +25,14 @@ export interface CloudSyncState {
 
 type SyncListener = (state: CloudSyncState) => void;
 
+export interface LocalPaidUpdateMeta {
+  sync_transaction_id: string;
+  timestamp: number;
+  isoTimestamp: string;
+  paymentStatus: string;
+  docId: string;
+}
+
 // Local storage keys mirrored by the sync engine
 export const STORAGE_KEYS = {
   INVENTORY: 'rr_panhouse_inventory',
@@ -109,6 +117,53 @@ class PocketBaseTwoWayRealtimeSyncService {
   private lastPushedHashes = new Map<string, string>();
   private pbRecordIdMap = new Map<string, string>(); // collection:recordId -> pb internal id
 
+  // Local paid updates registry for sync_transaction_id conflict resolution
+  private localPaidUpdates = new Map<string, LocalPaidUpdateMeta>();
+
+  /**
+   * Records a local 'paid' update with its unique sync_transaction_id and timestamp
+   */
+  public recordPaidTransaction(
+    collectionName: string,
+    docId: string,
+    sync_transaction_id: string,
+    isoTimestamp?: string
+  ): void {
+    if (!docId || !sync_transaction_id) return;
+    const nowIso = isoTimestamp || new Date().toISOString();
+    const timestamp = new Date(nowIso).getTime();
+
+    const meta: LocalPaidUpdateMeta = {
+      sync_transaction_id,
+      timestamp,
+      isoTimestamp: nowIso,
+      paymentStatus: 'paid',
+      docId,
+    };
+
+    this.localPaidUpdates.set(docId, meta);
+    this.localPaidUpdates.set(`${collectionName}:${docId}`, meta);
+    this.localPaidUpdates.set(sync_transaction_id, meta);
+
+    try {
+      const serialized = Array.from(this.localPaidUpdates.entries()).slice(-1000);
+      safeStorage.setItem('rr_local_paid_updates', JSON.stringify(serialized));
+    } catch {}
+  }
+
+  /**
+   * Retrieves the last recorded local 'paid' update by docId or sync_transaction_id
+   */
+  public getLastPaidUpdate(docId: string, sync_transaction_id?: string): LocalPaidUpdateMeta | undefined {
+    if (sync_transaction_id && this.localPaidUpdates.has(sync_transaction_id)) {
+      return this.localPaidUpdates.get(sync_transaction_id);
+    }
+    if (docId && this.localPaidUpdates.has(docId)) {
+      return this.localPaidUpdates.get(docId);
+    }
+    return undefined;
+  }
+
   // UI change notification hooks
   private onStorageChangeNotify?: () => void;
   private onWarehouseChangeNotify?: () => void;
@@ -171,6 +226,19 @@ class PocketBaseTwoWayRealtimeSyncService {
     } catch {}
 
     this.state.autoFetchIntervalSeconds = this.autoFetchIntervalSeconds;
+
+    // Load persisted local paid updates registry
+    try {
+      const savedPaidUpdates = safeStorage.getItem('rr_local_paid_updates');
+      if (savedPaidUpdates) {
+        const parsed = JSON.parse(savedPaidUpdates);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(([key, val]) => {
+            if (key && val) this.localPaidUpdates.set(key, val);
+          });
+        }
+      }
+    } catch {}
 
     // Migrate any legacy warehouse storage keys into standard rr_wh_* keys
     try {
@@ -395,6 +463,22 @@ class PocketBaseTwoWayRealtimeSyncService {
           }
 
           const id = String(docData.id || record.recordId || record.id || (docData as any).sku);
+          const incomingTxnId = docData.sync_transaction_id || record.sync_transaction_id;
+          const incomingTime = new Date(
+            docData.updatedAt || record.updated || docData.created || record.created || 0
+          ).getTime();
+
+          // Ignore incoming remote update if incoming timestamp is older than last local 'paid' update with a matching transaction ID
+          const lastPaid = this.getLastPaidUpdate(id, incomingTxnId);
+          if (lastPaid && incomingTime < lastPaid.timestamp) {
+            const isMatchingTxn = incomingTxnId === lastPaid.sync_transaction_id;
+            if (isMatchingTxn || !incomingTxnId) {
+              console.info(
+                `[PocketBase SSE] Ignored stale stream update for ${id} in ${colName} (Txn: ${lastPaid.sync_transaction_id}). Incoming time ${new Date(incomingTime).toISOString()} < local paid time ${lastPaid.isoTimestamp}`
+              );
+              return;
+            }
+          }
 
           let map = this.collectionDocsMap.get(colName);
           if (!map) {
@@ -471,7 +555,8 @@ class PocketBaseTwoWayRealtimeSyncService {
         const payStatus = item.paymentStatus || '';
         const stock = item.stockQuantity !== undefined ? item.stockQuantity : '';
         const lastMod = item.lastStockChange || item.updatedAt || item.lastUpdated || '';
-        return `${id}_${lastMod}_${outstanding}_${due}_${paid}_${payStatus}_${stock}`;
+        const txnId = item.sync_transaction_id || '';
+        return `${id}_${lastMod}_${outstanding}_${due}_${paid}_${payStatus}_${stock}_${txnId}`;
       }
     }
     return String(item);
@@ -565,11 +650,54 @@ class PocketBaseTwoWayRealtimeSyncService {
           }));
         }
 
-        // Apply Local Mutation Guard: If a local record was modified more recently than the incoming remote record,
-        // preserve the newer local record and schedule an immediate outbound sync to update the server.
+        // Apply Local Mutation Guard & sync_transaction_id protection:
+        // Ignore incoming remote updates if the incoming timestamp is older than the last local 'paid' update with a matching transaction ID.
         resolvedDocs = resolvedDocs.map((remoteDoc: any) => {
           const id = String(remoteDoc?.id || remoteDoc?.sku || '').trim();
           const localDoc = localMap.get(id);
+
+          const remoteTxnId = remoteDoc?.sync_transaction_id;
+          const localTxnId = localDoc?.sync_transaction_id;
+          const lastPaidMeta = this.getLastPaidUpdate(id, localTxnId || remoteTxnId);
+
+          const incomingTime = new Date(
+            remoteDoc?.updatedAt || remoteDoc?.updated || remoteDoc?.created || 0
+          ).getTime();
+
+          const localPaidTime =
+            lastPaidMeta?.timestamp ||
+            (localDoc?.updatedAt ? new Date(localDoc.updatedAt).getTime() : 0);
+
+          const isLocalPaid =
+            (localDoc &&
+              (localDoc.paymentStatus === 'paid' ||
+                localDoc.paymentStatus === 'settled' ||
+                (localDoc.dueAmount !== undefined && Number(localDoc.dueAmount) <= 0))) ||
+            Boolean(lastPaidMeta);
+
+          // Check if this incoming update has a matching transaction ID
+          const hasMatchingTxnId =
+            (remoteTxnId && localTxnId && remoteTxnId === localTxnId) ||
+            (remoteTxnId && lastPaidMeta && remoteTxnId === lastPaidMeta.sync_transaction_id) ||
+            (localTxnId && lastPaidMeta && localTxnId === lastPaidMeta.sync_transaction_id);
+
+          // Ignore incoming remote updates if the incoming timestamp is older than the last local 'paid' update with a matching transaction ID
+          if (isLocalPaid && (hasMatchingTxnId || (localTxnId && incomingTime < localPaidTime))) {
+            if (incomingTime < localPaidTime && localDoc) {
+              console.info(
+                `[PocketBase Sync] Ignored stale remote update for ${id} (Matching Txn: ${remoteTxnId || localTxnId || lastPaidMeta?.sync_transaction_id}). Incoming time ${new Date(incomingTime).toISOString()} is older than last local 'paid' update ${new Date(localPaidTime).toISOString()}`
+              );
+              // Trigger proactive sync push so VPS gets updated with the local paid state
+              const colEntry = Object.entries(COLLECTION_STORAGE_MAP).find(([, val]) => val.storageKey === storageKey);
+              if (colEntry) {
+                setTimeout(() => this.syncDocument(colEntry[0], id, localDoc), 80);
+              }
+              return localDoc;
+            }
+          }
+
+          // General Local Mutation Guard: If a local record was modified more recently than the incoming remote record,
+          // preserve the newer local record and schedule an immediate outbound sync to update the server.
           if (localDoc && localDoc.updatedAt && remoteDoc.updatedAt) {
             const localTime = new Date(localDoc.updatedAt).getTime();
             const remoteTime = new Date(remoteDoc.updatedAt).getTime();
@@ -703,12 +831,19 @@ class PocketBaseTwoWayRealtimeSyncService {
     }
 
     try {
-      const payload = {
+      const payload: any = {
         recordId: docId,
         data,
         _senderId: this.clientId,
-        updatedAt: new Date().toISOString(),
+        updatedAt: (data && data.updatedAt) || new Date().toISOString(),
       };
+      if (data && data.sync_transaction_id) {
+        payload.sync_transaction_id = data.sync_transaction_id;
+      }
+
+      if (data && data.sync_transaction_id && (data.paymentStatus === 'paid' || data.totalPaid > 0)) {
+        this.recordPaidTransaction(collectionName, docId, data.sync_transaction_id, data.updatedAt);
+      }
 
       let success = false;
       const cachedPbId = this.pbRecordIdMap.get(key);

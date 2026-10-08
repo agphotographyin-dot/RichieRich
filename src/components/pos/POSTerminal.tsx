@@ -644,6 +644,7 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
         totalProfit,
         paymentMethod,
         paymentStatus: 'paid',
+        sync_transaction_id: `SYNC-TXN-ORD-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
         status: 'completed',
       });
 

@@ -69,6 +69,8 @@ export interface Supplier {
     ifscCode: string;
     bankName: string;
   };
+  sync_transaction_id?: string;
+  updatedAt?: string;
 }
 
 export interface SupplierLedgerEntry {
@@ -83,6 +85,8 @@ export interface SupplierLedgerEntry {
   runningBalance: number;
   paymentMode?: 'bank_neft' | 'upi_qr' | 'cheque' | 'cash';
   notes?: string;
+  sync_transaction_id?: string;
+  updatedAt?: string;
 }
 
 export interface POItem {
@@ -130,6 +134,8 @@ export interface PurchaseOrder {
   paymentTerms: string;
   paymentStatus: 'unpaid' | 'partial' | 'paid';
   notes?: string;
+  sync_transaction_id?: string;
+  updatedAt?: string;
 }
 
 export interface PurchaseBillItem {
@@ -182,6 +188,8 @@ export interface PurchaseBill {
   grnStatus: 'verified_stocked' | 'qc_pending' | 'rejected';
   receivedBy: string;
   notes?: string;
+  sync_transaction_id?: string;
+  updatedAt?: string;
 }
 
 export interface BatchAllocation {

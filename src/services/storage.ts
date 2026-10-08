@@ -1733,11 +1733,18 @@ export class StorageService {
   processOrder(orderData: Omit<Order, 'id' | 'orderNumber' | 'createdAt'>): Order {
     const orders = this.getOrders();
     const orderNumber = `RR-${new Date().getFullYear()}-${1000 + orders.length + 1}`;
+    const nowIso = new Date().toISOString();
+    const sync_transaction_id =
+      orderData.sync_transaction_id ||
+      `SYNC-TXN-ORD-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+
     const newOrder: Order = {
       ...orderData,
       id: `ord-${Date.now()}`,
       orderNumber,
-      createdAt: new Date().toISOString(),
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      sync_transaction_id,
     };
 
     // 1. Deduct Inventory Stock in Real-Time (Store Specific Allocation or Central Warehouse)
@@ -1933,6 +1940,9 @@ export class StorageService {
 
     // Single unified notification broadcast for state synchronization
     this.notify();
+    if (newOrder.paymentStatus === 'paid' && newOrder.sync_transaction_id) {
+      cloudSync.recordPaidTransaction('orders', newOrder.id, newOrder.sync_transaction_id, newOrder.updatedAt || newOrder.createdAt);
+    }
     cloudSync.syncDocument('orders', newOrder.id, newOrder);
     newOrder.items.forEach((item) => {
       const invItem = inventory.find((i) => i.id === item.itemId || (item.sku && i.sku === item.sku));

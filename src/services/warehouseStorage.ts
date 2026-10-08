@@ -586,10 +586,16 @@ export const warehouseStorage = {
     const actualAmount = Math.max(0, Number(amount) || 0);
     if (actualAmount <= 0) return false;
 
+    // Generate unique transaction ID for this vendor payment
+    const sync_transaction_id = `SYNC-TXN-PAY-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+    const nowIso = new Date().toISOString();
+
     supplier.currentOutstanding = Math.max(0, (Number(supplier.currentOutstanding) || 0) - actualAmount);
     supplier.totalPaid = (Number(supplier.totalPaid) || 0) + actualAmount;
-    supplier.updatedAt = new Date().toISOString();
+    supplier.updatedAt = nowIso;
+    supplier.sync_transaction_id = sync_transaction_id;
     this.saveSuppliers(suppliers);
+    cloudSync.recordPaidTransaction('suppliers', supplier.id, sync_transaction_id, nowIso);
     cloudSync.syncDocument('suppliers', supplier.id, supplier);
 
     // Record in ledger
@@ -606,8 +612,11 @@ export const warehouseStorage = {
       runningBalance: supplier.currentOutstanding,
       paymentMode,
       notes: notes || `Payment recorded via ${paymentMode.toUpperCase()}`,
+      sync_transaction_id,
+      updatedAt: nowIso,
     };
     this.saveSupplierLedger([newEntry, ...ledgers]);
+    cloudSync.recordPaidTransaction('supplier_ledger', newEntry.id, sync_transaction_id, nowIso);
     cloudSync.syncDocument('supplier_ledger', newEntry.id, newEntry);
 
     // Update Purchase Bills
@@ -626,7 +635,9 @@ export const warehouseStorage = {
           b.dueAmount = Math.max(0, (Number(b.dueAmount) || 0) - payForThisBill);
           remainingPayment -= payForThisBill;
           b.paymentStatus = b.dueAmount <= 0 ? 'paid' : 'partial';
-          b.updatedAt = new Date().toISOString();
+          b.updatedAt = nowIso;
+          b.sync_transaction_id = sync_transaction_id;
+          cloudSync.recordPaidTransaction('inward_bills', b.id, sync_transaction_id, nowIso);
           cloudSync.syncDocument('inward_bills', b.id, b);
         } else if (!specificBillId && Number(b.dueAmount) > 0 && remainingPayment > 0) {
           const payForThisBill = Math.min(Number(b.dueAmount) || 0, remainingPayment);
@@ -634,14 +645,18 @@ export const warehouseStorage = {
           b.dueAmount = Math.max(0, (Number(b.dueAmount) || 0) - payForThisBill);
           remainingPayment -= payForThisBill;
           b.paymentStatus = b.dueAmount <= 0 ? 'paid' : 'partial';
-          b.updatedAt = new Date().toISOString();
+          b.updatedAt = nowIso;
+          b.sync_transaction_id = sync_transaction_id;
+          cloudSync.recordPaidTransaction('inward_bills', b.id, sync_transaction_id, nowIso);
           cloudSync.syncDocument('inward_bills', b.id, b);
         } else if (supplier.currentOutstanding === 0) {
           // If vendor balance is completely cleared to zero, mark all their bills settled
           b.dueAmount = 0;
           b.paidAmount = Number(b.grandTotal) || 0;
           b.paymentStatus = 'paid';
-          b.updatedAt = new Date().toISOString();
+          b.updatedAt = nowIso;
+          b.sync_transaction_id = sync_transaction_id;
+          cloudSync.recordPaidTransaction('inward_bills', b.id, sync_transaction_id, nowIso);
           cloudSync.syncDocument('inward_bills', b.id, b);
         }
       }
@@ -659,7 +674,9 @@ export const warehouseStorage = {
       if (isMatchingSupplier) {
         if (supplier.currentOutstanding === 0) {
           po.paymentStatus = 'paid';
-          po.updatedAt = new Date().toISOString();
+          po.updatedAt = nowIso;
+          po.sync_transaction_id = sync_transaction_id;
+          cloudSync.recordPaidTransaction('purchase_orders', po.id, sync_transaction_id, nowIso);
           cloudSync.syncDocument('purchase_orders', po.id, po);
         }
       }
@@ -1286,6 +1303,12 @@ export const warehouseStorage = {
       }
     }
 
+    const nowIso = new Date().toISOString();
+    const isPaid = billData.paymentStatus === 'paid' || (Number(billData.dueAmount) <= 0 && Number(billData.grandTotal) > 0);
+    const sync_transaction_id =
+      billData.sync_transaction_id ||
+      (isPaid ? `SYNC-TXN-PAY-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}` : undefined);
+
     const newBill: PurchaseBill = {
       ...billData,
       id: `pb-${Date.now()}`,
@@ -1293,8 +1316,13 @@ export const warehouseStorage = {
       poNumber,
       warehouseId: 'wh-central-amd',
       warehouseName: 'Central Warehouse',
+      updatedAt: nowIso,
+      sync_transaction_id,
     };
     this.savePurchaseBills([newBill, ...bills]);
+    if (newBill.sync_transaction_id && isPaid) {
+      cloudSync.recordPaidTransaction('inward_bills', newBill.id, newBill.sync_transaction_id, nowIso);
+    }
     cloudSync.syncDocument('inward_bills', newBill.id, newBill);
 
     // 1. Update Supplier Outstanding & Purchases
@@ -1325,7 +1353,6 @@ export const warehouseStorage = {
     // 2. Generate and store Batches with Expiry Tracking (Central Warehouse Only)
     const batches = this.getBatches();
     const currentInventory = storage.getInventory();
-    const nowIso = new Date().toISOString();
     const nowTs = Date.now();
 
     const newBatches: BatchRecord[] = newBill.items.map((item, idx) => {
