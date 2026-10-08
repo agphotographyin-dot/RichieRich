@@ -29,6 +29,7 @@ import {
   verifyAndSanitizeImportFile,
   BackupValidationResult,
 } from '../../services/backupIntegrityService';
+import { GoogleWorkspaceBackupPanel } from './GoogleWorkspaceBackupPanel';
 
 interface AdminBackupsSecurityProps {
   backups: BackupSnapshot[];
@@ -348,6 +349,9 @@ export const AdminBackupsSecurity: React.FC<AdminBackupsSecurityProps> = ({ back
           </p>
         </div>
       </div>
+
+      {/* Google Drive & Gmail Automated Cloud Backup Integration */}
+      <GoogleWorkspaceBackupPanel latestBackup={backups[0] || null} />
 
       {/* Backups List Table */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">

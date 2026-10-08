@@ -22,6 +22,7 @@ import { validateAndSanitizeBackupPayload } from './backupIntegrityService';
 import { safeStorage } from '../utils/safeStorage';
 import { getLocalDateString, isToday, isSameDay } from '../utils/dateUtils';
 import { cloudSync } from './cloudSync';
+import { executeDailyCloudBackup } from './googleWorkspaceBackupService';
 
 const STORAGE_KEYS = {
   INVENTORY: 'rr_panhouse_inventory',
@@ -311,6 +312,11 @@ export class StorageService {
     this.initDefaultData();
     this.setupSyncListener();
     this.checkDailyBackupScheduler();
+    if (typeof window !== 'undefined') {
+      setInterval(() => {
+        this.checkDailyBackupScheduler();
+      }, 60 * 60 * 1000); // Check hourly for date rollover
+    }
   }
 
   static getInstance(): StorageService {
@@ -2346,8 +2352,13 @@ export class StorageService {
       const lastBackupDate = safeStorage.getItem(STORAGE_KEYS.LAST_BACKUP_DATE);
       if (lastBackupDate !== todayStr) {
         // Automatically create daily 12:00 AM automated backup with full PocketBase collections, Store Stock and Inventory
-        this.createBackup('automated_daily', `Daily 12:00 AM Automated Snapshot [${todayStr}]`);
+        const snapshot = this.createBackup('automated_daily', `Daily 12:00 AM Automated Snapshot [${todayStr}]`);
         safeStorage.setItem(STORAGE_KEYS.LAST_BACKUP_DATE, todayStr);
+
+        // Execute automated Google Drive upload and Gmail push if configured
+        executeDailyCloudBackup(snapshot).catch((err) => {
+          console.warn('[CloudBackup] Daily automated cloud push note:', err);
+        });
       }
     } catch (e) {
       console.warn('Daily auto-backup scheduler check error:', e);
