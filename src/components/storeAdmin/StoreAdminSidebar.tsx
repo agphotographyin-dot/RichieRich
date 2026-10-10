@@ -194,10 +194,10 @@ export const StoreAdminSidebar: React.FC<StoreAdminSidebarProps> = ({
         },
         {
           id: 'sales_orders',
-          label: 'Billed Orders & POS',
+          label: 'Orders & Sales Ledger',
           icon: ShoppingBag,
           badge: totalOrdersCount || undefined,
-          badgeVariant: 'slate',
+          badgeVariant: 'amber',
         },
         {
           id: 'staff_counters',
@@ -243,12 +243,12 @@ export const StoreAdminSidebar: React.FC<StoreAdminSidebarProps> = ({
 
   return (
     <aside
-      className={`bg-[#0F172A] border-r border-slate-800/90 text-white flex flex-col justify-between transition-all duration-300 select-none z-30 shrink-0 sticky top-16 h-[calc(100vh-4rem)] overflow-hidden ${
-        isCollapsed ? 'w-16 sm:w-18' : 'w-64 sm:w-68'
+      className={`bg-[#0F172A] border-r border-slate-800/90 text-white flex flex-col justify-between transition-all duration-300 select-none z-30 shrink-0 sticky top-0 md:top-0 h-full md:h-[calc(100vh-4rem)] overflow-hidden ${
+        isCollapsed ? 'w-14 sm:w-15' : 'w-56 sm:w-60'
       }`}
     >
       {/* Top Section: Outlet Identity & Collapse Toggle */}
-      <div className={`border-b border-slate-800/80 transition-all ${isCollapsed ? 'p-2.5 flex flex-col items-center' : 'p-3 sm:p-4'}`}>
+      <div className={`border-b border-slate-800/80 transition-all ${isCollapsed ? 'p-2 flex flex-col items-center' : 'p-2.5 sm:p-3'}`}>
         {isCollapsed ? (
           <div className="flex flex-col items-center gap-2 w-full">
             <div
@@ -360,12 +360,12 @@ export const StoreAdminSidebar: React.FC<StoreAdminSidebarProps> = ({
 
         {/* Quick Launch Buttons (When expanded) */}
         {!isCollapsed && (
-          <div className="mt-3 space-y-1.5">
-            <div className="grid grid-cols-2 gap-2">
+          <div className="mt-2 space-y-1.5">
+            <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
                 onClick={onOpenDirectPO}
-                className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-amber-600/90 hover:bg-amber-600 text-white text-[11px] font-bold shadow-xs transition-colors cursor-pointer border border-amber-500/30"
+                className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl bg-amber-600/90 hover:bg-amber-600 text-white text-[11px] font-bold shadow-xs transition-colors cursor-pointer border border-amber-500/30"
                 title="Raise Direct Purchase Order to Supplier"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -375,7 +375,7 @@ export const StoreAdminSidebar: React.FC<StoreAdminSidebarProps> = ({
               <button
                 type="button"
                 onClick={onOpenReceiveGoods}
-                className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-emerald-600/90 hover:bg-emerald-600 text-white text-[11px] font-bold shadow-xs transition-colors cursor-pointer border border-emerald-500/30"
+                className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl bg-emerald-600/90 hover:bg-emerald-600 text-white text-[11px] font-bold shadow-xs transition-colors cursor-pointer border border-emerald-500/30"
                 title="Inward Goods Received from Supplier"
               >
                 <PackageCheck className="w-3.5 h-3.5" />
@@ -399,11 +399,11 @@ export const StoreAdminSidebar: React.FC<StoreAdminSidebarProps> = ({
       </div>
 
       {/* Navigation Links (Scrollable) */}
-      <div className="flex-1 overflow-y-auto py-3 px-2 sm:px-3 space-y-4">
+      <div className="flex-1 overflow-y-auto py-2 px-1.5 sm:px-2 space-y-2.5">
         {navGroups.map((group, gIdx) => (
-          <div key={gIdx} className="space-y-1">
+          <div key={gIdx} className="space-y-0.5">
             {!isCollapsed && group.groupTitle && (
-              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <div className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">
                 {group.groupTitle}
               </div>
             )}
@@ -418,13 +418,13 @@ export const StoreAdminSidebar: React.FC<StoreAdminSidebarProps> = ({
                   type="button"
                   onClick={() => onSelectTab(item.id)}
                   title={isCollapsed ? item.label : undefined}
-                  className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all cursor-pointer group ${
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl transition-all cursor-pointer group ${
                     isActive
                       ? 'bg-amber-600 text-white shadow-xs font-black'
                       : 'text-slate-400 hover:text-white hover:bg-slate-800/80 font-semibold'
-                  } ${isCollapsed ? 'justify-center px-0' : ''}`}
+                  } ${isCollapsed ? 'justify-center px-0 py-2' : ''}`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <Icon
                       className={`w-4 h-4 shrink-0 transition-colors ${
                         isActive ? 'text-white' : 'text-slate-400 group-hover:text-amber-400'
@@ -458,7 +458,7 @@ export const StoreAdminSidebar: React.FC<StoreAdminSidebarProps> = ({
       </div>
 
       {/* Footer / Quick Status */}
-      <div className="p-3 border-t border-slate-800/80 bg-slate-950/40">
+      <div className="p-2 sm:p-2.5 border-t border-slate-800/80 bg-slate-950/40">
         {!isCollapsed ? (
           <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
             <span>Store Admin v2.6</span>

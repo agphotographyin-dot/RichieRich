@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search,
   Scan,
@@ -15,6 +15,11 @@ import {
   Clock,
   Printer,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  ArrowLeft,
+  Maximize2,
+  Minimize2,
   AlertTriangle,
   Receipt,
   X,
@@ -42,6 +47,8 @@ interface POSTerminalProps {
   customers: Customer[];
   onOpenScanner?: () => void;
   onBarcodeScanned?: (barcode: string) => void;
+  isHeaderCollapsed?: boolean;
+  onToggleHeader?: () => void;
 }
 
 interface CartItem extends OrderItem {
@@ -82,11 +89,38 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
   onOpenScanner,
   posSession,
   onSwitchCounter,
+  isHeaderCollapsed,
+  onToggleHeader,
 }) => {
+  // Collapsed header state (supports controlled via props or persistent localStorage fallback)
+  const [localHeaderCollapsed, setLocalHeaderCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('rr_pos_header_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const isCollapsed = isHeaderCollapsed !== undefined ? isHeaderCollapsed : localHeaderCollapsed;
+
+  const toggleHeader = onToggleHeader || (() => {
+    setLocalHeaderCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('rr_pos_header_collapsed', String(next));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+  });
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<'catalog' | 'cart'>('catalog');
 
   // Loose products count for the POS-only category tab
   const looseProductsCount = useMemo(() => {
@@ -412,6 +446,37 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
       const target = e.target as HTMLElement;
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 
+      // POS Cashier Hotkeys when not typing in text fields
+      if (!isInput) {
+        // Toggle header collapse / reveal to give maximum space to products & cart
+        if (e.key === 'h' || e.key === 'H') {
+          e.preventDefault();
+          toggleHeader();
+          return;
+        }
+        // Quick focus product search
+        if (e.key === '/') {
+          e.preventDefault();
+          searchInputRef.current?.focus();
+          return;
+        }
+        // Quick open barcode scanner modal
+        if (e.key === 'F3') {
+          e.preventDefault();
+          if (onOpenScanner) onOpenScanner();
+          else setLocalScannerOpen(true);
+          return;
+        }
+        // F9 to open payment modal
+        if (e.key === 'F9') {
+          e.preventDefault();
+          if (cart.length > 0) {
+            setPaymentModalOpen(true);
+          }
+          return;
+        }
+      }
+
       const currentTime = Date.now();
       const timeDiff = currentTime - lastKeyTime;
       lastKeyTime = currentTime;
@@ -651,7 +716,7 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
       setRecentOrder(newOrder);
       setPaymentModalOpen(false);
       setReceiptModalOpen(true);
-      setMobileCartOpen(false);
+      setMobileTab('catalog');
       setCart([]);
       setSelectedCustomer(null);
       setCustomerPhone('');
@@ -705,65 +770,148 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
   const totalCartCount = cart.reduce((s, i) => s + i.quantity, 0);
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      {/* Top Banner with Active Store, Counter & Cashier Station Information */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl shadow-xs">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-900 border border-amber-300 flex items-center justify-center shrink-0">
-            <Store className="w-6 h-6 text-amber-700" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                {posSession.storeName}
-              </h2>
-              <span className="px-2.5 py-0.5 rounded-md bg-amber-500/20 text-amber-900 border border-amber-500/30 text-xs font-bold">
-                Counter #{posSession.counterNumber}
+    <div className="flex-1 min-h-0 flex flex-col h-full gap-2 overflow-hidden">
+      {/* Top Banner: Collapsible / Expandable with a single click or [H] hotkey */}
+      {isCollapsed ? (
+        /* Collapsed Ultra-Compact Header Strip (gives maximum space to product grid & cart) */
+        <div className="shrink-0 bg-[#1E293B] border border-slate-700/90 text-white rounded-xl px-3 sm:px-3.5 py-1.5 flex items-center justify-between gap-2 shadow-xs animate-in fade-in duration-150">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-6 h-6 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+              <Store className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+            <div className="flex items-center gap-1.5 truncate">
+              <span className="font-black text-xs text-white truncate">
+                {posSession.storeName.replace('Richie Rich Pan House - ', '').replace(' & Coffee Lounge', '')}
               </span>
-              <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase hidden sm:inline-block">
-                24x7 Active
+              <span className="px-1.5 py-0.2 rounded-md bg-amber-500/20 text-amber-300 font-mono text-[10px] font-black border border-amber-500/30">
+                C#{posSession.counterNumber}
+              </span>
+              <span className="text-[11px] text-slate-300 hidden md:inline truncate">
+                • Cashier: <strong className="text-white">{posSession.cashierName}</strong>
+              </span>
+              <span className="text-[10px] text-slate-400 hidden lg:inline">
+                ({posSession.shift})
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
-              <span className="font-medium text-slate-700 flex items-center gap-1">
-                <User className="w-3.5 h-3.5 text-amber-600" />
-                Cashier: <strong>{posSession.cashierName}</strong>
-              </span>
-              <span>•</span>
-              <span className="text-slate-500">{posSession.shift}</span>
-            </p>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={onOpenScanner || (() => setLocalScannerOpen(true))}
+              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg border border-slate-700 flex items-center gap-1 cursor-pointer transition-colors"
+              title="Scan Barcode (F3)"
+            >
+              <Scan className="w-3 h-3 text-amber-400" />
+              <span className="hidden sm:inline">Scan</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowShiftSummary(true)}
+              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg border border-slate-700 flex items-center gap-1 cursor-pointer transition-colors"
+              title="Shift Register Summary"
+            >
+              <Clock className="w-3 h-3 text-amber-400" />
+              <span className="hidden sm:inline">Shift</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-red-300 text-xs font-bold rounded-lg border border-slate-700 flex items-center gap-1 cursor-pointer transition-colors"
+              title="Switch Counter or Sign Out"
+            >
+              <LogOut className="w-3 h-3" />
+              <span className="hidden md:inline">Switch</span>
+            </button>
+
+            {/* EXPAND / REVEAL HEADER BUTTON */}
+            <button
+              type="button"
+              onClick={toggleHeader}
+              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded-lg flex items-center gap-1 cursor-pointer transition-all shadow-xs group"
+              title="Expand top header to reveal portal menus and navigation (Shortcut: H)"
+            >
+              <ChevronDown className="w-3.5 h-3.5 group-hover:translate-y-0.5 transition-transform" />
+              <span>Expand Header</span>
+              <span className="text-[10px] bg-slate-950/20 px-1 py-0.2 rounded font-mono hidden sm:inline">H</span>
+            </button>
           </div>
         </div>
+      ) : (
+        /* Expanded Store Banner with Collapse Header Button */
+        <div className="shrink-0 flex items-center justify-between gap-2 bg-white border border-slate-200 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl shadow-xs animate-in fade-in duration-150">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-100 text-amber-900 border border-amber-300 flex items-center justify-center shrink-0">
+              <Store className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-700" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h2 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight truncate">
+                  {posSession.storeName}
+                </h2>
+                <span className="px-1.5 py-0.2 rounded-md bg-amber-500/20 text-amber-900 border border-amber-500/30 text-[10px] font-bold shrink-0">
+                  C#{posSession.counterNumber}
+                </span>
+                <span className="px-1.5 py-0.2 rounded-md bg-emerald-100 text-emerald-800 text-[9px] font-extrabold uppercase hidden lg:inline-block">
+                  24x7 Active
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 flex items-center gap-1.5 truncate">
+                <span className="font-medium text-slate-700 flex items-center gap-1 truncate">
+                  <User className="w-3 h-3 text-amber-600 shrink-0" />
+                  Cashier: <strong>{posSession.cashierName}</strong>
+                </span>
+                <span className="hidden sm:inline">•</span>
+                <span className="text-slate-500 hidden sm:inline">{posSession.shift}</span>
+              </p>
+            </div>
+          </div>
 
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          <button
-            onClick={onOpenScanner || (() => setLocalScannerOpen(true))}
-            className="px-3 py-2 bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
-          >
-            <Scan className="w-4 h-4 text-amber-400" />
-            <span className="hidden sm:inline">Scan Barcode</span>
-          </button>
-          <button
-            onClick={() => setShowShiftSummary(true)}
-            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 flex items-center gap-1.5 cursor-pointer transition-colors"
-          >
-            <Clock className="w-4 h-4 text-amber-700" />
-            <span>Shift Register</span>
-          </button>
-          <button
-            onClick={handleLogout}
-            title="Switch Counter or Sign Out"
-            className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-xl border border-red-200 flex items-center gap-1.5 cursor-pointer transition-colors"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Switch Counter</span>
-          </button>
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={onOpenScanner || (() => setLocalScannerOpen(true))}
+              className="px-2 sm:px-2.5 py-1 sm:py-1.5 bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <Scan className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Scan</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowShiftSummary(true)}
+              className="px-2 sm:px-2.5 py-1 sm:py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg border border-slate-200 flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <Clock className="w-3.5 h-3.5 text-amber-700" />
+              <span className="hidden sm:inline">Shift</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Switch Counter or Sign Out"
+              className="px-2 sm:px-2.5 py-1 sm:py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-lg border border-red-200 flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <LogOut className="w-3 h-3" />
+              <span className="hidden md:inline">Switch</span>
+            </button>
+
+            {/* COLLAPSE HEADER BUTTON */}
+            <button
+              type="button"
+              onClick={toggleHeader}
+              className="px-2 sm:px-2.5 py-1 sm:py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded-lg border border-amber-600 flex items-center gap-1 cursor-pointer transition-all shadow-xs group"
+              title="Collapse Header to give maximum space to products & cart (Shortcut: H)"
+            >
+              <ChevronUp className="w-3.5 h-3.5 group-hover:-translate-y-0.5 transition-transform" />
+              <span className="hidden xs:inline">Collapse Header</span>
+              <span className="text-[10px] bg-slate-950/20 px-1 py-0.2 rounded font-mono hidden sm:inline">H</span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Real-time Scanned Item Feedback Toast Banner */}
       {lastScannedFeedback && (
-        <div className="bg-emerald-900 text-emerald-100 px-4 py-2.5 rounded-xl border border-emerald-700 shadow-md flex items-center justify-between animate-in slide-in-from-top-2">
+        <div className="shrink-0 bg-emerald-900 text-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-700 shadow-md flex items-center justify-between animate-in slide-in-from-top-2">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-emerald-800 text-amber-300 flex items-center justify-center font-bold">
               <Scan className="w-4 h-4" />
@@ -784,27 +932,75 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
         </div>
       )}
 
+      {/* Responsive View Switcher on Small/Mobile screens (< md) to guarantee 100% fit without page scroll */}
+      <div className="md:hidden shrink-0 flex items-center bg-slate-200/90 p-0.5 rounded-xl text-xs font-bold gap-1">
+        <button
+          type="button"
+          onClick={() => setMobileTab('catalog')}
+          className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            mobileTab === 'catalog'
+              ? 'bg-white text-slate-900 shadow-xs font-black'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5 text-amber-600" />
+          <span>Products ({filteredProducts.length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('cart')}
+          className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            mobileTab === 'cart'
+              ? 'bg-[#1E293B] text-white shadow-xs font-black'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Receipt className="w-3.5 h-3.5 text-amber-400" />
+          <span>Register Cart ({totalCartCount})</span>
+          {grandTotal > 0 && (
+            <span className="text-[10px] bg-amber-500 text-slate-950 px-1 py-0.2 rounded-sm font-black">
+              {CURRENCY}{grandTotal.toFixed(0)}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Main POS Grid: Product Catalog (Left) + Live Cart & Tender (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* LEFT: Product Catalog & Category Tabs (7 cols on lg, 7 cols on xl, 8 cols on 2xl) */}
-        <div className="lg:col-span-7 xl:col-span-7 2xl:col-span-8 space-y-4">
+      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-12 gap-2 sm:gap-2.5 items-stretch overflow-hidden">
+        {/* LEFT: Product Catalog & Category Tabs (7 cols on md/lg/xl, 8 cols on 2xl) */}
+        <div
+          className={`${
+            mobileTab === 'cart' ? 'hidden md:flex' : 'flex'
+          } md:col-span-7 xl:col-span-7 2xl:col-span-8 flex-col h-full min-h-0 gap-1.5 sm:gap-2 overflow-hidden`}
+        >
           {/* Search & Category Pills */}
-          <div className="bg-white border border-slate-200 p-4 rounded-2xl space-y-3 shadow-xs">
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+          <div className="shrink-0 bg-white border border-slate-200 p-2 sm:p-2.5 rounded-xl space-y-1.5 shadow-2xs">
+            <div className="relative flex items-center">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3" />
               <input
+                ref={searchInputRef}
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search pan specialties, 24x7 coffee, essentials, mukhwas, barcode..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-slate-400"
+                placeholder="Search pan specialties, 24x7 coffee, essentials, barcode... [/]"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-8 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-400"
               />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 p-0.5 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-thin">
               <button
                 onClick={() => setSelectedCategory('all')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   selectedCategory === 'all'
                     ? 'bg-[#1E293B] text-white shadow-xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
@@ -817,17 +1013,17 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedCategory('loose_products')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 ${
                   selectedCategory === 'loose_products'
                     ? 'bg-amber-500 text-slate-950 font-black shadow-xs ring-2 ring-amber-400/50'
                     : 'bg-amber-50/80 text-amber-900 hover:bg-amber-100 border border-amber-200 font-bold'
                 }`}
                 title="POS Category: Products registered to sell as loose units"
               >
-                <Layers className="w-3.5 h-3.5 text-amber-700" />
+                <Layers className="w-3 h-3 text-amber-700" />
                 <span>Loose Products</span>
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  className={`text-[9px] px-1 py-0.2 rounded-full font-bold ${
                     selectedCategory === 'loose_products'
                       ? 'bg-slate-950 text-amber-400'
                       : 'bg-amber-200/80 text-amber-900'
@@ -841,7 +1037,7 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                 <button
                   key={cat.id}
                   onClick={() => setSelectedCategory(cat.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                     selectedCategory === cat.id
                       ? 'bg-[#1E293B] text-white shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
@@ -853,8 +1049,8 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
             </div>
           </div>
 
-          {/* Product Cards Grid: Scales responsively from 2 up to 5 columns on wide monitors */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 max-h-[calc(100vh-220px)] min-h-[500px] overflow-y-auto pr-1">
+          {/* Product Cards Grid: Fits remaining height and scrolls internally without page scroll */}
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 content-start scrollbar-thin">
             {filteredProducts.map((item, idx) => {
               const isLoose = isLooseProduct(item);
               const piecesInfo = getItemStorePiecesStock(item);
@@ -878,14 +1074,14 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                       }
                     }
                   }}
-                  className={`bg-white border rounded-2xl p-3 flex flex-col justify-between transition-all group select-none relative ${
+                  className={`bg-white border rounded-xl p-2.5 flex flex-col justify-between transition-all group select-none relative ${
                     isOut
                       ? 'opacity-60 border-red-200 bg-red-50/20 cursor-not-allowed'
                       : 'border-slate-200 hover:border-amber-400 hover:shadow-md cursor-pointer'
                   }`}
                 >
                   <div>
-                    <div className="relative aspect-4/3 rounded-xl overflow-hidden mb-2 bg-slate-100 border border-slate-200">
+                    <div className="relative aspect-16/10 rounded-lg overflow-hidden mb-1.5 bg-slate-100 border border-slate-200">
                       {item.imageUrl ? (
                         <img
                           src={item.imageUrl}
@@ -1130,17 +1326,48 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
               </div>
             )}
           </div>
+
+          {/* Quick Cart Floating Strip on Mobile Catalog View */}
+          {cart.length > 0 && mobileTab === 'catalog' && (
+            <div className="md:hidden shrink-0 bg-[#1E293B] text-white rounded-xl p-2 px-3 shadow-lg flex items-center justify-between border border-slate-700 animate-in slide-in-from-bottom-2">
+              <div>
+                <span className="text-[11px] text-slate-300 block">{totalCartCount} items in cart</span>
+                <span className="text-sm font-black text-amber-400">{CURRENCY}{grandTotal.toFixed(2)}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileTab('cart')}
+                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                <span>View Cart & Pay</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* RIGHT: Current Active Cart, Patron Loyalty, Discount, & Checkout */}
-        <div className="hidden lg:flex lg:col-span-5 xl:col-span-5 2xl:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex-col justify-between space-y-4 sticky top-20">
-          <div className="space-y-3.5">
+        <div
+          className={`${
+            mobileTab === 'catalog' ? 'hidden md:flex' : 'flex'
+          } md:col-span-5 xl:col-span-5 2xl:col-span-4 bg-white border border-slate-200 rounded-xl p-2.5 sm:p-3 shadow-2xs flex-col h-full min-h-0 overflow-hidden justify-between`}
+        >
+          <div className="space-y-1.5 sm:space-y-2 min-h-0 flex-1 flex flex-col overflow-hidden">
             {/* Cart Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between pb-1.5 border-b border-slate-200 shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMobileTab('catalog')}
+                  className="md:hidden p-1 px-1.5 text-slate-700 hover:text-slate-950 bg-slate-100 rounded-lg cursor-pointer flex items-center gap-1 text-xs font-bold"
+                  title="Back to Product Catalog"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Items</span>
+                </button>
                 <Receipt className="w-4 h-4 text-slate-700" />
-                <h3 className="font-bold text-slate-900 text-sm">Active POS Register Cart</h3>
-                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200">
+                <h3 className="font-bold text-slate-900 text-xs sm:text-sm">Active POS Register Cart</h3>
+                <span className="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200">
                   {totalCartCount} items
                 </span>
               </div>
@@ -1155,13 +1382,13 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
             </div>
 
             {/* Customer Loyalty Search Box */}
-            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+            <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 space-y-1 shrink-0">
               <div className="flex items-center justify-between">
-                <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
-                  <User className="w-3.5 h-3.5 text-slate-500" /> Customer Phone (Loyalty)
+                <label className="text-[10px] font-bold text-slate-700 flex items-center gap-1">
+                  <User className="w-3 h-3 text-slate-500" /> Customer Phone (Loyalty)
                 </label>
                 {selectedCustomer && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
                     {selectedCustomer.tier} Tier
                   </span>
                 )}
@@ -1172,40 +1399,40 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                 value={customerPhone}
                 onChange={(e) => handlePhoneLookup(e.target.value)}
                 placeholder="Enter 10-digit phone to fetch/enroll..."
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-slate-400"
+                className="w-full bg-white border border-slate-200 rounded-md px-2.5 py-1 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-slate-400"
               />
 
               {selectedCustomer ? (
-                <div className="p-2.5 bg-emerald-50 rounded-lg border border-emerald-200 flex items-center justify-between text-xs">
+                <div className="p-1.5 bg-emerald-50 rounded-md border border-emerald-200 flex items-center justify-between text-xs">
                   <div>
-                    <p className="font-bold text-emerald-900">{selectedCustomer.name}</p>
-                    <p className="text-[10px] text-emerald-700">
+                    <p className="font-bold text-emerald-900 text-xs">{selectedCustomer.name}</p>
+                    <p className="text-[9px] text-emerald-700">
                       Balance: <strong>{selectedCustomer.loyaltyPoints} Points</strong> (~{CURRENCY}{(selectedCustomer.loyaltyPoints * 0.1).toFixed(2)})
                     </p>
                   </div>
 
-                  <label className="flex items-center gap-1.5 text-[11px] text-emerald-800 cursor-pointer font-bold">
+                  <label className="flex items-center gap-1 text-[10px] text-emerald-800 cursor-pointer font-bold">
                     <input
                       type="checkbox"
                       checked={redeemPoints}
                       onChange={(e) => setRedeemPoints(e.target.checked)}
-                      className="w-4 h-4 accent-slate-800 rounded-sm"
+                      className="w-3.5 h-3.5 accent-slate-800 rounded-xs"
                     />
                     Redeem
                   </label>
                 </div>
               ) : customerPhone.length >= 10 ? (
-                <div className="text-[10px] text-slate-500 flex items-center justify-between">
+                <div className="text-[9px] text-slate-500 flex items-center justify-between">
                   <span>New guest! Will auto-enroll +50 bonus points.</span>
                 </div>
               ) : null}
             </div>
 
             {/* Cart Items List */}
-            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
               {cart.length === 0 ? (
-                <div className="py-8 text-center text-slate-400">
-                  <Receipt className="w-8 h-8 stroke-1 mx-auto mb-1 text-slate-300" />
+                <div className="py-6 text-center text-slate-400">
+                  <Receipt className="w-7 h-7 stroke-1 mx-auto mb-1 text-slate-300" />
                   <p className="text-xs text-slate-600 font-medium">Cart is empty</p>
                   <p className="text-[10px] text-slate-400">Scan barcode or click items to start billing</p>
                 </div>
@@ -1213,7 +1440,7 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                 cart.map((ci, idx) => (
                   <div
                     key={idx}
-                    className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between gap-2"
+                    className="p-2 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between gap-1.5"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 truncate">
@@ -1241,7 +1468,7 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200">
                       <button
                         onClick={() => updateQuantity(idx, -1)}
                         className="p-1 text-slate-500 hover:text-slate-900 rounded-sm cursor-pointer"
@@ -1257,7 +1484,7 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                       </button>
                     </div>
 
-                    <div className="text-right min-w-[55px]">
+                    <div className="text-right min-w-[50px]">
                       <span className="font-extrabold text-xs text-slate-900">
                         {CURRENCY}{ci.subtotal.toFixed(2)}
                       </span>
@@ -1275,25 +1502,25 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
             </div>
 
             {/* Promo Coupon Bar */}
-            <form onSubmit={handleApplyPromo} className="space-y-1">
-              <div className="flex gap-2">
+            <form onSubmit={handleApplyPromo} className="shrink-0 space-y-0.5">
+              <div className="flex gap-1.5">
                 <input
                   type="text"
-                  placeholder="Coupon code (e.g. ROYALPAN20)"
+                  placeholder="Coupon code"
                   value={promoCodeInput}
                   onChange={(e) => setPromoCodeInput(e.target.value)}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 uppercase font-mono placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-slate-400"
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1 text-xs text-slate-800 uppercase font-mono placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-slate-400"
                 />
                 <button
                   type="submit"
-                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg border border-slate-200 cursor-pointer transition-colors"
+                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-md border border-slate-200 cursor-pointer transition-colors"
                 >
                   Apply
                 </button>
               </div>
-              {promoError && <p className="text-[10px] text-red-600">{promoError}</p>}
+              {promoError && <p className="text-[9px] text-red-600">{promoError}</p>}
               {appliedDiscount && (
-                <p className="text-[10px] text-emerald-700 font-semibold">
+                <p className="text-[9px] text-emerald-700 font-semibold">
                   ✓ Applied {appliedDiscount.code} (-{CURRENCY}{appliedDiscount.amount.toFixed(2)})
                 </p>
               )}
@@ -1301,8 +1528,8 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
           </div>
 
           {/* Cart Bill Summary & Tender Button */}
-          <div className="pt-3 border-t border-slate-200 space-y-2">
-            <div className="space-y-1 text-xs text-slate-500">
+          <div className="shrink-0 pt-2 border-t border-slate-200 space-y-1.5">
+            <div className="space-y-0.5 text-xs text-slate-500">
               <div className="flex justify-between">
                 <span>Subtotal</span>
                 <span className="text-slate-800 font-semibold">{CURRENCY}{subtotal.toFixed(2)}</span>
@@ -1310,27 +1537,26 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
 
               {effectiveDiscount > 0 && (
                 <div className="flex justify-between text-emerald-700 font-semibold">
-                  <span>Discounts & Loyalty Points</span>
+                  <span>Discounts & Points</span>
                   <span>-{CURRENCY}{effectiveDiscount.toFixed(2)}</span>
                 </div>
               )}
 
               <div className="flex justify-between">
                 <span className="flex items-center gap-1">
-                  <span>GST (Tax on Bill)</span>
-                  {taxAmount === 0 && (
+                  <span>GST</span>
+                  {taxAmount === 0 ? (
                     <span className="text-[10px] text-slate-400 font-normal">(0% Exempt)</span>
-                  )}
-                  {taxAmount > 0 && (
-                    <span className="text-[10px] text-emerald-700 font-medium">(5% on taxable)</span>
+                  ) : (
+                    <span className="text-[10px] text-emerald-700 font-medium">(5%)</span>
                   )}
                 </span>
                 <span className={taxAmount > 0 ? 'text-slate-800 font-medium' : 'text-slate-400'}>
-                  {taxAmount > 0 ? `${CURRENCY}${taxAmount.toFixed(2)}` : `${CURRENCY}0.00 (Exempt)`}
+                  {taxAmount > 0 ? `${CURRENCY}${taxAmount.toFixed(2)}` : `${CURRENCY}0.00`}
                 </span>
               </div>
 
-              <div className="flex justify-between text-sm font-black text-slate-900 pt-2 border-t border-slate-200">
+              <div className="flex justify-between text-sm font-black text-slate-900 pt-1 border-t border-slate-200">
                 <span>Payable Amount</span>
                 <span className="text-slate-900 text-base">{CURRENCY}{grandTotal.toFixed(2)}</span>
               </div>
@@ -1339,29 +1565,52 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
             <button
               onClick={() => setPaymentModalOpen(true)}
               disabled={cart.length === 0}
-              className="w-full py-3 bg-[#1E293B] hover:bg-slate-900 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-colors"
+              className="w-full py-2 bg-[#1E293B] hover:bg-slate-900 disabled:opacity-50 text-white font-black text-xs sm:text-sm rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
             >
-              <CreditCard className="w-4 h-4 text-amber-400" /> Collect {CURRENCY}{grandTotal.toFixed(2)} & Bill
+              <CreditCard className="w-4 h-4 text-amber-400" /> Collect {CURRENCY}{grandTotal.toFixed(2)} & Bill <span className="text-[10px] font-normal text-slate-400 ml-1 font-mono hidden sm:inline">(F9)</span>
             </button>
+
+            {/* Quick 1-Tap Tender Shortcuts for Rapid Checkout */}
+            {cart.length > 0 && (
+              <div className="grid grid-cols-3 gap-1 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentMethod('cash');
+                    setPaymentModalOpen(true);
+                  }}
+                  className="py-1 px-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-900 hover:border-emerald-300 text-slate-800 font-bold text-xs rounded-lg border border-slate-200 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                  title="Quick Cash Tender"
+                >
+                  <Banknote className="w-3.5 h-3.5 text-emerald-600" /> Cash
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentMethod('upi_qr');
+                    setPaymentModalOpen(true);
+                  }}
+                  className="py-1 px-1.5 bg-slate-100 hover:bg-amber-50 hover:text-amber-900 hover:border-amber-300 text-slate-800 font-bold text-xs rounded-lg border border-slate-200 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                  title="Quick UPI / Dynamic QR Tender"
+                >
+                  <QrCode className="w-3.5 h-3.5 text-amber-600" /> UPI QR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentMethod('card');
+                    setPaymentModalOpen(true);
+                  }}
+                  className="py-1 px-1.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-900 hover:border-indigo-300 text-slate-800 font-bold text-xs rounded-lg border border-slate-200 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                  title="Quick Card Tender"
+                >
+                  <CreditCard className="w-3.5 h-3.5 text-indigo-600" /> Card
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
-
-      {/* Floating Bottom Bar on Mobile/Tablet */}
-      {cart.length > 0 && (
-        <div className="lg:hidden fixed bottom-4 left-4 right-4 z-40 bg-slate-900 text-white rounded-2xl p-4 shadow-2xl flex items-center justify-between border border-slate-700">
-          <div>
-            <span className="text-xs text-slate-400 block">{totalCartCount} items in cart</span>
-            <span className="text-lg font-black text-amber-400">{CURRENCY}{grandTotal.toFixed(2)}</span>
-          </div>
-          <button
-            onClick={() => setPaymentModalOpen(true)}
-            className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow-md transition-colors cursor-pointer"
-          >
-            Collect & Pay
-          </button>
-        </div>
-      )}
 
       {/* Payment Selection Modal */}
       {paymentModalOpen && (
@@ -1685,6 +1934,9 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
   categories,
   customers,
   onOpenScanner,
+  onBarcodeScanned,
+  isHeaderCollapsed,
+  onToggleHeader,
 }) => {
   const [posSession, setPosSession] = useState<POSSession | null>(() => storage.getActivePOSSession());
 
@@ -1718,7 +1970,10 @@ export const POSTerminal: React.FC<POSTerminalProps> = ({
       categories={categories}
       customers={customers}
       onOpenScanner={onOpenScanner}
+      onBarcodeScanned={onBarcodeScanned}
       onSwitchCounter={handleSwitchCounter}
+      isHeaderCollapsed={isHeaderCollapsed}
+      onToggleHeader={onToggleHeader}
     />
   );
 };

@@ -18,6 +18,7 @@ import {
   Building2,
   Store,
   Sparkles,
+  ChevronUp,
 } from 'lucide-react';
 import { Role, PushNotification, AdminTab, Customer, POSSession } from '../../types';
 import { RichieRichLogo } from './RichieRichLogo';
@@ -38,6 +39,8 @@ interface HeaderProps {
   onToggleWarehouseLayoutMode?: () => void;
   posSession?: POSSession | null;
   onSwitchPOSCounter?: () => void;
+  isPOSHeaderCollapsed?: boolean;
+  onTogglePOSHeader?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -55,6 +58,8 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleWarehouseLayoutMode,
   posSession,
   onSwitchPOSCounter,
+  isPOSHeaderCollapsed = false,
+  onTogglePOSHeader,
 }) => {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -69,10 +74,14 @@ export const Header: React.FC<HeaderProps> = ({
   ];
 
   return (
-    <header className="sticky top-0 z-40 bg-[#1E293B] border-b border-slate-700/80 text-white shadow-md">
+    <header
+      className={`shrink-0 z-40 bg-[#1E293B] border-b border-slate-700/80 text-white shadow-md transition-all duration-200 ${
+        currentRole === 'pos' && isPOSHeaderCollapsed ? 'hidden' : 'block'
+      }`}
+    >
       {/* Top Primary Bar */}
       <div className="w-full max-w-[2400px] 2xl:max-w-none mx-auto px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12">
-        <div className="flex items-center justify-between h-16 gap-3">
+        <div className={`flex items-center justify-between gap-3 ${currentRole === 'pos' ? 'h-13' : 'h-16'}`}>
           {/* Logo & Store Title */}
           <div
             onClick={onNavigateLanding}
@@ -239,8 +248,22 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Logout / Exit Session Button */}
-            {onLogout && (
+            {/* POS Header Collapse Toggle Button */}
+            {currentRole === 'pos' && onTogglePOSHeader && (
+              <button
+                type="button"
+                onClick={onTogglePOSHeader}
+                title="Collapse Header to give maximum space to products & cart (Shortcut: H)"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 border border-amber-600 text-xs font-black transition-all cursor-pointer shadow-xs group"
+              >
+                <ChevronUp className="w-3.5 h-3.5 group-hover:-translate-y-0.5 transition-transform" />
+                <span className="hidden sm:inline">Collapse</span>
+                <span className="text-[10px] bg-slate-950/20 px-1 py-0.2 rounded font-mono hidden md:inline">H</span>
+              </button>
+            )}
+
+            {/* Logout / Exit Session Button (Removed for POS terminal as requested; POS uses active shift and counter switch) */}
+            {onLogout && currentRole !== 'pos' && (
               <button
                 onClick={onLogout}
                 title="Log Out of this Portal"

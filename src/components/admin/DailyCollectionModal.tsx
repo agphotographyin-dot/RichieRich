@@ -33,6 +33,8 @@ interface DailyCollectionModalProps {
   orders: Order[];
   stores: StoreLocation[];
   initialDate?: string;
+  initialStoreId?: string;
+  fixedStoreId?: string;
   onSelectPaymentFilter?: (method: 'all' | 'cash' | 'upi_qr' | 'card') => void;
 }
 
@@ -42,11 +44,13 @@ export const DailyCollectionModal: React.FC<DailyCollectionModalProps> = ({
   orders,
   stores,
   initialDate,
+  initialStoreId,
+  fixedStoreId,
   onSelectPaymentFilter,
 }) => {
   const todayStr = getLocalDateString(new Date());
   const [selectedDate, setSelectedDate] = useState<string>(initialDate || todayStr);
-  const [selectedStoreId, setSelectedStoreId] = useState<string>('all');
+  const [selectedStoreId, setSelectedStoreId] = useState<string>(fixedStoreId || initialStoreId || 'all');
   const [copied, setCopied] = useState(false);
   const [activePaymentTab, setActivePaymentTab] = useState<'all' | 'cash' | 'upi_qr' | 'card'>('all');
 
@@ -280,21 +284,29 @@ _Generated via Richie Rich POS Management System_`;
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-2xs">
-              <Store className="w-4 h-4 text-amber-700" />
-              <select
-                value={selectedStoreId}
-                onChange={(e) => setSelectedStoreId(e.target.value)}
-                className="font-semibold text-slate-800 bg-transparent focus:outline-hidden cursor-pointer"
-              >
-                <option value="all">🏢 All Stores & Outlets</option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    🏬 {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {fixedStoreId ? (
+              <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-2xs font-semibold text-slate-800">
+                <Store className="w-4 h-4 text-amber-700" />
+                <span>🏬 {stores.find((s) => s.id === fixedStoreId)?.name || 'This Outlet'}</span>
+                <span className="text-[10px] text-amber-700 font-mono">(Store View)</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-2xs">
+                <Store className="w-4 h-4 text-amber-700" />
+                <select
+                  value={selectedStoreId}
+                  onChange={(e) => setSelectedStoreId(e.target.value)}
+                  className="font-semibold text-slate-800 bg-transparent focus:outline-hidden cursor-pointer"
+                >
+                  <option value="all">🏢 All Stores & Outlets</option>
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      🏬 {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           <div className="text-[11px] text-slate-500 font-medium flex items-center gap-2">

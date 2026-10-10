@@ -650,10 +650,10 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {filteredItems.length === 0 ? (
-              <div className="col-span-full bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-xs">
-                <Leaf className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <div className="col-span-full bg-white border border-slate-200 rounded-2xl p-8 text-center shadow-xs">
+                <Leaf className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                 <h4 className="font-bold text-slate-800 text-sm">No creations found</h4>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
                   No items match &quot;{searchTerm}&quot; in this category. Try adjusting your search query or reset filters.
@@ -664,7 +664,7 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({
                     setSelectedCategory('all');
                     setSearchTerm('');
                   }}
-                  className="mt-4 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+                  className="mt-3 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
                 >
                   Reset All Filters
                 </button>
@@ -677,10 +677,11 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({
                 return (
                   <div
                     key={item.id}
-                    className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-4 flex flex-col justify-between transition-all group shadow-xs hover:shadow-md"
+                    className="bg-white border border-slate-200 hover:border-slate-300 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between transition-all group shadow-xs hover:shadow-md"
                   >
                     <div>
-                      <div className="relative aspect-16/10 rounded-xl overflow-hidden mb-3 bg-slate-100 border border-slate-200">
+                      {/* Compact Image Container with reduced aspect ratio */}
+                      <div className="relative aspect-16/9 sm:aspect-16/10 rounded-lg sm:rounded-xl overflow-hidden mb-2 bg-slate-100 border border-slate-200">
                         <img
                           src={item.imageUrl || 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&auto=format&fit=crop&q=80'}
                           alt={item.name}
@@ -688,36 +689,36 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                         {item.tags && item.tags.length > 0 && (
-                          <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-white/95 text-slate-800 text-[10px] font-bold tracking-wide uppercase shadow-xs border border-slate-200">
+                          <span className="absolute top-1.5 left-1.5 px-1.5 py-0.2 rounded-md bg-white/95 text-slate-800 text-[9px] font-bold tracking-wide uppercase shadow-xs border border-slate-200">
                             {item.tags[0]}
                           </span>
                         )}
 
                         {/* Outlet specific stock indicator */}
-                        <span className={`absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold shadow-xs ${
+                        <span className={`absolute bottom-1.5 right-1.5 px-1.5 py-0.2 rounded-md text-[9px] font-bold shadow-xs ${
                           isOut ? 'bg-red-600 text-white' : 'bg-slate-900/80 text-white backdrop-blur-xs'
                         }`}>
-                          {isOut ? `Sold Out at ${activeStore.shortName}` : `${branchStock} left in stock`}
+                          {isOut ? `Sold Out` : `${branchStock} in stock`}
                         </span>
                       </div>
 
-                      <div className="flex items-start justify-between gap-2">
-                        <h4 className="font-bold text-sm text-slate-900 group-hover:text-amber-700 leading-tight">
+                      <div className="flex items-start justify-between gap-1.5">
+                        <h4 className="font-bold text-xs sm:text-sm text-slate-900 group-hover:text-amber-700 leading-snug line-clamp-1">
                           {item.name}
                         </h4>
-                        <span className="font-black text-slate-900 text-sm shrink-0">
+                        <span className="font-black text-slate-900 text-xs sm:text-sm shrink-0">
                           {CURRENCY}{item.sellingPrice.toFixed(2)}
                         </span>
                       </div>
 
-                      <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
+                      <p className="text-[11px] text-slate-500 mt-1 line-clamp-2 leading-tight">
                         {item.description}
                       </p>
 
                       {item.ingredients && item.ingredients.length > 0 && (
-                        <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
-                          {item.ingredients.slice(0, 3).map((ing, i) => (
-                            <span key={i} className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200 font-medium">
+                        <div className="flex items-center gap-1 flex-wrap mt-1.5">
+                          {item.ingredients.slice(0, 2).map((ing, i) => (
+                            <span key={i} className="text-[9px] bg-slate-50 text-slate-600 px-1.5 py-0.2 rounded border border-slate-200 font-medium">
                               {ing}
                             </span>
                           ))}
@@ -725,17 +726,17 @@ export const CustomerApp: React.FC<CustomerAppProps> = ({
                       )}
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-[11px] text-slate-400">
-                        {isOut ? 'Out of Stock' : 'Prepared Fresh 24x7'}
+                    <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400">
+                        {isOut ? 'Sold Out' : 'Fresh 24x7'}
                       </span>
                       <button
                         type="button"
                         disabled={isOut}
                         onClick={() => handleOpenCustomization(item)}
-                        className="px-3.5 py-2 bg-[#1E293B] hover:bg-slate-900 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
+                        className="px-2.5 py-1.5 bg-[#1E293B] hover:bg-slate-900 disabled:opacity-50 text-white text-[11px] font-bold rounded-lg sm:rounded-xl shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
                       >
-                        <Plus className="w-3.5 h-3.5 text-amber-400" /> Customize & Add
+                        <Plus className="w-3 h-3 text-amber-400" /> Add
                       </button>
                     </div>
                   </div>

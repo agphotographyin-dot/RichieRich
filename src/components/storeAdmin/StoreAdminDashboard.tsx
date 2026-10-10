@@ -61,6 +61,7 @@ import { StoreSuppliersView } from './StoreSuppliersView';
 import { SupplierModal } from './SupplierModal';
 import { StoreAdminSidebar, StoreAdminTabId } from './StoreAdminSidebar';
 import { StoreAdminHeader } from './StoreAdminHeader';
+import { AdminOrders } from '../admin/AdminOrders';
 import { isToday, getLocalDateString } from '../../utils/dateUtils';
 
 interface StoreAdminDashboardProps {
@@ -178,7 +179,6 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
   const [expenseSearch, setExpenseSearch] = useState('');
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string>('all');
   const [expensePaymentFilter, setExpensePaymentFilter] = useState<string>('all');
-  const [orderSearch, setOrderSearch] = useState('');
   const [inventorySearch, setInventorySearch] = useState('');
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState<string>('all');
   const [inventoryPage, setInventoryPage] = useState(1);
@@ -263,17 +263,6 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
       return matchSearch && matchCategory && matchPayment;
     });
   }, [allExpenses, expenseSearch, expenseCategoryFilter, expensePaymentFilter]);
-
-  // Filtered Orders (BUG FIX: using grandTotal / totalAmount fallback consistently)
-  const filteredOrders = useMemo(() => {
-    return allOrders.filter((ord) => {
-      return (
-        ord.id.toLowerCase().includes(orderSearch.toLowerCase()) ||
-        ord.customerName?.toLowerCase().includes(orderSearch.toLowerCase()) ||
-        ord.customerPhone?.toLowerCase().includes(orderSearch.toLowerCase())
-      );
-    });
-  }, [allOrders, orderSearch]);
 
   // Filtered Inventory for Store (BUG FIX: Full search and category filtering)
   const filteredInventory = useMemo(() => {
@@ -528,7 +517,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
         />
 
         {/* Main Content Viewport: Edge-to-edge full width maximizing table and dashboard space */}
-        <main className="flex-1 min-w-0 p-3 sm:p-5 lg:p-6 space-y-5 overflow-x-hidden bg-[#F8FAFC]">
+        <main className="flex-1 min-w-0 p-2.5 sm:p-4 lg:p-5 space-y-4 overflow-x-hidden bg-[#F8FAFC]">
           {/* Breadcrumb & View Header */}
           <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -545,7 +534,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                 <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
                   {activeTab === 'financials' && 'Store Financial Statement & P&L Calculation'}
                   {activeTab === 'expenses' && 'Store Expenses & Outflow Ledger'}
-                  {activeTab === 'sales_orders' && 'Store Sales Orders & POS Register'}
+                  {activeTab === 'sales_orders' && 'Store Orders & Master Sales Ledger'}
                   {activeTab === 'staff_counters' && 'Staff & Active Counter Stations'}
                   {activeTab === 'store_inventory' && 'Store Stock Inventory & Catalog'}
                   {activeTab === 'manage_stock' && 'Direct Store Purchasing & Goods Receipt'}
@@ -891,6 +880,30 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Direct Link to Store Orders & Sales Ledger */}
+            <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/30 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shrink-0">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-slate-900">
+                    Live Orders & Master Sales Ledger for {currentStore.name}
+                  </h4>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    View full counter fulfillment logs, daily cash/UPI settlement reports, and tax invoice manifests for all {allOrders.length} billed store transactions.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => handleTabSelect('sales_orders')}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-amber-400 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors shrink-0"
+              >
+                <span>Open Sales Ledger ({allOrders.length})</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -1063,102 +1076,16 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
         )}
 
         {/* ========================================================================= */}
-        {/* TAB CONTENT 3: STORE SALES & BILLED ORDERS */}
+        {/* TAB CONTENT 3: MASTER ORDERS & SALES LEDGER (LOCKED TO LOGIN STORE ONLY) */}
         {/* ========================================================================= */}
         {activeTab === 'sales_orders' && (
           <div className="space-y-4">
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="relative flex-1 w-full">
-                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search store orders by Order ID, Customer Name or Mobile..."
-                  value={orderSearch}
-                  onChange={(e) => setOrderSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:bg-white focus:border-amber-500"
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-amber-800 font-bold bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
-                  Total Orders Billed: {filteredOrders.length}
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-600">
-                  <thead className="bg-slate-50 text-slate-700 uppercase font-extrabold text-[10px] tracking-wider border-b border-slate-200">
-                    <tr>
-                      <th className="py-3 px-4">Order ID</th>
-                      <th className="py-3 px-4">Time & Counter</th>
-                      <th className="py-3 px-4">Customer Details</th>
-                      <th className="py-3 px-4">Items Summary</th>
-                      <th className="py-3 px-4">Payment Method</th>
-                      <th className="py-3 px-4 text-right">Bill Total (Credit)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredOrders.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-10 text-slate-400">
-                          No billed orders found for this store.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredOrders.map((ord) => {
-                        const billTotal = ord.grandTotal ?? 0;
-                        return (
-                          <tr key={ord.id} className="hover:bg-slate-50/70 transition-colors">
-                            <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
-                              #{ord.id}
-                            </td>
-
-                            <td className="py-3 px-4 whitespace-nowrap">
-                              <div className="font-mono text-[11px] text-slate-700">
-                                {new Date(ord.createdAt).toLocaleTimeString([], {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
-                              </div>
-                              <div className="text-[10px] text-slate-500">
-                                Counter #{ord.counterNumber || 1} • {ord.cashierName || 'Cashier'}
-                              </div>
-                            </td>
-
-                            <td className="py-3 px-4">
-                              <div className="font-bold text-slate-800">
-                                {ord.customerName || 'Walk-in Customer'}
-                              </div>
-                              <div className="text-[11px] font-mono text-slate-500">
-                                {ord.customerPhone || 'Counter Sale'}
-                              </div>
-                            </td>
-
-                            <td className="py-3 px-4">
-                              <div className="text-xs text-slate-700 font-medium truncate max-w-xs">
-                                {ord.items?.map((item) => `${item.quantity}x ${item.name}`).join(', ') || 'Assorted Paan & Items'}
-                              </div>
-                            </td>
-
-                            <td className="py-3 px-4 whitespace-nowrap">
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-100 text-slate-800 border border-slate-200">
-                                {ord.paymentMethod || 'cash'}
-                              </span>
-                            </td>
-
-                            <td className="py-3 px-4 text-right font-mono font-black text-slate-900 text-sm whitespace-nowrap">
-                              ₹{billTotal.toFixed(2)}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <AdminOrders
+              orders={allOrders}
+              fixedStoreId={currentStore.id}
+              storeName={currentStore.name}
+              isStoreAdmin={true}
+            />
           </div>
         )}
 

@@ -29,6 +29,8 @@ interface DateRangeStatementModalProps {
   stores: StoreLocation[];
   initialStartDate?: string;
   initialEndDate?: string;
+  initialStoreId?: string;
+  fixedStoreId?: string;
 }
 
 export const DateRangeStatementModal: React.FC<DateRangeStatementModalProps> = ({
@@ -38,6 +40,8 @@ export const DateRangeStatementModal: React.FC<DateRangeStatementModalProps> = (
   stores,
   initialStartDate,
   initialEndDate,
+  initialStoreId,
+  fixedStoreId,
 }) => {
   const todayStr = getLocalDateString(new Date());
   const thirtyDaysAgoStr = (() => {
@@ -48,7 +52,7 @@ export const DateRangeStatementModal: React.FC<DateRangeStatementModalProps> = (
 
   const [startDate, setStartDate] = useState<string>(initialStartDate || thirtyDaysAgoStr);
   const [endDate, setEndDate] = useState<string>(initialEndDate || todayStr);
-  const [selectedStoreId, setSelectedStoreId] = useState<string>('all');
+  const [selectedStoreId, setSelectedStoreId] = useState<string>(fixedStoreId || initialStoreId || 'all');
   const [selectedPaymentMode, setSelectedPaymentMode] = useState<string>('all');
   const [activePreset, setActivePreset] = useState<string>('30days');
 
@@ -289,18 +293,25 @@ export const DateRangeStatementModal: React.FC<DateRangeStatementModalProps> = (
                 <Store className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Store / Outlet Scope:</span>
               </label>
-              <select
-                value={selectedStoreId}
-                onChange={(e) => setSelectedStoreId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-              >
-                <option value="all">🏢 All Stores & Outlets Combined</option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              {fixedStoreId ? (
+                <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 flex items-center justify-between">
+                  <span>🏬 {stores.find((s) => s.id === fixedStoreId)?.name || 'This Outlet'}</span>
+                  <span className="text-[10px] text-amber-700 font-mono">(Store View)</span>
+                </div>
+              ) : (
+                <select
+                  value={selectedStoreId}
+                  onChange={(e) => setSelectedStoreId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value="all">🏢 All Stores & Outlets Combined</option>
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div>

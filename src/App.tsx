@@ -139,6 +139,27 @@ export const App: React.FC = () => {
     });
   };
 
+  // POS Header Collapse/Expand mode to give maximum space to product grid & active register cart
+  const [isPOSHeaderCollapsed, setIsPOSHeaderCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('rr_pos_header_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const togglePOSHeader = () => {
+    setIsPOSHeaderCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('rr_pos_header_collapsed', String(next));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+  };
+
   // Sync URL on initial mount
   useEffect(() => {
     const route = parseCurrentRoute();
@@ -429,7 +450,13 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
+    <div
+      className={`${
+        currentRole === 'pos' && isPOSAuthenticated
+          ? 'h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col bg-[#F8FAFC]'
+          : 'min-h-screen flex flex-col bg-[#F8FAFC]'
+      } text-slate-800 font-sans selection:bg-amber-500 selection:text-slate-950`}
+    >
       {/* Universal Portal Header (Master Admin, Store Admin, POS, Warehouse, Landing, Customer) */}
       <Header
         currentRole={currentRole}
@@ -446,14 +473,20 @@ export const App: React.FC = () => {
         onToggleWarehouseLayoutMode={toggleWarehouseLayoutMode}
         posSession={posSession}
         onSwitchPOSCounter={handleSwitchPOSCounter}
+        isPOSHeaderCollapsed={isPOSHeaderCollapsed}
+        onTogglePOSHeader={togglePOSHeader}
       />
 
-      {/* Main Content Area: Expands sideways responsively to fit device size, screen, and resolution */}
+      {/* Main Content Area: Fits exactly in screen for POS (no page scroll), scrollable for other portals */}
       <main
-        className={`flex-1 w-full ${
+        className={`flex-1 min-h-0 w-full ${
           currentRole === 'store_admin' || currentRole === 'warehouse'
-            ? 'max-w-none px-0 py-0'
-            : 'max-w-[2400px] 2xl:max-w-none mx-auto px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 sm:py-6'
+            ? 'max-w-none px-0 py-0 overflow-y-auto'
+            : currentRole === 'pos' && isPOSAuthenticated
+            ? isPOSHeaderCollapsed
+              ? 'max-w-none w-full px-2 sm:px-3 py-1 flex flex-col overflow-hidden h-full flex-1 min-h-0'
+              : 'max-w-none w-full px-2 sm:px-3 py-1.5 flex flex-col overflow-hidden h-full flex-1 min-h-0'
+            : 'max-w-[2400px] 2xl:max-w-none mx-auto px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 sm:py-6 overflow-y-auto'
         }`}
       >
         {/* ================================================================= */}
@@ -582,12 +615,14 @@ export const App: React.FC = () => {
                 onBackToLanding={() => navigateToRole('landing')}
               />
             ) : (
-              <div className="animate-in fade-in duration-150">
+              <div className="flex-1 min-h-0 flex flex-col h-full overflow-hidden animate-in fade-in duration-150">
                 <POSTerminal
                   inventory={inventory}
                   categories={categories}
                   customers={customers}
                   onOpenScanner={() => setIsScannerOpen(true)}
+                  isHeaderCollapsed={isPOSHeaderCollapsed}
+                  onToggleHeader={togglePOSHeader}
                 />
               </div>
             )}

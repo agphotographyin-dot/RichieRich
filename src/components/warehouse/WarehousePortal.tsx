@@ -435,7 +435,7 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           />
 
           {/* Main Content Viewport: Edge-to-edge full width matching Store Admin */}
-          <main className="flex-1 min-w-0 p-3 sm:p-5 lg:p-6 space-y-5 overflow-x-hidden bg-[#F8FAFC]">
+          <main className="flex-1 min-w-0 p-2.5 sm:p-4 lg:p-5 space-y-4 overflow-x-hidden bg-[#F8FAFC]">
             {/* Breadcrumb & View Header */}
             <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>

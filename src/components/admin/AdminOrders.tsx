@@ -36,9 +36,17 @@ import { isToday, getLocalDateString, isSameDay } from '../../utils/dateUtils';
 
 interface AdminOrdersProps {
   orders: Order[];
+  fixedStoreId?: string;
+  storeName?: string;
+  isStoreAdmin?: boolean;
 }
 
-export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
+export const AdminOrders: React.FC<AdminOrdersProps> = ({
+  orders,
+  fixedStoreId,
+  storeName,
+  isStoreAdmin,
+}) => {
   const todayStr = getLocalDateString(new Date());
   const yesterdayStr = (() => {
     const d = new Date();
@@ -53,7 +61,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'cash' | 'upi_qr' | 'card'>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
-  const [storeFilter, setStoreFilter] = useState<string>('all');
+  const [storeFilter, setStoreFilter] = useState<string>(fixedStoreId || 'all');
   const [salespersonFilter, setSalespersonFilter] = useState<string>('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [invoiceToPrint, setInvoiceToPrint] = useState<Order | null>(null);
@@ -93,18 +101,25 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
     }
   };
 
-  // Extract unique salespersons from orders & store counters
-  const salespersons = Array.from(
-    new Set([
-      ...orders.map((o) => o.cashierName).filter(Boolean),
-      ...stores.flatMap((s) => s.counters.map((c) => c.cashierName)),
-    ])
-  ) as string[];
+  // Extract unique salespersons from orders & store counters (strictly scoped to login store if fixedStoreId is passed)
+  const salespersons = useMemo(() => {
+    const relevantOrders = fixedStoreId ? orders.filter((o) => o.storeId === fixedStoreId) : orders;
+    const relevantStores = fixedStoreId ? stores.filter((s) => s.id === fixedStoreId) : stores;
+    return Array.from(
+      new Set([
+        ...relevantOrders.map((o) => o.cashierName).filter(Boolean),
+        ...relevantStores.flatMap((s) => s.counters.map((c) => c.cashierName)),
+      ])
+    ) as string[];
+  }, [orders, stores, fixedStoreId]);
 
   // Compute Today's metrics specifically for executive collection cards (strictly resets after 12:00 AM midnight)
   const todayOrders = useMemo(() => {
-    return orders.filter((o) => isToday(o.createdAt));
-  }, [orders]);
+    return orders.filter((o) => {
+      if (fixedStoreId && o.storeId !== fixedStoreId) return false;
+      return isToday(o.createdAt);
+    });
+  }, [orders, fixedStoreId]);
 
   const totalSaleToday = useMemo(() => {
     return todayOrders.reduce((sum, o) => sum + o.grandTotal, 0);
@@ -177,10 +192,11 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
 
       const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
       const matchesSource = sourceFilter === 'all' || o.source === sourceFilter;
-      const matchesStore =
-        storeFilter === 'all' ||
-        o.storeId === storeFilter ||
-        (o.storeName && o.storeName.toLowerCase().includes(storeFilter.toLowerCase()));
+      const matchesStore = fixedStoreId
+        ? o.storeId === fixedStoreId
+        : storeFilter === 'all' ||
+          o.storeId === storeFilter ||
+          (o.storeName && o.storeName.toLowerCase().includes(storeFilter.toLowerCase()));
       const matchesSalesperson =
         salespersonFilter === 'all' ||
         o.cashierName === salespersonFilter;
@@ -199,6 +215,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
     statusFilter,
     sourceFilter,
     storeFilter,
+    fixedStoreId,
     salespersonFilter,
   ]);
 
@@ -215,8 +232,12 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
   };
 
   const handleExportPDF = () => {
-    const storeObj = stores.find((s) => s.id === storeFilter);
-    const storeLabel = storeFilter === 'all' ? 'All Stores & Outlets' : (storeObj?.name || storeFilter);
+    const activeKey = fixedStoreId || storeFilter;
+    const storeObj = stores.find((s) => s.id === activeKey);
+    const storeLabel =
+      activeKey === 'all'
+        ? 'All Stores & Outlets'
+        : storeName || storeObj?.name || activeKey;
     const paymentLabel = paymentFilter === 'all' ? 'All Payments' : paymentFilter.toUpperCase();
 
     pdfReportService.exportDateRangeStatementPDF(
@@ -229,17 +250,18 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
   };
 
   const handleDownloadCSV = () => {
+    const activeKey = fixedStoreId || storeFilter;
     const csvContent = storage.exportDateRangeStatementCSV(
       startDate,
       endDate,
-      storeFilter,
+      activeKey,
       paymentFilter
     );
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `sales_statement_${startDate}_to_${endDate}.csv`);
+    link.setAttribute('download', `sales_statement_${(storeName || activeKey).replace(/\s+/g, '_')}_${startDate}_to_${endDate}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -251,16 +273,20 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-xl shadow-xs">
         <div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <h2 className="text-xl font-bold text-slate-800 tracking-tight">Master Orders & Sales Ledger</h2>
+            <h2 className="text-xl font-bold text-slate-800 tracking-tight">
+              {fixedStoreId ? `${storeName || 'Store'} Orders & Sales Ledger` : 'Master Orders & Sales Ledger'}
+            </h2>
             <span className="px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold">
-              {orders.length} Total Orders
+              {filteredOrders.length} {fixedStoreId ? 'Store Orders' : 'Total Orders'}
             </span>
             <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold">
-              Live POS Sync
+              {fixedStoreId ? 'Outlet Financials' : 'Live POS Sync'}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Real-time fulfillment ledger with daily collection report, payment mode breakdown (Cash, UPI, Card), store counters & staff audit.
+            {fixedStoreId
+              ? `Real-time counter fulfillment ledger, daily cash/UPI settlement, and financial revenue report for ${storeName || 'this store'}.`
+              : 'Real-time fulfillment ledger with daily collection report, payment mode breakdown (Cash, UPI, Card), store counters & staff audit.'}
           </p>
         </div>
 
@@ -635,18 +661,26 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
           {/* Store, Staff, Status, Channel Dropdowns */}
           <div className="flex items-center gap-2 flex-wrap">
             {/* Store Filter */}
-            <select
-              value={storeFilter}
-              onChange={(e) => setStoreFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 text-xs text-slate-700 font-medium rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:border-slate-400 cursor-pointer max-w-[150px]"
-            >
-              <option value="all">🏬 All Stores</option>
-              {stores.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.shortName}
-                </option>
-              ))}
-            </select>
+            {fixedStoreId ? (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-900 border border-amber-500/20 text-xs font-bold">
+                <Store className="w-3.5 h-3.5 text-amber-600" />
+                <span>{storeName || stores.find((s) => s.id === fixedStoreId)?.name || 'This Outlet'}</span>
+                <span className="text-[10px] text-amber-700 font-mono font-normal">(Login Store)</span>
+              </div>
+            ) : (
+              <select
+                value={storeFilter}
+                onChange={(e) => setStoreFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 text-xs text-slate-700 font-medium rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:border-slate-400 cursor-pointer max-w-[150px]"
+              >
+                <option value="all">🏬 All Stores</option>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.shortName}
+                  </option>
+                ))}
+              </select>
+            )}
 
             {/* Salesperson Filter */}
             <select
@@ -1051,6 +1085,8 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
         stores={stores}
         initialStartDate={startDate}
         initialEndDate={endDate}
+        initialStoreId={fixedStoreId}
+        fixedStoreId={fixedStoreId}
       />
 
       {/* Daily Collection Reconciliation Modal (Z-Report) */}
@@ -1060,6 +1096,8 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ orders }) => {
         orders={orders}
         stores={stores}
         initialDate={startDate}
+        initialStoreId={fixedStoreId}
+        fixedStoreId={fixedStoreId}
       />
     </div>
   );
