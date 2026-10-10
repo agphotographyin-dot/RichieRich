@@ -35,6 +35,7 @@ import {
   BarChart3,
   Truck,
   ClipboardCheck,
+  PanelLeft,
 } from 'lucide-react';
 import {
   StoreLocation,
@@ -62,12 +63,13 @@ import { SupplierModal } from './SupplierModal';
 import { StoreAdminSidebar, StoreAdminTabId } from './StoreAdminSidebar';
 import { StoreAdminHeader } from './StoreAdminHeader';
 import { AdminOrders } from '../admin/AdminOrders';
+import { AdminPrinterSetupView } from '../admin/AdminPrinterSetupView';
 import { isToday, getLocalDateString } from '../../utils/dateUtils';
 
 interface StoreAdminDashboardProps {
   initialStoreId?: string;
   initialTab?: string;
-  onTabChange?: (tab: 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents' | 'manage_stock' | 'suppliers') => void;
+  onTabChange?: (tab: StoreAdminTabId) => void;
   onLogout: () => void;
   onNavigateToWarehouse?: () => void;
   onNavigateToAdmin?: () => void;
@@ -110,7 +112,8 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('rr_store_admin_sidebar_collapsed');
-      return saved === 'true';
+      if (saved !== null) return saved === 'true';
+      return typeof window !== 'undefined' && window.innerWidth < 1024;
     } catch {
       return false;
     }
@@ -128,7 +131,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
 
   const [globalSearch, setGlobalSearch] = useState('');
 
-  const mapPropToTab = (tab?: string): 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents' | 'manage_stock' | 'suppliers' => {
+  const mapPropToTab = (tab?: string): StoreAdminTabId => {
     if (!tab) return 'financials';
     if (tab === 'expenses') return 'expenses';
     if (tab === 'sales_orders' || tab === 'orders') return 'sales_orders';
@@ -137,10 +140,11 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
     if (tab === 'stock_indents' || tab === 'indents' || tab === 'store_indents') return 'stock_indents';
     if (tab === 'manage_stock' || tab === 'direct_purchases' || tab === 'purchases' || tab === 'direct_po') return 'manage_stock';
     if (tab === 'suppliers' || tab === 'vendors' || tab === 'supplier_management') return 'suppliers';
+    if (tab === 'printer_setup' || tab === 'printer' || tab === 'printing') return 'printer_setup';
     return 'financials';
   };
 
-  const [activeTab, setActiveTab] = useState<'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents' | 'manage_stock' | 'suppliers'>(() => mapPropToTab(initialTab));
+  const [activeTab, setActiveTab] = useState<StoreAdminTabId>(() => mapPropToTab(initialTab));
 
   useEffect(() => {
     if (initialTab) {
@@ -148,7 +152,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
     }
   }, [initialTab]);
 
-  const handleTabSelect = (tab: 'financials' | 'expenses' | 'sales_orders' | 'staff_counters' | 'store_inventory' | 'stock_indents' | 'manage_stock' | 'suppliers') => {
+  const handleTabSelect = (tab: StoreAdminTabId) => {
     setActiveTab(tab);
     onTabChange?.(tab);
   };
@@ -477,9 +481,9 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
   }, [storeInventory, activeStoreId]);
 
   return (
-    <div className="w-full min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
-      {/* Body Container: Sidebar + Main Content (Full-Screen Workspace matching Warehouse) */}
-      <div className="flex-1 flex flex-col md:flex-row w-full relative min-h-[calc(100vh-4rem)]">
+    <div className="w-full h-full bg-[#F8FAFC] text-slate-900 flex flex-col overflow-hidden font-sans selection:bg-amber-500 selection:text-slate-950">
+      {/* Body Container: Fixed Sidebar + Scrollable Main Content */}
+      <div className="flex-1 min-h-0 flex flex-row w-full h-full overflow-hidden relative">
         {/* Collapsible Dark Enterprise Sidebar */}
         <StoreAdminSidebar
           activeTab={activeTab as StoreAdminTabId}
@@ -516,21 +520,30 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
           onLogout={onLogout}
         />
 
-        {/* Main Content Viewport: Edge-to-edge full width maximizing table and dashboard space */}
-        <main className="flex-1 min-w-0 p-2.5 sm:p-4 lg:p-5 space-y-4 overflow-x-hidden bg-[#F8FAFC]">
+        {/* Main Content Viewport: Independently scrollable, stays beside fixed sidebar */}
+        <main className="flex-1 min-h-0 min-w-0 h-full p-2.5 sm:p-4 lg:p-5 space-y-4 overflow-y-auto overflow-x-hidden bg-[#F8FAFC]">
           {/* Breadcrumb & View Header */}
           <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
-                <span>Store Outlets</span>
-                <span>/</span>
-                <span className="text-amber-600 font-extrabold">{currentStore.name}</span>
-                <span>/</span>
-                <span className="text-slate-800 capitalize font-extrabold">
-                  {activeTab.replace(/_/g, ' ')}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 mt-1">
+            <div className="flex items-start gap-3">
+              <button
+                type="button"
+                onClick={toggleSidebarCollapse}
+                className="mt-0.5 p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer md:hidden flex items-center justify-center shrink-0 border border-slate-200"
+                title={isSidebarCollapsed ? 'Expand Sidebar Menu' : 'Collapse Sidebar Menu'}
+              >
+                <PanelLeft className="w-4 h-4 text-amber-600" />
+              </button>
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                  <span>Store Outlets</span>
+                  <span>/</span>
+                  <span className="text-amber-600 font-extrabold">{currentStore.name}</span>
+                  <span>/</span>
+                  <span className="text-slate-800 capitalize font-extrabold">
+                    {activeTab.replace(/_/g, ' ')}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
                 <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
                   {activeTab === 'financials' && 'Store Financial Statement & P&L Calculation'}
                   {activeTab === 'expenses' && 'Store Expenses & Outflow Ledger'}
@@ -540,6 +553,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                   {activeTab === 'manage_stock' && 'Direct Store Purchasing & Goods Receipt'}
                   {activeTab === 'suppliers' && 'Supplier & Vendor Directory for Direct Purchasing'}
                   {activeTab === 'stock_indents' && 'Warehouse Indents & Requisitions'}
+                  {activeTab === 'printer_setup' && 'Thermal Printer & Direct Print Setup'}
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-black border border-emerald-200 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -550,38 +564,50 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                 </span>
               </div>
             </div>
+            </div>
 
             {/* Quick action shortcuts */}
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => handleTabSelect('manage_stock')}
-                className="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 active:scale-95 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all border border-amber-500/40"
-              >
-                <Truck className="w-3.5 h-3.5 text-white" />
-                <span>Manage Stock</span>
-                {activeDirectPOCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-slate-950 text-amber-300 text-[10px] font-black">
-                    {activeDirectPOCount}
-                  </span>
-                )}
-              </button>
+              {activeTab === 'printer_setup' ? (
+                <button
+                  onClick={() => handleTabSelect('financials')}
+                  className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                >
+                  <span>Dashboard Overview</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleTabSelect('manage_stock')}
+                    className="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 active:scale-95 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all border border-amber-500/40"
+                  >
+                    <Truck className="w-3.5 h-3.5 text-white" />
+                    <span>Manage Stock</span>
+                    {activeDirectPOCount > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-slate-950 text-amber-300 text-[10px] font-black">
+                        {activeDirectPOCount}
+                      </span>
+                    )}
+                  </button>
 
-              <button
-                onClick={() => setIsAddExpenseOpen(true)}
-                className="px-3 py-2 bg-[#1E293B] hover:bg-slate-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5 text-amber-400" />
-                <span>Record Expense</span>
-              </button>
+                  <button
+                    onClick={() => setIsAddExpenseOpen(true)}
+                    className="px-3 py-2 bg-[#1E293B] hover:bg-slate-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Record Expense</span>
+                  </button>
 
-              <button
-                onClick={printStoreFinancialReport}
-                className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-800 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer border border-slate-200 shadow-xs transition-colors"
-                title="Print Store Statement"
-              >
-                <Printer className="w-3.5 h-3.5 text-amber-600" />
-                <span>Statement</span>
-              </button>
+                  <button
+                    onClick={printStoreFinancialReport}
+                    className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-800 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer border border-slate-200 shadow-xs transition-colors"
+                    title="Print Store Statement"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Statement</span>
+                  </button>
+                </>
+              )}
 
               <button
                 onClick={triggerRefresh}
@@ -1531,6 +1557,13 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
             }}
             onRefresh={triggerRefresh}
           />
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB CONTENT 9: THERMAL PRINTER & DIRECT PRINT SETUP                      */}
+        {/* ========================================================================= */}
+        {activeTab === 'printer_setup' && (
+          <AdminPrinterSetupView storeName={currentStore.name} />
         )}
         </main>
       </div>

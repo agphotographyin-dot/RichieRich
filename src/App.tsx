@@ -41,6 +41,7 @@ import { AdminAnalytics } from './components/admin/AdminAnalytics';
 import { AdminOrders } from './components/admin/AdminOrders';
 import { AdminLoyaltyPromos } from './components/admin/AdminLoyaltyPromos';
 import { AdminBackupsSecurity } from './components/admin/AdminBackupsSecurity';
+import { AdminPrinterSetupView } from './components/admin/AdminPrinterSetupView';
 import { RegisterBarcodeModal } from './components/admin/RegisterBarcodeModal';
 import { CreatePOModal } from './components/warehouse/modals/CreatePOModal';
 import { InwardBillModal } from './components/warehouse/modals/InwardBillModal';
@@ -451,11 +452,7 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className={`${
-        currentRole === 'pos' && isPOSAuthenticated
-          ? 'h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col bg-[#F8FAFC]'
-          : 'min-h-screen flex flex-col bg-[#F8FAFC]'
-      } text-slate-800 font-sans selection:bg-amber-500 selection:text-slate-950`}
+      className="h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col bg-[#F8FAFC] text-slate-800 font-sans selection:bg-amber-500 selection:text-slate-950"
     >
       {/* Universal Portal Header (Master Admin, Store Admin, POS, Warehouse, Landing, Customer) */}
       <Header
@@ -477,16 +474,18 @@ export const App: React.FC = () => {
         onTogglePOSHeader={togglePOSHeader}
       />
 
-      {/* Main Content Area: Fits exactly in screen for POS (no page scroll), scrollable for other portals */}
+      {/* Main Content Area: Fixed layout for dashboard/store_admin/warehouse/POS portals, independent scroll for content */}
       <main
-        className={`flex-1 min-h-0 w-full ${
+        className={`flex-1 min-h-0 w-full overflow-hidden ${
           currentRole === 'store_admin' || currentRole === 'warehouse'
-            ? 'max-w-none px-0 py-0 overflow-y-auto'
+            ? 'max-w-none px-0 py-0 flex flex-col h-full overflow-hidden'
             : currentRole === 'pos' && isPOSAuthenticated
             ? isPOSHeaderCollapsed
               ? 'max-w-none w-full px-2 sm:px-3 py-1 flex flex-col overflow-hidden h-full flex-1 min-h-0'
               : 'max-w-none w-full px-2 sm:px-3 py-1.5 flex flex-col overflow-hidden h-full flex-1 min-h-0'
-            : 'max-w-[2400px] 2xl:max-w-none mx-auto px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 sm:py-6 overflow-y-auto'
+            : currentRole === 'admin'
+            ? 'max-w-none px-0 py-0 flex flex-col h-full overflow-y-auto'
+            : 'max-w-[2400px] 2xl:max-w-none mx-auto px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 sm:py-6 overflow-y-auto h-full flex-1 min-h-0'
         }`}
       >
         {/* ================================================================= */}
@@ -575,6 +574,10 @@ export const App: React.FC = () => {
                 {activeAdminTab === 'backups' && (
                   <AdminBackupsSecurity backups={backups} />
                 )}
+
+                {activeAdminTab === 'printer_setup' && (
+                  <AdminPrinterSetupView />
+                )}
               </div>
             )}
           </>
@@ -591,7 +594,7 @@ export const App: React.FC = () => {
                 onBackToLanding={() => navigateToRole('landing')}
               />
             ) : (
-              <div className="animate-in fade-in duration-150">
+              <div className="h-full flex-1 min-h-0 flex flex-col overflow-hidden w-full animate-in fade-in duration-150">
                 <StoreAdminDashboard
                   initialTab={activeStoreAdminTab}
                   onTabChange={handleStoreAdminTabChange}

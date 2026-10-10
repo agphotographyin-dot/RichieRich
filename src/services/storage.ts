@@ -3,6 +3,7 @@ import {
   Category,
   Customer,
   Order,
+  OrderItem,
   Promotion,
   PushNotification,
   BackupSnapshot,
@@ -2085,6 +2086,218 @@ export class StorageService {
 
     return true;
   }
+
+  /**
+   * Modifies an existing bill/order:
+   * 1. Reconciles inventory differences between old items and new items for the specific store/warehouse.
+   * 2. Recalculates loyalty points if customer and totals changed.
+   * 3. Sets isModified, modifiedAt, modifiedBy, and modificationReason.
+   * 4. Logs audit trail and updates cloudSync and notifications.
+   */
+  modifyOrder(
+    orderId: string,
+    updatedData: {
+      items: OrderItem[];
+      subtotal: number;
+      discountAmount: number;
+      appliedPromoCode?: string;
+      loyaltyPointsUsed?: number;
+      taxAmount: number;
+      grandTotal: number;
+      totalCost: number;
+      totalProfit: number;
+      paymentMethod: Order['paymentMethod'];
+      paymentStatus?: 'paid' | 'pending' | 'refunded';
+      status?: Order['status'];
+      notes?: string;
+      customerPhone?: string;
+      customerName?: string;
+      customerId?: string;
+      modificationReason?: string;
+      modifiedBy?: string;
+    }
+  ): Order | null {
+    const orders = this.getOrders();
+    const existingIndex = orders.findIndex((o) => o.id === orderId);
+    if (existingIndex === -1) return null;
+
+    const oldOrder = orders[existingIndex];
+    const inventory = this.getInventory();
+    const storeId = oldOrder.storeId;
+    const nowIso = new Date().toISOString();
+
+    // Map old items piece equivalent { itemId/sku: totalPieces }
+    const oldPiecesMap = new Map<string, number>();
+    oldOrder.items.forEach((it) => {
+      const invItem = inventory.find((i) => i.id === it.itemId || (it.sku && i.sku === it.sku));
+      const ppb = Math.max(1, (invItem && invItem.piecesPerBox) || it.piecesPerBox || 1);
+      const isLoose = it.saleType === 'loose';
+      const pieces = isLoose ? it.quantity : it.quantity * ppb;
+      const key = (invItem && invItem.id) || it.itemId || it.sku;
+      oldPiecesMap.set(key, (oldPiecesMap.get(key) || 0) + pieces);
+    });
+
+    // Map new items piece equivalent { itemId/sku: totalPieces }
+    const newPiecesMap = new Map<string, number>();
+    updatedData.items.forEach((it) => {
+      const invItem = inventory.find((i) => i.id === it.itemId || (it.sku && i.sku === it.sku));
+      const ppb = Math.max(1, (invItem && invItem.piecesPerBox) || it.piecesPerBox || 1);
+      const isLoose = it.saleType === 'loose';
+      const pieces = isLoose ? it.quantity : it.quantity * ppb;
+      const key = (invItem && invItem.id) || it.itemId || it.sku;
+      newPiecesMap.set(key, (newPiecesMap.get(key) || 0) + pieces);
+    });
+
+    // All affected items
+    const allItemKeys = new Set([...oldPiecesMap.keys(), ...newPiecesMap.keys()]);
+    const auditRecords: any[] = [];
+    const locName = oldOrder.storeName || (storeId ? `Store (${storeId})` : 'Central Warehouse');
+
+    allItemKeys.forEach((key) => {
+      const invItem = inventory.find((i) => i.id === key || i.sku === key);
+      if (!invItem) return;
+
+      const oldPieces = oldPiecesMap.get(key) || 0;
+      const newPieces = newPiecesMap.get(key) || 0;
+      const pieceDiff = newPieces - oldPieces; // positive means MORE sold (deduct stock), negative means LESS sold (return stock)
+
+      if (pieceDiff === 0) return;
+
+      const ppb = Math.max(1, invItem.piecesPerBox || 1);
+
+      if (storeId) {
+        if (!invItem.storeAllocations) invItem.storeAllocations = {};
+        if (!invItem.storeBoxAllocations) invItem.storeBoxAllocations = {};
+
+        const curBoxes = Math.max(0, Number(invItem.storeAllocations[storeId]) || 0);
+        const curAlloc = invItem.storeBoxAllocations[storeId];
+        const curLoose = curAlloc && curAlloc.loosePieces !== undefined ? Math.max(0, Number(curAlloc.loosePieces) || 0) : 0;
+        const totalPiecesBefore = curBoxes * ppb + curLoose;
+
+        const totalPiecesAfter = Math.max(0, totalPiecesBefore - pieceDiff);
+        const newBoxes = Math.floor(totalPiecesAfter / ppb);
+        const newLoose = totalPiecesAfter % ppb;
+
+        invItem.storeAllocations[storeId] = newBoxes;
+        invItem.storeBoxAllocations[storeId] = {
+          fullBoxes: newBoxes,
+          loosePieces: newLoose,
+          totalPieces: totalPiecesAfter,
+          total_piece_equivalent: totalPiecesAfter,
+        };
+      } else {
+        const curBoxes = Math.max(0, Number(invItem.stockQuantity) || 0);
+        const curLoose = Math.max(0, Number(invItem.loosePieceStock) || 0);
+        const totalPiecesBefore = curBoxes * ppb + curLoose;
+
+        const totalPiecesAfter = Math.max(0, totalPiecesBefore - pieceDiff);
+        const newBoxes = Math.floor(totalPiecesAfter / ppb);
+        const newLoose = totalPiecesAfter % ppb;
+
+        invItem.stockQuantity = newBoxes;
+        invItem.loosePieceStock = newLoose;
+        invItem.totalPieceEquivalent = totalPiecesAfter;
+      }
+
+      auditRecords.push({
+        transactionId: `TXN-MOD-${Date.now().toString().slice(-5)}${Math.floor(10 + Math.random() * 90)}`,
+        referenceNumber: oldOrder.orderNumber,
+        itemId: invItem.id,
+        sku: invItem.sku,
+        itemName: invItem.name,
+        movementType: pieceDiff > 0 ? 'pos_sales_consumption' : 'pos_sales_return',
+        fromLocation: locName,
+        toLocation: `Bill Adjustment (${oldOrder.orderNumber})`,
+        quantity: -pieceDiff,
+        quantityChanged: -pieceDiff,
+        unit: invItem.unit || 'units',
+        performedBy: updatedData.modifiedBy || 'POS Cashier',
+        userRole: 'POS Cashier',
+        notes: `Bill Modified: ${updatedData.modificationReason || 'Items/Price adjusted'}. Net pieces adjustment: ${-pieceDiff}`,
+        timestamp: nowIso,
+      });
+    });
+
+    if (auditRecords.length > 0) {
+      if (warehouseStorageRef && typeof warehouseStorageRef.addAuditRecords === 'function') {
+        warehouseStorageRef.addAuditRecords(auditRecords);
+      } else {
+        try {
+          const raw = safeStorage.getItem('rr_wh_audit_trail');
+          const list = raw ? JSON.parse(raw) : [];
+          const now = Date.now();
+          const newRecs = auditRecords.map((a, idx) => ({
+            ...a,
+            id: `aud-${now}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+            timestamp: nowIso,
+          }));
+          safeStorage.setItem('rr_wh_audit_trail', JSON.stringify([...newRecs, ...list].slice(0, 1000)));
+        } catch {}
+      }
+    }
+
+    this.saveInventory(inventory);
+
+    // Adjust Loyalty if Customer is involved
+    if (oldOrder.customerId || oldOrder.customerPhone || updatedData.customerId || updatedData.customerPhone) {
+      const customers = this.getCustomers();
+      const targetPhone = updatedData.customerPhone || oldOrder.customerPhone;
+      const targetId = updatedData.customerId || oldOrder.customerId;
+      const cust = customers.find((c) => (targetId && c.id === targetId) || (targetPhone && c.phone === targetPhone));
+
+      if (cust) {
+        const oldEarned = oldOrder.loyaltyPointsEarned || Math.floor(oldOrder.grandTotal / 10);
+        const oldUsed = oldOrder.loyaltyPointsUsed || 0;
+        const newEarned = Math.floor(updatedData.grandTotal / 10);
+        const newUsed = updatedData.loyaltyPointsUsed || 0;
+
+        // Reconcile: rollback old values then apply new values
+        cust.loyaltyPoints = Math.max(0, cust.loyaltyPoints + oldUsed - oldEarned - newUsed + newEarned);
+        cust.totalSpent = Math.max(0, cust.totalSpent - oldOrder.grandTotal + updatedData.grandTotal);
+
+        this.setCached(STORAGE_KEYS.CUSTOMERS, customers);
+        safeStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+      }
+    }
+
+    // Build the updated order
+    const updatedOrder: Order = {
+      ...oldOrder,
+      ...updatedData,
+      id: oldOrder.id,
+      orderNumber: oldOrder.orderNumber,
+      createdAt: oldOrder.createdAt,
+      updatedAt: nowIso,
+      isModified: true,
+      modifiedAt: nowIso,
+      modifiedBy: updatedData.modifiedBy || oldOrder.cashierName || 'POS Cashier',
+      modificationReason: updatedData.modificationReason || 'Customer requested item / tender adjustment',
+      previousGrandTotal: oldOrder.previousGrandTotal || oldOrder.grandTotal,
+    };
+
+    orders[existingIndex] = updatedOrder;
+    this.setCached(STORAGE_KEYS.ORDERS, orders);
+    safeStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    this.notify();
+
+    cloudSync.syncDocument('orders', updatedOrder.id, updatedOrder);
+    cloudSync.debouncedSyncCollection('inventory', inventory, 50);
+
+    setTimeout(() => {
+      soundEffects.playSuccessChime();
+      this.addNotification({
+        title: `✏️ Bill #${updatedOrder.orderNumber} Modified`,
+        message: `Total adjusted from ${CURRENCY}${oldOrder.grandTotal.toFixed(2)} to ${CURRENCY}${updatedOrder.grandTotal.toFixed(2)} (${updatedOrder.paymentMethod.toUpperCase()})`,
+        type: 'order_update',
+        targetRole: 'all',
+        read: false,
+        linkTab: 'orders',
+      });
+    }, 10);
+
+    return updatedOrder;
+  }
+
 
   // --- PROMOTIONS ---
 

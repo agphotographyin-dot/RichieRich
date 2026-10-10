@@ -90,7 +90,7 @@ export const MasterAdminSidebar: React.FC<MasterAdminSidebarProps> = ({
 
   return (
     <aside
-      className={`bg-[#0F172A] border-r border-slate-800 text-slate-300 transition-all duration-300 ease-in-out flex flex-col z-30 shrink-0 select-none ${
+      className={`bg-[#0F172A] border-r border-slate-800 text-slate-300 transition-all duration-300 ease-in-out flex flex-col z-30 shrink-0 select-none sticky top-0 h-full overflow-hidden ${
         isCollapsed ? 'w-16 md:w-20' : 'w-72 sm:w-80'
       }`}
     >
@@ -354,6 +354,28 @@ export const MasterAdminSidebar: React.FC<MasterAdminSidebarProps> = ({
                 <span className="flex-1 text-left truncate">Security & Backups</span>
                 <span className="px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 text-[10px] font-mono">
                   {backupsCount}
+                </span>
+              </>
+            )}
+          </button>
+
+          {/* Tab: Printer & Thermal Setup */}
+          <button
+            type="button"
+            onClick={() => handleTabClick('printer_setup')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'printer_setup'
+                ? 'bg-gradient-to-r from-amber-600 to-amber-700 text-white font-black shadow-xs'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+            } ${isCollapsed ? 'justify-center px-0' : ''}`}
+            title="Thermal Slip, Direct Zero-Prompt Printing & Receipt Setup"
+          >
+            <Printer className={`w-4 h-4 shrink-0 ${activeTab === 'printer_setup' ? 'text-white' : 'text-amber-400'}`} />
+            {!isCollapsed && (
+              <>
+                <span className="flex-1 text-left truncate">Printer & Thermal Setup</span>
+                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 font-mono font-bold">
+                  DIRECT
                 </span>
               </>
             )}

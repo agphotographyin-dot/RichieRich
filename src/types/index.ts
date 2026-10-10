@@ -1,7 +1,7 @@
 export type Role = 'landing' | 'admin' | 'pos' | 'customer' | 'warehouse' | 'store_admin';
 export type UserRole = Role;
-export type AdminTab = 'dashboard' | 'inventory' | 'staff_counters' | 'analytics' | 'orders' | 'loyalty_promos' | 'backups';
-export type StoreAdminTab = 'overview' | 'finances' | 'expenses' | 'orders' | 'inventory' | 'staff' | 'closing' | 'stock_indents' | 'indents' | 'manage_stock' | 'direct_purchases' | 'suppliers';
+export type AdminTab = 'dashboard' | 'inventory' | 'staff_counters' | 'analytics' | 'orders' | 'loyalty_promos' | 'backups' | 'printer_setup';
+export type StoreAdminTab = 'overview' | 'finances' | 'expenses' | 'orders' | 'inventory' | 'staff' | 'closing' | 'stock_indents' | 'indents' | 'manage_stock' | 'direct_purchases' | 'suppliers' | 'printer_setup';
 
 export * from './warehouse';
 
@@ -296,6 +296,11 @@ export interface Order {
   cashierName?: string;
   notes?: string;
   sync_transaction_id?: string;
+  isModified?: boolean;
+  modifiedAt?: string;
+  modifiedBy?: string;
+  modificationReason?: string;
+  previousGrandTotal?: number;
 }
 
 export interface Promotion {
@@ -378,4 +383,35 @@ export interface CatalogStockMetrics {
   totalValuationRetail: number;
   centralValuationCost: number;
   storesValuationCost: number;
+}
+
+export type PrinterConnectionType = 'web_serial' | 'web_bluetooth' | 'silent_direct' | 'network' | 'browser_dialog';
+
+export interface PrinterSettings {
+  directPrintEnabled: boolean; // bypass printer selection dialog
+  connectionType: PrinterConnectionType;
+  paperWidth: '80mm' | '58mm';
+  baudRate: number; // e.g. 9600, 19200, 38400, 115200
+  autoPrintOnCheckout: boolean; // auto print on checkout completion
+  cutPaper: boolean; // issue ESC/POS GS V 0
+  kickDrawer: boolean; // issue ESC/POS drawer kick pulse
+  copies: number; // 1 or 2
+  printDensity: 'normal' | 'dark' | 'high';
+  networkPrinterIp?: string;
+  networkPrinterPort?: number;
+
+  // Thermal Receipt Header & Content Layout (Print page setup)
+  headerTitle: string;
+  headerTagline: string;
+  headerGstin: string;
+  headerPhone: string;
+  headerAddress: string;
+  showLogo: boolean;
+  showCashierAndCounter: boolean;
+  showCustomerLoyalty: boolean;
+  showBarcode: boolean;
+  showTaxBreakdown: boolean;
+  footerGreeting: string;
+  footerPolicy: string;
+  lastTestedAt?: string;
 }

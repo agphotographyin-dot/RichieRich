@@ -31,6 +31,7 @@ import {
   Layers,
   Edit3,
   SlidersHorizontal,
+  History,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { InventoryItem, Category, Customer, Order, OrderItem, PaymentMethod, POSSession } from '../../types';
@@ -40,6 +41,9 @@ import { isToday } from '../../utils/dateUtils';
 import { POSReceiptModal } from './POSReceiptModal';
 import { POSStoreCounterLogin } from './POSStoreCounterLogin';
 import { BarcodeScannerModal } from '../common/BarcodeScannerModal';
+import { POSRecentBillsModal } from './POSRecentBillsModal';
+import { POSModifyBillModal } from './POSModifyBillModal';
+import { POSPrinterQuickSetupModal } from './POSPrinterQuickSetupModal';
 
 interface POSTerminalProps {
   inventory: InventoryItem[];
@@ -158,6 +162,12 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
   const [localScannerOpen, setLocalScannerOpen] = useState(false);
   const [orderSyncTrigger, setOrderSyncTrigger] = useState(0);
   const [isProcessingSale, setIsProcessingSale] = useState(false);
+
+  // Recent 20 Bills & Bill Modification modal states
+  const [recentBillsModalOpen, setRecentBillsModalOpen] = useState(false);
+  const [billToModify, setBillToModify] = useState<Order | null>(null);
+  const [modifyBillModalOpen, setModifyBillModalOpen] = useState(false);
+  const [printerSetupModalOpen, setPrinterSetupModalOpen] = useState(false);
 
   // Subscribe to storage changes for live shift & order sync
   useEffect(() => {
@@ -807,12 +817,30 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
             </button>
             <button
               type="button"
+              onClick={() => setRecentBillsModalOpen(true)}
+              className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold rounded-lg border border-amber-500/40 flex items-center gap-1 cursor-pointer transition-colors"
+              title="View Last 20 Bills and Modify them"
+            >
+              <History className="w-3 h-3 text-amber-400" />
+              <span>Last 20 Bills</span>
+            </button>
+            <button
+              type="button"
               onClick={() => setShowShiftSummary(true)}
               className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg border border-slate-700 flex items-center gap-1 cursor-pointer transition-colors"
               title="Shift Register Summary"
             >
               <Clock className="w-3 h-3 text-amber-400" />
               <span className="hidden sm:inline">Shift</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPrinterSetupModalOpen(true)}
+              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg border border-slate-700 flex items-center gap-1 cursor-pointer transition-colors"
+              title="Thermal Printer & Direct Print Setup"
+            >
+              <Printer className="w-3 h-3 text-amber-400" />
+              <span className="hidden sm:inline">Printer</span>
             </button>
             <button
               type="button"
@@ -878,11 +906,29 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
             </button>
             <button
               type="button"
+              onClick={() => setRecentBillsModalOpen(true)}
+              className="px-2 sm:px-2.5 py-1 sm:py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold rounded-lg border border-amber-300 flex items-center gap-1 cursor-pointer transition-colors"
+              title="View Last 20 Bills and Modify them"
+            >
+              <History className="w-3.5 h-3.5 text-amber-700" />
+              <span>Last 20 Bills</span>
+            </button>
+            <button
+              type="button"
               onClick={() => setShowShiftSummary(true)}
               className="px-2 sm:px-2.5 py-1 sm:py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg border border-slate-200 flex items-center gap-1 cursor-pointer transition-colors"
             >
               <Clock className="w-3.5 h-3.5 text-amber-700" />
               <span className="hidden sm:inline">Shift</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPrinterSetupModalOpen(true)}
+              className="px-2 sm:px-2.5 py-1 sm:py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg border border-slate-200 flex items-center gap-1 cursor-pointer transition-colors"
+              title="Thermal Printer & Direct Print Setup"
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-700" />
+              <span className="hidden lg:inline">Printer</span>
             </button>
             <button
               type="button"
@@ -1371,14 +1417,25 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                   {totalCartCount} items
                 </span>
               </div>
-              {cart.length > 0 && (
+              <div className="flex items-center gap-1.5">
                 <button
-                  onClick={clearCart}
-                  className="text-[11px] text-red-600 hover:text-red-700 font-semibold flex items-center gap-1 cursor-pointer"
+                  type="button"
+                  onClick={() => setRecentBillsModalOpen(true)}
+                  className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-[10px] font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                  title="View last 20 bills & modify them"
                 >
-                  <Trash2 className="w-3 h-3" /> Clear
+                  <History className="w-3 h-3 text-amber-600" />
+                  <span>Last 20 Bills</span>
                 </button>
-              )}
+                {cart.length > 0 && (
+                  <button
+                    onClick={clearCart}
+                    className="text-[11px] text-red-600 hover:text-red-700 font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" /> Clear
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Customer Loyalty Search Box */}
@@ -1914,6 +1971,13 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
         onClose={() => setReceiptModalOpen(false)}
         order={recentOrder}
         customer={selectedCustomer}
+        onNavigateToPrinterSetup={() => setPrinterSetupModalOpen(true)}
+      />
+
+      {/* POS Counter Thermal Printer Quick Setup Modal */}
+      <POSPrinterQuickSetupModal
+        isOpen={printerSetupModalOpen}
+        onClose={() => setPrinterSetupModalOpen(false)}
       />
 
       {/* POS Dedicated Barcode Scanner Modal */}
@@ -1923,6 +1987,41 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
         onScanSuccess={(code) => {
           handleBarcodeScanned(code);
           setLocalScannerOpen(false);
+        }}
+      />
+
+      {/* POS Last 20 Bills Modal */}
+      <POSRecentBillsModal
+        isOpen={recentBillsModalOpen}
+        onClose={() => setRecentBillsModalOpen(false)}
+        storeId={posSession.storeId}
+        counterNumber={posSession.counterNumber}
+        cashierName={posSession.cashierName}
+        onSelectForModify={(bill) => {
+          setBillToModify(bill);
+          setRecentBillsModalOpen(false);
+          setModifyBillModalOpen(true);
+        }}
+        onPrintBill={(bill) => {
+          setRecentOrder(bill);
+          setReceiptModalOpen(true);
+        }}
+      />
+
+      {/* POS Modify Bill Modal */}
+      <POSModifyBillModal
+        isOpen={modifyBillModalOpen}
+        onClose={() => {
+          setModifyBillModalOpen(false);
+          setBillToModify(null);
+        }}
+        order={billToModify}
+        inventory={inventory}
+        cashierName={posSession.cashierName}
+        storeId={posSession.storeId}
+        onOrderUpdated={(updated) => {
+          setRecentOrder(updated);
+          setOrderSyncTrigger((prev) => prev + 1);
         }}
       />
     </div>

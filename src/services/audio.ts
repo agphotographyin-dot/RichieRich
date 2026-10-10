@@ -103,6 +103,30 @@ class SoundEffects {
     this.playClick();
   }
 
+  // Play thermal printer paper feed / slip printing sound
+  playPrinterFeed() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      // Thermal printer stepper motor buzz simulation
+      for (let i = 0; i < 4; i++) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(320 + i * 20, now + i * 0.05);
+        gain.gain.setValueAtTime(0.04, now + i * 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.05 + 0.04);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + i * 0.05);
+        osc.stop(now + i * 0.05 + 0.04);
+      }
+    } catch (e) {
+      // safely ignore
+    }
+  }
+
   // Play Low Stock / Warning chime
   playWarningChime() {
     try {

@@ -19,6 +19,7 @@ import {
   Store,
   Sparkles,
   ChevronUp,
+  Printer,
 } from 'lucide-react';
 import { Role, PushNotification, AdminTab, Customer, POSSession } from '../../types';
 import { RichieRichLogo } from './RichieRichLogo';
@@ -71,11 +72,12 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'orders', label: 'Orders', icon: <Receipt className="w-3.5 h-3.5" /> },
     { id: 'loyalty_promos', label: 'Loyalty & Promos', icon: <Gift className="w-3.5 h-3.5" /> },
     { id: 'backups', label: 'System & Backups', icon: <HardDrive className="w-3.5 h-3.5" /> },
+    { id: 'printer_setup', label: 'Printer & Thermal Setup', icon: <Printer className="w-3.5 h-3.5" /> },
   ];
 
   return (
     <header
-      className={`shrink-0 z-40 bg-[#1E293B] border-b border-slate-700/80 text-white shadow-md transition-all duration-200 ${
+      className={`sticky top-0 left-0 right-0 z-40 shrink-0 bg-[#1E293B] border-b border-slate-700/80 text-white shadow-md transition-all duration-200 ${
         currentRole === 'pos' && isPOSHeaderCollapsed ? 'hidden' : 'block'
       }`}
     >

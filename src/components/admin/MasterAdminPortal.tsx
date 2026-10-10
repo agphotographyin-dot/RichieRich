@@ -50,6 +50,7 @@ import { AdminAnalytics } from './AdminAnalytics';
 import { AdminOrders } from './AdminOrders';
 import { AdminLoyaltyPromos } from './AdminLoyaltyPromos';
 import { AdminBackupsSecurity } from './AdminBackupsSecurity';
+import { AdminPrinterSetupView } from './AdminPrinterSetupView';
 
 // Header & Sidebar
 import { MasterAdminHeader } from './MasterAdminHeader';
@@ -190,8 +191,8 @@ export const MasterAdminPortal: React.FC<MasterAdminPortalProps> = ({
   ).length;
 
   return (
-    <div className="w-full min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
-      {/* Top Header */}
+    <div className="w-full h-full min-h-0 overflow-hidden flex flex-col bg-[#F8FAFC] text-slate-900 font-sans selection:bg-amber-500 selection:text-slate-950">
+      {/* Top Header - Fixed Position */}
       <MasterAdminHeader
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -209,9 +210,9 @@ export const MasterAdminPortal: React.FC<MasterAdminPortalProps> = ({
         onNavigateToLanding={onNavigateToLanding}
       />
 
-      {/* Body Container: Sidebar + Main Content */}
-      <div className="flex-1 flex flex-col md:flex-row w-full relative min-h-[calc(100vh-4rem)]">
-        {/* Collapsible Dark Enterprise Sidebar */}
+      {/* Body Container: Fixed Sidebar + Scrollable Main Content */}
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row w-full relative h-full overflow-hidden">
+        {/* Collapsible Dark Enterprise Sidebar - Fixed Position */}
         <MasterAdminSidebar
           activeTab={activeTab}
           onSelectTab={handleTabSelect}
@@ -232,8 +233,8 @@ export const MasterAdminPortal: React.FC<MasterAdminPortalProps> = ({
           onNavigateToPOS={onNavigateToPOS}
         />
 
-        {/* Main Content Viewport */}
-        <main className="flex-1 min-w-0 p-3 sm:p-5 lg:p-6 space-y-5 overflow-x-hidden bg-[#F8FAFC]">
+        {/* Main Content Viewport: Scrolls independently while Header and Sidebar remain fixed */}
+        <main className="flex-1 min-w-0 h-full overflow-y-auto p-3 sm:p-5 lg:p-6 space-y-5 overflow-x-hidden bg-[#F8FAFC] custom-scrollbar">
           {/* Breadcrumb & View Header Bar */}
           <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -372,6 +373,10 @@ export const MasterAdminPortal: React.FC<MasterAdminPortalProps> = ({
 
             {activeTab === 'backups' && (
               <AdminBackupsSecurity backups={backups} />
+            )}
+
+            {activeTab === 'printer_setup' && (
+              <AdminPrinterSetupView />
             )}
           </div>
         </main>

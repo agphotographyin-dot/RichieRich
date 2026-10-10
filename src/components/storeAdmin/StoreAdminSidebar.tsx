@@ -47,7 +47,8 @@ export type StoreAdminTabId =
   | 'store_inventory'
   | 'manage_stock'
   | 'suppliers'
-  | 'stock_indents';
+  | 'stock_indents'
+  | 'printer_setup';
 
 interface StoreAdminSidebarProps {
   activeTab: StoreAdminTabId;
@@ -204,6 +205,11 @@ export const StoreAdminSidebar: React.FC<StoreAdminSidebarProps> = ({
           label: 'Staff & Counters',
           icon: Users,
         },
+        {
+          id: 'printer_setup',
+          label: 'Printer & Thermal Setup',
+          icon: Printer,
+        },
       ],
     },
     {
@@ -243,7 +249,7 @@ export const StoreAdminSidebar: React.FC<StoreAdminSidebarProps> = ({
 
   return (
     <aside
-      className={`bg-[#0F172A] border-r border-slate-800/90 text-white flex flex-col justify-between transition-all duration-300 select-none z-30 shrink-0 sticky top-0 md:top-0 h-full md:h-[calc(100vh-4rem)] overflow-hidden ${
+      className={`bg-[#0F172A] border-r border-slate-800/90 text-white flex flex-col justify-between transition-all duration-300 select-none z-30 shrink-0 h-full overflow-hidden ${
         isCollapsed ? 'w-14 sm:w-15' : 'w-56 sm:w-60'
       }`}
     >
@@ -398,8 +404,8 @@ export const StoreAdminSidebar: React.FC<StoreAdminSidebarProps> = ({
         )}
       </div>
 
-      {/* Navigation Links (Scrollable) */}
-      <div className="flex-1 overflow-y-auto py-2 px-1.5 sm:px-2 space-y-2.5">
+      {/* Navigation Links (Scrollable Independently) */}
+      <div className="flex-1 min-h-0 overflow-y-auto py-2 px-1.5 sm:px-2 space-y-2.5 custom-scrollbar">
         {navGroups.map((group, gIdx) => (
           <div key={gIdx} className="space-y-0.5">
             {!isCollapsed && group.groupTitle && (

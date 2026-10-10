@@ -407,10 +407,10 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
   };
 
   return (
-    <div className="w-full min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
+    <div className="w-full h-full bg-[#F8FAFC] text-slate-900 flex flex-col overflow-hidden font-sans selection:bg-amber-500 selection:text-slate-950">
       {layoutMode === 'modern' ? (
         /* ================= MODERN WORKSPACE LAYOUT (MATCHING STORE ADMIN SIDEBAR PLACEMENT) ================= */
-        <div className="flex-1 flex flex-col md:flex-row w-full relative min-h-[calc(100vh-4rem)]">
+        <div className="flex-1 min-h-0 flex flex-row w-full h-full overflow-hidden relative">
           {/* Left-side Navigation Panel (Same Placement & Height as Store Admin) */}
           <WarehouseSidebar
             activeTab={activeTab}
@@ -434,8 +434,8 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
             onToggleLayoutMode={toggleLayoutMode}
           />
 
-          {/* Main Content Viewport: Edge-to-edge full width matching Store Admin */}
-          <main className="flex-1 min-w-0 p-2.5 sm:p-4 lg:p-5 space-y-4 overflow-x-hidden bg-[#F8FAFC]">
+          {/* Main Content Viewport: Independently scrollable, stays beside fixed sidebar */}
+          <main className="flex-1 min-h-0 min-w-0 h-full p-2.5 sm:p-4 lg:p-5 space-y-4 overflow-y-auto overflow-x-hidden bg-[#F8FAFC]">
             {/* Breadcrumb & View Header */}
             <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
