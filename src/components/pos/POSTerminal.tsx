@@ -190,7 +190,10 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
     return storage.getStoreById(posSession.storeId) || null;
   }, [posSession?.storeId, orderSyncTrigger]);
 
-  const isNegativeSellingEnabled = Boolean(currentStoreConfig?.enableNegativeSelling);
+  const isNegativeSellingEnabled =
+    currentStoreConfig?.enableNegativeSelling !== undefined
+      ? Boolean(currentStoreConfig.enableNegativeSelling)
+      : true;
 
   // Get store specific available stock for this counter's branch (order/stock units)
   const getItemStoreStock = (item: InventoryItem): number => {
@@ -824,6 +827,14 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
               <span className="text-[10px] text-slate-400 hidden lg:inline">
                 ({posSession.shift})
               </span>
+              <span className={`px-1.5 py-0.2 rounded-md font-mono text-[9px] font-black border uppercase shrink-0 ${
+                isNegativeSellingEnabled
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+              }`}
+              title={isNegativeSellingEnabled ? 'Store Negative Selling is ENABLED: zero stock billing allowed' : 'Strict Stock: Zero stock billing blocked'}>
+                {isNegativeSellingEnabled ? '⚡ Negative Selling ON' : '🛡️ Strict Stock'}
+              </span>
             </div>
           </div>
 
@@ -904,6 +915,16 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                 </span>
                 <span className="px-1.5 py-0.2 rounded-md bg-emerald-100 text-emerald-800 text-[9px] font-extrabold uppercase hidden lg:inline-block">
                   24x7 Active
+                </span>
+                <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase border flex items-center gap-1 shrink-0 ${
+                  isNegativeSellingEnabled
+                    ? 'bg-amber-100 text-amber-900 border-amber-300'
+                    : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                }`}
+                title={isNegativeSellingEnabled ? 'Store Stock Policy: Negative Selling Enabled (POS can bill items at 0 stock)' : 'Store Stock Policy: Strict Stock Validation'}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${isNegativeSellingEnabled ? 'bg-amber-600 animate-pulse' : 'bg-emerald-600'}`} />
+                  <span>{isNegativeSellingEnabled ? 'Negative Selling: ON' : 'Strict Stock Mode'}</span>
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 flex items-center gap-1.5 truncate">

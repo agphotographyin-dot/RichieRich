@@ -27,6 +27,7 @@ import {
   UserPlus,
   BadgeCheck,
   User,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   StoreLocation,
@@ -663,6 +664,21 @@ export const AdminStaffCounters: React.FC<AdminStaffCountersProps> = ({
   const handleToggleAdminStatus = (admin: StoreAdminCredential) => {
     storage.updateStoreAdmin(admin.id, { isActive: !admin.isActive });
     soundEffects.playSoftClick();
+    refreshData();
+  };
+
+  const handleToggleStoreNegativeSelling = (storeId: string) => {
+    const store = stores.find((s) => s.id === storeId);
+    if (!store) return;
+    const nextVal = !store.enableNegativeSelling;
+    storage.updateStore(storeId, { enableNegativeSelling: nextVal });
+    soundEffects.playClick();
+    refreshData();
+  };
+
+  const handleSetAllNegativeSelling = (enabled: boolean) => {
+    storage.setAllStoresNegativeSelling(enabled);
+    soundEffects.playClick();
     refreshData();
   };
 
@@ -1619,6 +1635,46 @@ export const AdminStaffCounters: React.FC<AdminStaffCountersProps> = ({
             </div>
           </div>
 
+          {/* Master Store Stock Policy & Negative Selling Central Control */}
+          <div className="bg-gradient-to-r from-amber-50/80 via-white to-amber-50/40 border border-amber-200/90 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500 text-slate-950 shrink-0 shadow-xs">
+                <SlidersHorizontal className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-extrabold text-sm text-slate-900">
+                    Outlet Negative Selling & Stock Validation Policy
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-bold">
+                    Real-time POS Policy
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 mt-1 max-w-2xl">
+                  Configure whether POS counter cashiers can complete customer sales when items have 0 stock or shortages. When active, sales are processed continuously without blocking checkouts.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0 self-end md:self-center">
+              <button
+                type="button"
+                onClick={() => handleSetAllNegativeSelling(true)}
+                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>Enable For All Stores</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetAllNegativeSelling(false)}
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                Strict Stock For All Stores
+              </button>
+            </div>
+          </div>
+
           {/* Section Subheader for Cashiers & PINs */}
           <div className="flex items-center justify-between pt-2">
             <div>
@@ -1662,7 +1718,23 @@ export const AdminStaffCounters: React.FC<AdminStaffCountersProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Negative Selling Toggle for Store */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleStoreNegativeSelling(store.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+                      store.enableNegativeSelling
+                        ? 'bg-amber-100 text-amber-950 border-amber-300 hover:bg-amber-200'
+                        : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
+                    }`}
+                    title={store.enableNegativeSelling ? 'Negative Selling is ENABLED: Click to disable' : 'Negative Selling is DISABLED: Click to enable'}
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Negative Selling: {store.enableNegativeSelling ? 'ALLOWED' : 'STRICT'}</span>
+                    <span className={`w-2 h-2 rounded-full ${store.enableNegativeSelling ? 'bg-amber-600 animate-pulse' : 'bg-slate-400'}`} />
+                  </button>
+
                   <button
                     onClick={() => handleOpenAddModal(store.id)}
                     className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"

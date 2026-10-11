@@ -256,6 +256,7 @@ export const INITIAL_STORES: StoreLocation[] = [
     shortName: 'Bopal',
     area: 'South Bopal, Ahmedabad',
     countersCount: 2,
+    enableNegativeSelling: true,
     counters: [
       { id: 1, name: 'Counter 1 (Main Billing)', defaultPin: '1001', cashierName: 'Karan Patel', shift: '24x7 Active (Shift A)' },
       { id: 2, name: 'Counter 2 (Quick Express & Pan)', defaultPin: '1002', cashierName: 'Sanjay Rawal', shift: '24x7 Active (Shift B)' },
@@ -271,6 +272,7 @@ export const INITIAL_STORES: StoreLocation[] = [
     shortName: 'Gota',
     area: 'Vandemataram Road, Gota, Ahmedabad',
     countersCount: 4,
+    enableNegativeSelling: true,
     counters: [
       { id: 1, name: 'Counter 1 (Royal Paan Special)', defaultPin: '2001', cashierName: 'Mahesh Solanki', shift: '24x7 Active (Day)' },
       { id: 2, name: 'Counter 2 (Espresso & Hot Coffee Bar)', defaultPin: '2002', cashierName: 'Rahul Joshi', shift: '24x7 Active (Evening)' },
@@ -288,6 +290,7 @@ export const INITIAL_STORES: StoreLocation[] = [
     shortName: 'Sindhubhavan',
     area: 'Sindhubhavan Road, Bodakdev, Ahmedabad',
     countersCount: 2,
+    enableNegativeSelling: true,
     counters: [
       { id: 1, name: 'Counter 1 (VIP Lounge & Pan)', defaultPin: '3001', cashierName: 'Pritesh Dave', shift: '24x7 Active (Shift A)' },
       { id: 2, name: 'Counter 2 (Beverages & Mukhwas Bar)', defaultPin: '3002', cashierName: 'Kavita Sharma', shift: '24x7 Active (Shift B)' },
@@ -303,6 +306,7 @@ export const INITIAL_STORES: StoreLocation[] = [
     shortName: 'SG Highway',
     area: 'SG Highway, Thaltej / Prahladnagar, Ahmedabad',
     countersCount: 2,
+    enableNegativeSelling: true,
     counters: [
       { id: 1, name: 'Counter 1 (Highway 24x7 Express)', defaultPin: '4001', cashierName: 'Vikram Rajput', shift: '24x7 Active (Day/Night)' },
       { id: 2, name: 'Counter 2 (Quick Brews & Cigars/Essentials)', defaultPin: '4002', cashierName: 'Anil Desai', shift: '24x7 Active (Late Night)' },
@@ -699,7 +703,13 @@ export class StorageService {
         const data = safeStorage.getItem(STORAGE_KEYS.STORES);
         if (!data) return INITIAL_STORES;
         const parsed = JSON.parse(data);
-        return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_STORES;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((s: StoreLocation) => ({
+            ...s,
+            enableNegativeSelling: s.enableNegativeSelling !== undefined ? Boolean(s.enableNegativeSelling) : true,
+          }));
+        }
+        return INITIAL_STORES;
       } catch {
         return INITIAL_STORES;
       }
@@ -735,6 +745,24 @@ export class StorageService {
     });
 
     return store;
+  }
+
+  setStoreNegativeSelling(storeId: string, enabled: boolean): StoreLocation | null {
+    return this.updateStore(storeId, { enableNegativeSelling: Boolean(enabled) });
+  }
+
+  setAllStoresNegativeSelling(enabled: boolean): void {
+    const stores = this.getStores().map((s) => ({
+      ...s,
+      enableNegativeSelling: Boolean(enabled),
+    }));
+    this.saveStores(stores);
+  }
+
+  isStoreNegativeSellingEnabled(storeId?: string): boolean {
+    if (!storeId) return true;
+    const store = this.getStoreById(storeId);
+    return store?.enableNegativeSelling !== undefined ? Boolean(store.enableNegativeSelling) : true;
   }
 
   addCounter(
@@ -1815,7 +1843,9 @@ export class StorageService {
     const inventory = this.getInventory();
     const stores = this.getStores();
     const targetStore = orderData.storeId ? stores.find((s) => s.id === orderData.storeId) : undefined;
-    const isNegativeSellingEnabled = Boolean(targetStore?.enableNegativeSelling);
+    const isNegativeSellingEnabled = targetStore?.enableNegativeSelling !== undefined
+      ? Boolean(targetStore.enableNegativeSelling)
+      : true;
 
     let triggeredStoreLowStock = false;
     const auditRecords: any[] = [];
