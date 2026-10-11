@@ -2703,23 +2703,8 @@ export class StorageService {
       const lastBackupDate = safeStorage.getItem(STORAGE_KEYS.LAST_BACKUP_DATE);
       if (lastBackupDate !== todayStr) {
         // Automatically create daily 12:00 AM automated backup with full PocketBase collections, Store Stock and Inventory
-        const snapshot = this.createBackup('automated_daily', `Daily 12:00 AM Automated Snapshot [${todayStr}]`);
+        this.createBackup('automated_daily', `Daily 12:00 AM Automated Snapshot [${todayStr}]`);
         safeStorage.setItem(STORAGE_KEYS.LAST_BACKUP_DATE, todayStr);
-
-        // Execute automated Google Drive upload and Gmail push if configured (dynamic import prevents build-time circular or export mismatch failures)
-        import('./googleWorkspaceBackupService')
-          .then((wsMod) => {
-            const runner =
-              wsMod?.executeDailyCloudBackup ||
-              (wsMod as any)?.default?.executeDailyCloudBackup ||
-              (wsMod as any)?.googleWorkspaceBackupService?.executeDailyCloudBackup;
-            if (typeof runner === 'function') {
-              return runner(snapshot);
-            }
-          })
-          .catch((err) => {
-            console.warn('[CloudBackup] Daily automated cloud push note:', err);
-          });
       }
     } catch (e) {
       console.warn('Daily auto-backup scheduler check error:', e);
