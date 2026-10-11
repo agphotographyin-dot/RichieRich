@@ -63,6 +63,7 @@ import { StoreSuppliersView } from './StoreSuppliersView';
 import { SupplierModal } from './SupplierModal';
 import { StoreAdminSidebar, StoreAdminTabId } from './StoreAdminSidebar';
 import { StoreAdminHeader } from './StoreAdminHeader';
+import { AddItemModal } from '../admin/AddItemModal';
 import { AdminOrders } from '../admin/AdminOrders';
 import { AdminPrinterSetupView } from '../admin/AdminPrinterSetupView';
 import { isToday, getLocalDateString } from '../../utils/dateUtils';
@@ -208,6 +209,10 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
   const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false);
   const [supplierToEdit, setSupplierToEdit] = useState<Supplier | null>(null);
   const [preselectedSupplierForPO, setPreselectedSupplierForPO] = useState<string | undefined>(undefined);
+
+  // Add Product / SKU modal state
+  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
+  const categories = useMemo(() => storage.getCategories(), [refreshKey]);
 
   const currentStore = stores.find((s) => s.id === activeStoreId) || stores[0];
 
@@ -528,6 +533,7 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
             setAuditPreselectedItem(null);
             setIsStockAuditOpen(true);
           }}
+          onOpenAddItem={() => setIsAddItemOpen(true)}
           activeDirectPOCount={activeDirectPOCount}
           pendingIndentsCount={pendingIndentsCount}
           lowStockCount={lowStockItemsCount}
@@ -1364,6 +1370,16 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
 
                   <button
                     type="button"
+                    onClick={() => setIsAddItemOpen(true)}
+                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                    title="Add a new product/SKU to master catalog and store inventory"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add New Product</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => {
                       setAuditPreselectedItem(null);
                       setIsStockAuditOpen(true);
@@ -2150,6 +2166,16 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
         onSuccess={() => {
           triggerRefresh();
         }}
+      />
+
+      {/* Add New Product / SKU Modal (Synced with Master Inventory & Warehouse) */}
+      <AddItemModal
+        isOpen={isAddItemOpen}
+        onClose={() => {
+          setIsAddItemOpen(false);
+          triggerRefresh();
+        }}
+        categories={categories}
       />
     </div>
   );

@@ -63,6 +63,7 @@ interface StoreAdminSidebarProps {
   onOpenReceiveGoods: () => void;
   onOpenIndent: () => void;
   onOpenAuditStock?: () => void;
+  onOpenAddItem?: () => void;
   activeDirectPOCount: number;
   pendingIndentsCount: number;
   lowStockCount: number;
@@ -86,6 +87,7 @@ export const StoreAdminSidebar: React.FC<StoreAdminSidebarProps> = ({
   onOpenReceiveGoods,
   onOpenIndent,
   onOpenAuditStock,
+  onOpenAddItem,
   activeDirectPOCount,
   pendingIndentsCount,
   lowStockCount,
@@ -398,6 +400,18 @@ export const StoreAdminSidebar: React.FC<StoreAdminSidebarProps> = ({
               >
                 <ClipboardCheck className="w-3.5 h-3.5 text-amber-400" />
                 <span>Audit Store Stock</span>
+              </button>
+            )}
+
+            {onOpenAddItem && (
+              <button
+                type="button"
+                onClick={onOpenAddItem}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl bg-indigo-600/90 hover:bg-indigo-600 text-white text-[11px] font-bold border border-indigo-500/40 shadow-2xs transition-colors cursor-pointer"
+                title="Add a new Product/SKU to master inventory & outlet"
+              >
+                <Plus className="w-3.5 h-3.5 text-indigo-200" />
+                <span>Add Product / SKU</span>
               </button>
             )}
           </div>

@@ -535,27 +535,61 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
     return () => clearTimeout(timer);
   }, [lastScannedFeedback]);
 
-  // Filter products (active only)
-  const filteredProducts = inventory.filter((item) => {
-    if (item.status === 'inactive') return false;
+  // Filter products (active only) - Memoized for instant responsiveness
+  const filteredProducts = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    return inventory.filter((item) => {
+      if (item.status === 'inactive') return false;
 
-    let matchesCategory = false;
-    if (selectedCategory === 'all') {
-      matchesCategory = true;
-    } else if (selectedCategory === 'loose_products') {
-      matchesCategory = isLooseProduct(item);
-    } else {
-      matchesCategory = item.category === selectedCategory;
+      let matchesCategory = false;
+      if (selectedCategory === 'all') {
+        matchesCategory = true;
+      } else if (selectedCategory === 'loose_products') {
+        matchesCategory = isLooseProduct(item);
+      } else {
+        matchesCategory = item.category === selectedCategory;
+      }
+
+      if (!matchesCategory) return false;
+      if (!q) return true;
+
+      return (
+        item.name.toLowerCase().includes(q) ||
+        item.sku.toLowerCase().includes(q) ||
+        item.barcode.includes(q) ||
+        Boolean(item.looseBarcode && item.looseBarcode.includes(q)) ||
+        Boolean(item.brand && item.brand.toLowerCase().includes(q))
+      );
+    });
+  }, [inventory, selectedCategory, searchTerm]);
+
+  // Load while scrolling (Infinite scroll pagination) to eliminate POS rendering lag
+  const INITIAL_BATCH_SIZE = 30;
+  const BATCH_INCREMENT = 24;
+  const [visibleCount, setVisibleCount] = useState<number>(INITIAL_BATCH_SIZE);
+  const catalogScrollRef = useRef<HTMLDivElement>(null);
+
+  // Reset visible count when category or search changes so user sees instant top results
+  useEffect(() => {
+    setVisibleCount(INITIAL_BATCH_SIZE);
+    if (catalogScrollRef.current) {
+      catalogScrollRef.current.scrollTop = 0;
     }
+  }, [selectedCategory, searchTerm]);
 
-    const matchesSearch =
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.barcode.includes(searchTerm) ||
-      (item.looseBarcode && item.looseBarcode.includes(searchTerm)) ||
-      (item.brand && item.brand.toLowerCase().includes(searchTerm.toLowerCase()));
-    return matchesCategory && matchesSearch;
-  });
+  // Infinite scroll handler: Load more items seamlessly when nearing bottom of scroll area
+  const handleCatalogScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+    // When within 250px of bottom, append next batch
+    if (scrollBottom < 250 && visibleCount < filteredProducts.length) {
+      setVisibleCount((prev) => Math.min(prev + BATCH_INCREMENT, filteredProducts.length));
+    }
+  };
+
+  const visibleProducts = useMemo(() => {
+    return filteredProducts.slice(0, visibleCount);
+  }, [filteredProducts, visibleCount]);
 
   const updateQuantity = (index: number, delta: number) => {
     setCart((prev) => {
@@ -1138,9 +1172,13 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
             </div>
           </div>
 
-          {/* Product Cards Grid: Fits remaining height and scrolls internally without page scroll */}
-          <div className="flex-1 min-h-0 overflow-y-auto pr-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 content-start scrollbar-thin">
-            {filteredProducts.map((item, idx) => {
+          {/* Product Cards Grid: Fits remaining height and scrolls internally without page scroll (Load-on-scroll enabled) */}
+          <div
+            ref={catalogScrollRef}
+            onScroll={handleCatalogScroll}
+            className="flex-1 min-h-0 overflow-y-auto pr-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 content-start scrollbar-thin"
+          >
+            {visibleProducts.map((item, idx) => {
               const isLoose = isLooseProduct(item);
               const piecesInfo = getItemStorePiecesStock(item);
               const { units: storeUnits, loosePieces: storeLoosePieces, totalPieces: storeTotalPieces, piecesPerBox } = piecesInfo;
@@ -1424,6 +1462,20 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                 </div>
               );
             })}
+
+            {/* Infinite scroll loading indicator */}
+            {visibleCount < filteredProducts.length && (
+              <div className="col-span-full py-3 text-center">
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((prev) => Math.min(prev + BATCH_INCREMENT, filteredProducts.length))}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors cursor-pointer shadow-2xs inline-flex items-center gap-2"
+                >
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                  <span>Loading more items ({visibleProducts.length} of {filteredProducts.length} loaded)...</span>
+                </button>
+              </div>
+            )}
 
             {filteredProducts.length === 0 && (
               <div className="col-span-full py-16 text-center bg-white rounded-2xl border border-dashed border-slate-200 p-8 space-y-2">

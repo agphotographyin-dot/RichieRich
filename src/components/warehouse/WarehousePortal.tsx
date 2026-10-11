@@ -437,8 +437,8 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
 
           {/* Main Content Viewport: Independently scrollable, stays beside fixed sidebar */}
           <main className="flex-1 min-h-0 min-w-0 h-full p-2.5 sm:p-4 lg:p-5 space-y-4 overflow-y-auto overflow-x-hidden bg-[#F8FAFC]">
-            {/* Breadcrumb & View Header */}
-            <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            {/* Breadcrumb & View Header - Fixed at top of scroll viewport */}
+            <div className="bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-0 z-20">
               <div className="flex items-start gap-3">
                 <button
                   type="button"

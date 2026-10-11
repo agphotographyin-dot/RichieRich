@@ -95,7 +95,7 @@ export const WarehouseHeader: React.FC<WarehouseHeaderProps> = ({
   const activeSecondaryLabel = secondaryTabs.find((t) => t.id === activeTab)?.label;
 
   return (
-    <div className="bg-[#1E293B] border border-slate-700/80 text-white rounded-2xl shadow-sm mb-6 relative">
+    <div className="bg-[#1E293B] border border-slate-700/80 text-white rounded-2xl shadow-md mb-6 sticky top-0 z-30 backdrop-blur-md">
       {/* Top Banner with Role Switcher & Live Quick Actions */}
       <div className="p-4 sm:p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-slate-700/60 rounded-t-2xl">
         <div className="flex items-center gap-3.5">
