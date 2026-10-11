@@ -643,7 +643,7 @@ export const App: React.FC = () => {
                 onBackToLanding={() => navigateToRole('landing')}
               />
             ) : (
-              <div className="animate-in fade-in duration-150">
+              <div className="h-full flex-1 min-h-0 flex flex-col overflow-hidden w-full animate-in fade-in duration-150">
                 <WarehousePortal
                   currentTab={activeWarehouseTab}
                   onTabChange={handleWarehouseTabChange}

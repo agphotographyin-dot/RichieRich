@@ -4,6 +4,7 @@ import {
   PackagePlus,
   Truck,
   RotateCcw,
+  PanelLeft,
 } from 'lucide-react';
 import { WarehouseHeader } from './WarehouseHeader';
 import { WarehouseSidebar } from './WarehouseSidebar';
@@ -438,35 +439,45 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
           <main className="flex-1 min-h-0 min-w-0 h-full p-2.5 sm:p-4 lg:p-5 space-y-4 overflow-y-auto overflow-x-hidden bg-[#F8FAFC]">
             {/* Breadcrumb & View Header */}
             <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
-                  <span>Enterprise HQ</span>
-                  <span>/</span>
-                  <span className="text-amber-600 font-extrabold">Central Logistics & Supply Chain</span>
-                  <span>/</span>
-                  <span className="text-slate-800 capitalize font-extrabold">
-                    {activeTab.replace(/_/g, ' ')}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 mt-1">
-                  <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-                    {activeTab === 'dashboard' && 'Warehouse Executive Command Dashboard'}
-                    {activeTab === 'inventory' && 'Central Master Stock & Batch Inventory'}
-                    {activeTab === 'transfers' && 'Stock Transfers & Store Indent Fulfillments'}
-                    {activeTab === 'purchases' && 'Vendor Purchase Orders & Inward Bills'}
-                    {activeTab === 'store_stock' && 'Store Outlets Stock Allocation & Replenishment'}
-                    {activeTab === 'locations' && 'Bin Locations & Storage Capacity'}
-                    {activeTab === 'adjustments' && 'Stock Adjustments & Expiry Waste Control'}
-                    {activeTab === 'audit_trail' && 'Complete System Movement & Audit Trail'}
-                    {activeTab === 'reports' && 'Valuation, Expiry & Supplier Financial Reports'}
-                  </h1>
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-black border border-emerald-200 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span>Warehouse Online</span>
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-mono">
-                    {warehouses[0]?.name || 'Central Ahmedabad WH'}
-                  </span>
+              <div className="flex items-start gap-3">
+                <button
+                  type="button"
+                  onClick={toggleSidebarCollapse}
+                  className="mt-0.5 p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer md:hidden flex items-center justify-center shrink-0 border border-slate-200"
+                  title={isSidebarCollapsed ? "Expand Sidebar Menu" : "Collapse Sidebar Menu"}
+                >
+                  <PanelLeft className="w-4 h-4 text-amber-600" />
+                </button>
+                <div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                    <span>Enterprise HQ</span>
+                    <span>/</span>
+                    <span className="text-amber-600 font-extrabold">Central Logistics & Supply Chain</span>
+                    <span>/</span>
+                    <span className="text-slate-800 capitalize font-extrabold">
+                      {activeTab.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                      {activeTab === 'dashboard' && 'Warehouse Executive Command Dashboard'}
+                      {activeTab === 'inventory' && 'Central Master Stock & Batch Inventory'}
+                      {activeTab === 'transfers' && 'Stock Transfers & Store Indent Fulfillments'}
+                      {activeTab === 'purchases' && 'Vendor Purchase Orders & Inward Bills'}
+                      {activeTab === 'store_stock' && 'Store Outlets Stock Allocation & Replenishment'}
+                      {activeTab === 'locations' && 'Bin Locations & Storage Capacity'}
+                      {activeTab === 'adjustments' && 'Stock Adjustments & Expiry Waste Control'}
+                      {activeTab === 'audit_trail' && 'Complete System Movement & Audit Trail'}
+                      {activeTab === 'reports' && 'Valuation, Expiry & Supplier Financial Reports'}
+                    </h1>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-black border border-emerald-200 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span>Warehouse Online</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-mono">
+                      {warehouses[0]?.name || 'Central Ahmedabad WH'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -529,7 +540,7 @@ export const WarehousePortal: React.FC<WarehousePortalProps> = ({
         </div>
       ) : (
         /* ================= CLASSIC TABBED LAYOUT ================= */
-        <div className="p-3 sm:p-5 lg:p-6 space-y-4 animate-in fade-in duration-200">
+        <div className="flex-1 min-h-0 w-full overflow-y-auto p-3 sm:p-5 lg:p-6 space-y-4 animate-in fade-in duration-200">
           <WarehouseHeader
             activeTab={activeTab}
             onSelectTab={handleSelectTab}
