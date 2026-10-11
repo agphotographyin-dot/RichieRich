@@ -138,8 +138,8 @@ export function getProductBoxLooseStock(item: InventoryItem, storeId?: string): 
   const piecesPerBox = item.piecesPerBox && item.piecesPerBox > 0 ? item.piecesPerBox : 1;
 
   const rawQty = storeId
-    ? Math.max(0, Math.floor(Number(item.storeAllocations?.[storeId]) || 0))
-    : Math.max(0, Math.floor(Number(item.stockQuantity) || 0));
+    ? Math.floor(Number(item.storeAllocations?.[storeId]) || 0)
+    : Math.floor(Number(item.stockQuantity) || 0);
 
   return {
     fullBoxes: isBoxUnit ? rawQty : 0,
@@ -925,7 +925,8 @@ export class StorageService {
       item.totalPieceEquivalent = newWarehouseStock;
       item.total_piece_equivalent = newWarehouseStock;
     } else {
-      const currentToStoreStock = Math.max(0, Number(item.storeAllocations[toStoreId]) || 0);
+      const rawToAlloc = item.storeAllocations[toStoreId];
+      const currentToStoreStock = Number.isFinite(Number(rawToAlloc)) ? Math.floor(Number(rawToAlloc)) : 0;
       const newStoreStock = currentToStoreStock + quantity;
       item.storeAllocations[toStoreId] = newStoreStock;
       if (!item.storeBoxAllocations) item.storeBoxAllocations = {};
@@ -1510,8 +1511,9 @@ export class StorageService {
         item.storeAllocations = {};
       }
 
-      const prevStock = Math.max(0, Number(item.storeAllocations[storeId]) || 0);
-      const newStock = Math.max(0, Number(audit.countedStock) || 0);
+      const rawAlloc = item.storeAllocations[storeId];
+      const prevStock = Number.isFinite(Number(rawAlloc)) ? Math.floor(Number(rawAlloc)) : 0;
+      const newStock = Number.isFinite(Number(audit.countedStock)) ? Math.floor(Number(audit.countedStock)) : 0;
       const delta = newStock - prevStock;
 
       // Update store allocation
@@ -1790,6 +1792,17 @@ export class StorageService {
       orderData.sync_transaction_id ||
       `SYNC-TXN-ORD-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 
+    // Prevent duplicate deductions when checkout requests are retried
+    if (sync_transaction_id) {
+      const existingOrder = orders.find(
+        (o) => o.sync_transaction_id && o.sync_transaction_id === sync_transaction_id
+      );
+      if (existingOrder) {
+        console.warn(`[storage.processOrder] Duplicate checkout request detected for ${sync_transaction_id}. Returning existing order without duplicate deduction.`);
+        return existingOrder;
+      }
+    }
+
     const newOrder: Order = {
       ...orderData,
       id: `ord-${Date.now()}`,
@@ -1802,6 +1815,9 @@ export class StorageService {
     // 1. Deduct Inventory Stock in Real-Time (Store Specific Allocation or Central Warehouse)
     const inventory = this.getInventory();
     const stores = this.getStores();
+    const targetStore = orderData.storeId ? stores.find((s) => s.id === orderData.storeId) : undefined;
+    const isNegativeSellingEnabled = Boolean(targetStore?.enableNegativeSelling);
+
     let triggeredStoreLowStock = false;
     const auditRecords: any[] = [];
     const locName = orderData.storeName || (orderData.storeId ? `Store (${orderData.storeId})` : 'Central Warehouse');
@@ -1823,34 +1839,67 @@ export class StorageService {
           if (!invItem.storeAllocations) invItem.storeAllocations = {};
           if (!invItem.storeBoxAllocations) invItem.storeBoxAllocations = {};
 
-          const curBoxes = Math.max(0, Number(invItem.storeAllocations[orderData.storeId]) || 0);
+          const curBoxes = Number.isFinite(Number(invItem.storeAllocations[orderData.storeId]))
+            ? Number(invItem.storeAllocations[orderData.storeId])
+            : 0;
           const curAlloc = invItem.storeBoxAllocations[orderData.storeId];
-          const curLoose = curAlloc && curAlloc.loosePieces !== undefined ? Math.max(0, Number(curAlloc.loosePieces) || 0) : 0;
+          const curLoose = curAlloc && curAlloc.loosePieces !== undefined ? Number(curAlloc.loosePieces) || 0 : 0;
           const totalPiecesBefore = (curBoxes * ppb) + curLoose;
 
-          totalPiecesAfter = Math.max(0, totalPiecesBefore - piecesSold);
-          const newFullBoxes = Math.floor(totalPiecesAfter / ppb);
-          const newLoosePieces = totalPiecesAfter % ppb;
-
-          prevStock = curBoxes;
-          finalStock = newFullBoxes;
-
-          invItem.storeAllocations[orderData.storeId] = newFullBoxes;
-          invItem.storeBoxAllocations[orderData.storeId] = {
-            fullBoxes: newFullBoxes,
-            loosePieces: newLoosePieces,
-            totalPieces: totalPiecesAfter,
-            total_piece_equivalent: totalPiecesAfter,
-          };
+          // If negative selling is enabled or allowed for store, allow negative values
+          // If not enabled, clamp at 0
+          if (isNegativeSellingEnabled) {
+            if (isLooseSale) {
+              totalPiecesAfter = totalPiecesBefore - piecesSold;
+              const newFullBoxes = Math.floor(totalPiecesAfter / ppb);
+              const newLoosePieces = totalPiecesAfter % ppb;
+              prevStock = curBoxes;
+              finalStock = newFullBoxes;
+              invItem.storeAllocations[orderData.storeId] = newFullBoxes;
+              invItem.storeBoxAllocations[orderData.storeId] = {
+                fullBoxes: newFullBoxes,
+                loosePieces: newLoosePieces,
+                totalPieces: totalPiecesAfter,
+                total_piece_equivalent: totalPiecesAfter,
+              };
+            } else {
+              // Direct whole unit / Box sale: accurately update unit balance (e.g. 5 - 8 = -3, 0 - 2 = -2)
+              const newFullBoxes = curBoxes - qtyToDeduct;
+              totalPiecesAfter = (newFullBoxes * ppb) + curLoose;
+              prevStock = curBoxes;
+              finalStock = newFullBoxes;
+              invItem.storeAllocations[orderData.storeId] = newFullBoxes;
+              invItem.storeBoxAllocations[orderData.storeId] = {
+                fullBoxes: newFullBoxes,
+                loosePieces: curLoose,
+                totalPieces: totalPiecesAfter,
+                total_piece_equivalent: totalPiecesAfter,
+              };
+            }
+          } else {
+            totalPiecesAfter = Math.max(0, totalPiecesBefore - piecesSold);
+            const newFullBoxes = Math.max(0, Math.floor(totalPiecesAfter / ppb));
+            const newLoosePieces = Math.max(0, totalPiecesAfter % ppb);
+            prevStock = Math.max(0, curBoxes);
+            finalStock = newFullBoxes;
+            invItem.storeAllocations[orderData.storeId] = newFullBoxes;
+            invItem.storeBoxAllocations[orderData.storeId] = {
+              fullBoxes: newFullBoxes,
+              loosePieces: newLoosePieces,
+              totalPieces: totalPiecesAfter,
+              total_piece_equivalent: totalPiecesAfter,
+            };
+          }
 
           const storeMinThreshold = Math.max(2, Math.round((invItem.lowStockThreshold || 10) * 0.4));
           if (finalStock <= storeMinThreshold && totalPiecesAfter <= storeMinThreshold * ppb) {
             triggeredStoreLowStock = true;
             const stObj = stores.find((s) => s.id === orderData.storeId);
             const stName = stObj ? stObj.shortName || stObj.name : orderData.storeId.toUpperCase();
+            const currentLooseCount = invItem.storeBoxAllocations?.[orderData.storeId]?.loosePieces || 0;
             this.addNotification({
               title: `⚠️ In-Store Low Stock: ${stName} - ${invItem.name}`,
-              message: `Post-Sale Alert: ${stName} stock dropped to ${finalStock} ${invItem.unit} + ${newLoosePieces} loose pieces (${totalPiecesAfter} total pieces). Threshold: ${storeMinThreshold}. Warehouse replenishment needed!`,
+              message: `Post-Sale Alert: ${stName} stock dropped to ${finalStock} ${invItem.unit || 'units'} + ${currentLooseCount} loose pieces (${totalPiecesAfter} total pieces). Threshold: ${storeMinThreshold}. Warehouse replenishment needed!`,
               type: 'low_stock',
               targetRole: 'admin',
               read: false,
@@ -3534,8 +3583,8 @@ export function getBoxLooseStockSummary(item: InventoryItem, storeId?: string): 
   const isLooseUnit = !isBoxUnit;
 
   const rawQty = storeId
-    ? Math.max(0, Math.floor(Number(item.storeAllocations?.[storeId]) || 0))
-    : Math.max(0, Math.floor(Number(item.stockQuantity) || 0));
+    ? Math.floor(Number(item.storeAllocations?.[storeId]) || 0)
+    : Math.floor(Number(item.stockQuantity) || 0);
 
   const storeBox = storeId && item.storeBoxAllocations?.[storeId];
   const fullBoxes = storeBox !== undefined ? storeBox.fullBoxes : (isBoxUnit ? rawQty : 0);

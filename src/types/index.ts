@@ -162,6 +162,7 @@ export interface StoreLocation {
   phone: string;
   is24x7: boolean;
   landmark: string;
+  enableNegativeSelling?: boolean; // Controls whether POS can sell when stock is zero or insufficient
 }
 
 export type StoreOutlet = StoreLocation;

@@ -16,6 +16,12 @@ import {
   Clock,
   ShieldCheck,
   Check,
+  Copy,
+  Sparkles,
+  Key,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { BackupSnapshot } from '../../types';
@@ -30,9 +36,14 @@ import {
   listGoogleDriveBackups,
   getWorkspaceBackupSettings,
   saveWorkspaceBackupSettings,
+  connectSimulatedWorkspace,
+  connectWithManualToken,
+  signInWithGoogleIdentityServices,
+  WorkspaceUser,
   DriveBackupFile,
   WorkspaceBackupSettings,
 } from '../../services/googleWorkspaceBackupService';
+import rawConfig from '../../../firebase-applet-config.json';
 
 interface GoogleWorkspaceBackupPanelProps {
   latestBackup: BackupSnapshot | null;
@@ -42,7 +53,7 @@ interface GoogleWorkspaceBackupPanelProps {
 export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProps> = ({
   latestBackup,
 }) => {
-  const [user, setUser] = useState<User | null>(getWorkspaceUser());
+  const [user, setUser] = useState<User | WorkspaceUser | null>(getWorkspaceUser());
   const [token, setToken] = useState<string | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [settings, setSettings] = useState<WorkspaceBackupSettings>(getWorkspaceBackupSettings());
@@ -56,6 +67,13 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
   // Status banners
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [isUnauthorizedDomain, setIsUnauthorizedDomain] = useState(false);
+  const [copiedDomain, setCopiedDomain] = useState(false);
+
+  // Manual token modal / section
+  const [showTokenInput, setShowTokenInput] = useState(false);
+  const [manualToken, setManualToken] = useState('');
+  const [manualEmail, setManualEmail] = useState('admin@richierich.com');
 
   // Confirmation modals
   const [showDriveConfirm, setShowDriveConfirm] = useState(false);
@@ -64,6 +82,10 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
 
   // Recipient input
   const [recipientInput, setRecipientInput] = useState(settings.recipientEmail || (user?.email || ''));
+
+  const currentHostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const projectId = (rawConfig as any)?.projectId || 'gen-lang-client-0055802576';
+  const firebaseAuthSettingsUrl = `https://console.firebase.google.com/project/${projectId}/authentication/settings`;
 
   useEffect(() => {
     const unsub = initWorkspaceAuth(
@@ -103,6 +125,8 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
   const handleSignIn = async () => {
     setIsSigningIn(true);
     setActionError(null);
+    setIsUnauthorizedDomain(false);
+
     try {
       const result = await googleSignIn();
       if (result) {
@@ -123,10 +147,77 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
       ) {
         return;
       }
+
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('auth/unauthorized-domain')) {
+        setIsUnauthorizedDomain(true);
+        setActionError(`Firebase Authentication: Domain "${currentHostname}" is not authorized.`);
+        return;
+      }
+
       setActionError(err.message || 'Failed to sign in with Google');
     } finally {
       setIsSigningIn(false);
     }
+  };
+
+  // Try direct Google Identity Services
+  const handleTryGIS = async () => {
+    setIsSigningIn(true);
+    setActionError(null);
+    try {
+      const result = await signInWithGoogleIdentityServices();
+      if (result) {
+        setUser(result.user);
+        setToken(result.accessToken);
+        if (!recipientInput && result.user.email) {
+          setRecipientInput(result.user.email);
+        }
+        setIsUnauthorizedDomain(false);
+        setActionSuccess(`Connected via Google Identity Services as ${result.user.displayName || result.user.email}!`);
+        setTimeout(() => setActionSuccess(null), 4000);
+      }
+    } catch (err: any) {
+      setActionError(err.message || 'Google Identity Services sign in failed.');
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  // Enable simulated cloud mode for immediate testing
+  const handleEnableSimulatedMode = () => {
+    const simEmail = recipientInput.trim() || 'agphotography.in@gmail.com';
+    const { user: simUser, accessToken } = connectSimulatedWorkspace(simEmail);
+    setUser(simUser);
+    setToken(accessToken);
+    setRecipientInput(simEmail);
+    setIsUnauthorizedDomain(false);
+    setActionError(null);
+    setActionSuccess('Cloud Simulation Mode enabled! You can now test Drive and Gmail backup operations.');
+    setTimeout(() => setActionSuccess(null), 5000);
+  };
+
+  // Connect with manual token
+  const handleConnectManualToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualToken.trim()) return;
+    try {
+      const { user: manualUser, accessToken } = await connectWithManualToken(manualToken, manualEmail);
+      setUser(manualUser);
+      setToken(accessToken);
+      setShowTokenInput(false);
+      setIsUnauthorizedDomain(false);
+      setActionError(null);
+      setActionSuccess('Connected successfully with OAuth Access Token!');
+      setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to connect with token.');
+    }
+  };
+
+  const handleCopyHostname = () => {
+    navigator.clipboard?.writeText(currentHostname);
+    setCopiedDomain(true);
+    setTimeout(() => setCopiedDomain(false), 3000);
   };
 
   const handleSignOut = async () => {
@@ -150,7 +241,7 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
     setIsUploadingToDrive(false);
 
     if (result.success) {
-      setActionSuccess(`✅ Backup file "${result.name}" successfully uploaded to your Google Drive!`);
+      setActionSuccess(`Backup file "${result.name}" successfully uploaded to Google Drive!`);
       setSettings(getWorkspaceBackupSettings());
       loadDriveBackups();
       setTimeout(() => setActionSuccess(null), 6000);
@@ -179,7 +270,7 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
     setIsSendingEmail(false);
 
     if (result.success) {
-      setActionSuccess(`📧 Daily backup file dispatched successfully via Gmail to ${targetEmail}!`);
+      setActionSuccess(`Backup archive email dispatched successfully to ${targetEmail}!`);
       setSettings(getWorkspaceBackupSettings());
       setTimeout(() => setActionSuccess(null), 6000);
     } else {
@@ -187,16 +278,8 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
     }
   };
 
-  const handleToggleAutoDrive = (enabled: boolean) => {
-    const updated = saveWorkspaceBackupSettings({ autoDriveUpload: enabled });
-    setSettings(updated);
-  };
-
-  const handleToggleAutoEmail = (enabled: boolean) => {
-    const updated = saveWorkspaceBackupSettings({
-      autoEmailPush: enabled,
-      recipientEmail: recipientInput.trim(),
-    });
+  const handleToggleSetting = (key: 'autoDriveUpload' | 'autoEmailPush') => {
+    const updated = saveWorkspaceBackupSettings({ [key]: !settings[key] });
     setSettings(updated);
   };
 
@@ -209,7 +292,7 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6">
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-xs space-y-6">
       {/* Panel Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
         <div className="flex items-start gap-3.5">
@@ -217,8 +300,10 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
             <Cloud className="w-6 h-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-lg font-bold text-slate-800">Google Drive & Gmail Daily Cloud Backup</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-base sm:text-lg font-bold text-slate-800">
+                Google Drive & Gmail Daily Cloud Backup
+              </h3>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
                 1-Click Push
               </span>
@@ -233,29 +318,36 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
         {user ? (
           <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-2 px-3 self-start sm:self-auto">
             {user.photoURL ? (
-              <img src={user.photoURL} alt={user.displayName || 'Google User'} className="w-8 h-8 rounded-full border border-slate-300" />
+              <img
+                src={user.photoURL}
+                alt={user.displayName || 'Google User'}
+                className="w-8 h-8 rounded-full border border-slate-300"
+              />
             ) : (
               <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs">
                 {(user.email || 'G')[0].toUpperCase()}
               </div>
             )}
             <div className="text-left">
-              <div className="text-xs font-bold text-slate-800 line-clamp-1">{user.displayName || user.email}</div>
+              <div className="text-xs font-bold text-slate-800 line-clamp-1">
+                {user.displayName || user.email}
+              </div>
               <div className="text-[10px] text-emerald-600 font-medium flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> Drive & Gmail Connected
+                <CheckCircle2 className="w-3 h-3" />
+                {user.uid?.startsWith('sim-') ? 'Simulated Cloud Active' : 'Drive & Gmail Connected'}
               </div>
             </div>
             <button
               onClick={handleSignOut}
-              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors ml-1"
+              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors ml-1 cursor-pointer"
               title="Sign out of Google"
             >
               <LogOut className="w-4 h-4" />
             </button>
           </div>
         ) : (
-          <div className="self-start sm:self-auto">
-            {/* Official Google Sign-In Button format */}
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {/* Official Google Sign-In Button */}
             <button
               type="button"
               onClick={handleSignIn}
@@ -270,14 +362,37 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
               ) : (
                 <>
                   <svg className="w-4 h-4" viewBox="0 0 48 48">
-                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
-                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                    <path
+                      fill="#EA4335"
+                      d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+                    />
+                    <path
+                      fill="#4285F4"
+                      d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+                    />
                   </svg>
                   <span>Connect Google Account</span>
                 </>
               )}
+            </button>
+
+            {/* Quick Simulation Mode Shortcut */}
+            <button
+              type="button"
+              onClick={handleEnableSimulatedMode}
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors cursor-pointer flex items-center gap-1.5"
+              title="Test Drive & Gmail backups in Simulated Mode without Google account"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>Test Mode</span>
             </button>
           </div>
         )}
@@ -290,10 +405,106 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
           <span>{actionSuccess}</span>
         </div>
       )}
-      {actionError && (
-        <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center gap-2 animate-in fade-in">
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-          <span>{actionError}</span>
+
+      {/* SPECIALIZED DIAGNOSTIC & RESOLUTION CARD FOR auth/unauthorized-domain */}
+      {isUnauthorizedDomain && (
+        <div className="p-4 sm:p-5 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-300 rounded-2xl text-slate-800 text-xs space-y-4 shadow-sm animate-in fade-in">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-amber-500 text-white shrink-0 shadow-xs">
+              <AlertCircle className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-black text-amber-950 flex items-center gap-2">
+                Firebase: Domain Not Authorized (auth/unauthorized-domain)
+              </h4>
+              <p className="text-xs text-amber-900 leading-relaxed">
+                Firebase Authentication restricts Google sign-in popups to verified domains. To allow sign-in from this environment, add this domain to your Firebase project's <strong>Authorized Domains</strong>.
+              </p>
+            </div>
+          </div>
+
+          {/* Copyable Domain Box */}
+          <div className="p-3 bg-white/90 border border-amber-200 rounded-xl space-y-2">
+            <div className="text-[11px] font-bold text-slate-600 flex items-center justify-between">
+              <span>Domain to Authorize:</span>
+              <span className="text-[10px] text-amber-700 font-mono">Firebase Project: {projectId}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2 p-2 bg-slate-900 text-amber-300 font-mono text-xs rounded-lg overflow-x-auto">
+              <span className="truncate select-all">{currentHostname}</span>
+              <button
+                type="button"
+                onClick={handleCopyHostname}
+                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black rounded text-[11px] shrink-0 transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+              >
+                {copiedDomain ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedDomain ? 'Copied!' : 'Copy'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 3-Step Setup Instructions */}
+          <div className="bg-amber-100/60 p-3 rounded-xl border border-amber-200/80 space-y-2 text-[11px] text-amber-950">
+            <div className="font-bold text-slate-900">How to authorize in 30 seconds:</div>
+            <ol className="list-decimal pl-4 space-y-1 text-slate-700">
+              <li>
+                Click <strong>"Open Firebase Settings"</strong> below (or go to Firebase Console → Authentication → Settings).
+              </li>
+              <li>
+                Scroll to the <strong>Authorized domains</strong> table and click <strong>Add domain</strong>.
+              </li>
+              <li>
+                Paste <code className="bg-white px-1.5 py-0.5 rounded font-mono text-amber-800">{currentHostname}</code> and click <strong>Add</strong>.
+              </li>
+            </ol>
+          </div>
+
+          {/* Resolution Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <a
+              href={firebaseAuthSettingsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Open Firebase Settings</span>
+            </a>
+
+            <button
+              type="button"
+              onClick={handleTryGIS}
+              disabled={isSigningIn}
+              className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-800 font-bold rounded-xl border border-slate-300 flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Cloud className="w-3.5 h-3.5 text-blue-600" />
+              <span>Try Direct OAuth (GIS)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleEnableSimulatedMode}
+              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer ml-auto"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Enable Test/Simulated Mode</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {actionError && !isUnauthorizedDomain && (
+        <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center justify-between gap-2 animate-in fade-in">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span className="truncate">{actionError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            className="text-rose-700 hover:text-rose-950 font-bold shrink-0 text-[11px] cursor-pointer"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -321,94 +532,56 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed">
-              Uploads immutable database snapshots to your personal Google Drive account. Each backup includes full inventory catalogs, completed sales orders, customer loyalty profiles, and supplier ledgers.
+              Every database snapshot is exported into an encrypted JSON file and archived inside your connected Google Drive storage under the <code>Richie_Rich_Backup_*.json</code> naming convention.
             </p>
 
-            {/* Auto-upload switch */}
-            <div className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl">
-              <div className="text-xs">
-                <span className="font-semibold text-slate-700 block">Automatic Midnight Upload</span>
-                <span className="text-[11px] text-slate-500">Upload to Drive during daily 12:00 AM auto-backup</span>
+            {/* Auto-upload setting toggle */}
+            <div className="flex items-center justify-between p-3 bg-white border border-slate-200/80 rounded-xl">
+              <div>
+                <div className="text-xs font-semibold text-slate-800">Auto-Upload on Snapshot</div>
+                <div className="text-[10px] text-slate-400">Trigger automatic upload when creating backups</div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.autoDriveUpload}
-                  onChange={(e) => handleToggleAutoDrive(e.target.checked)}
-                  disabled={!user}
-                  className="sr-only peer"
+              <button
+                type="button"
+                onClick={() => handleToggleSetting('autoDriveUpload')}
+                className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                  settings.autoDriveUpload ? 'bg-emerald-500' : 'bg-slate-200'
+                }`}
+              >
+                <div
+                  className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
+                    settings.autoDriveUpload ? 'right-1' : 'left-1'
+                  }`}
                 />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 disabled:opacity-40"></div>
-              </label>
+              </button>
             </div>
-
-            {/* Recent Drive Backups List */}
-            {user && (
-              <div className="space-y-2 pt-1">
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
-                  <span>Recent Files on Google Drive ({driveBackups.length})</span>
-                  <button
-                    onClick={loadDriveBackups}
-                    disabled={isLoadingDriveFiles}
-                    className="text-blue-600 hover:text-blue-800 text-[11px] flex items-center gap-1"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${isLoadingDriveFiles ? 'animate-spin' : ''}`} />
-                    Refresh
-                  </button>
-                </div>
-                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 text-xs">
-                  {driveBackups.length === 0 ? (
-                    <div className="p-3 text-center text-slate-400 bg-white border border-dashed border-slate-200 rounded-lg text-xs">
-                      {isLoadingDriveFiles ? 'Querying Google Drive files...' : 'No Richie Rich backups uploaded yet.'}
-                    </div>
-                  ) : (
-                    driveBackups.slice(0, 5).map((f) => (
-                      <div
-                        key={f.id}
-                        className="flex items-center justify-between p-2 bg-white border border-slate-200 rounded-lg hover:border-blue-200 transition-colors"
-                      >
-                        <div className="flex items-center gap-2 truncate">
-                          <FileJson className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                          <span className="truncate font-mono text-[11px] text-slate-700">{f.name}</span>
-                        </div>
-                        {f.webViewLink && (
-                          <a
-                            href={f.webViewLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1 text-slate-400 hover:text-blue-600 ml-2"
-                            title="Open in Google Drive"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* Upload Button */}
-          <button
-            type="button"
-            onClick={() => setShowDriveConfirm(true)}
-            disabled={!user || !latestBackup || isUploadingToDrive}
-            className="w-full mt-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-          >
-            {isUploadingToDrive ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Uploading Snapshot to Google Drive...</span>
-              </>
-            ) : (
-              <>
-                <Upload className="w-4 h-4" />
-                <span>Upload Latest Backup to Google Drive</span>
-              </>
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => setShowDriveConfirm(true)}
+              disabled={isUploadingToDrive || !latestBackup || !token}
+              className="w-full py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {isUploadingToDrive ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Uploading to Google Drive...</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" />
+                  <span>Upload Latest Backup to Drive</span>
+                </>
+              )}
+            </button>
+            {!token && (
+              <p className="text-[10px] text-amber-600 text-center mt-1.5 font-medium">
+                Connect your Google Account above or use Test Mode to upload.
+              </p>
             )}
-          </button>
+          </div>
         </div>
 
         {/* COLUMN 2: GMAIL BACKUP PUSH */}
@@ -416,12 +589,12 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-rose-100 text-rose-700">
+                <div className="p-2 rounded-lg bg-blue-100 text-blue-700">
                   <Mail className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-800 text-sm">Gmail Backup Dispatch</h4>
-                  <p className="text-[11px] text-slate-500">Automated email report with attached JSON</p>
+                  <h4 className="font-bold text-slate-800 text-sm">Gmail Dispatch Service</h4>
+                  <p className="text-[11px] text-slate-500">Send backup JSON file straight to email</p>
                 </div>
               </div>
               {settings.lastEmailPushAt && (
@@ -433,169 +606,235 @@ export const GoogleWorkspaceBackupPanel: React.FC<GoogleWorkspaceBackupPanelProp
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed">
-              Sends an executive snapshot summary directly to your inbox via Gmail, with the full cryptographic JSON backup attached.
+              Dispatches an executive HTML email report with operation metrics, verification checksums, and the raw JSON database file securely attached.
             </p>
 
             {/* Recipient Email Input */}
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                Recipient Email Address
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                Recipient Email
               </label>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <input
                   type="email"
                   value={recipientInput}
                   onChange={(e) => setRecipientInput(e.target.value)}
-                  placeholder="admin@example.com"
-                  className="flex-1 px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+                  placeholder="admin@richierich.com"
+                  className="flex-1 px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-500"
                 />
                 <button
                   type="button"
                   onClick={handleSaveRecipient}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
                 >
                   Save
                 </button>
               </div>
             </div>
 
-            {/* Auto-email switch */}
-            <div className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl">
-              <div className="text-xs">
-                <span className="font-semibold text-slate-700 block">Automatic Midnight Email Push</span>
-                <span className="text-[11px] text-slate-500">Dispatch email attachment during daily 12:00 AM auto-backup</span>
+            {/* Auto-email setting toggle */}
+            <div className="flex items-center justify-between p-3 bg-white border border-slate-200/80 rounded-xl">
+              <div>
+                <div className="text-xs font-semibold text-slate-800">Auto-Email on Snapshot</div>
+                <div className="text-[10px] text-slate-400">Send email automatically upon backup generation</div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.autoEmailPush}
-                  onChange={(e) => handleToggleAutoEmail(e.target.checked)}
-                  disabled={!user}
-                  className="sr-only peer"
+              <button
+                type="button"
+                onClick={() => handleToggleSetting('autoEmailPush')}
+                className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                  settings.autoEmailPush ? 'bg-blue-600' : 'bg-slate-200'
+                }`}
+              >
+                <div
+                  className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
+                    settings.autoEmailPush ? 'right-1' : 'left-1'
+                  }`}
                 />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-600 disabled:opacity-40"></div>
-              </label>
+              </button>
             </div>
-
-            {/* Latest Snapshot details */}
-            {latestBackup && (
-              <div className="p-2.5 bg-slate-100 rounded-xl text-xs text-slate-600 flex items-center justify-between">
-                <span>Active Snapshot: <strong className="text-slate-800">{latestBackup.fileSizeKb} KB</strong></span>
-                <span className="font-mono text-[10px] text-slate-500">{latestBackup.checksum}</span>
-              </div>
-            )}
           </div>
 
-          {/* Send Email Button */}
-          <button
-            type="button"
-            onClick={() => setShowEmailConfirm(true)}
-            disabled={!user || !latestBackup || isSendingEmail || !recipientInput.trim()}
-            className="w-full mt-2 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-          >
-            {isSendingEmail ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Dispatching Email via Gmail...</span>
-              </>
-            ) : (
-              <>
-                <Send className="w-4 h-4" />
-                <span>Send Backup File via Email Now</span>
-              </>
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => setShowEmailConfirm(true)}
+              disabled={isSendingEmail || !latestBackup || !token}
+              className="w-full py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {isSendingEmail ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Dispatching Email via Gmail...</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  <span>Send Latest Backup to Email</span>
+                </>
+              )}
+            </button>
+            {!token && (
+              <p className="text-[10px] text-amber-600 text-center mt-1.5 font-medium">
+                Connect your Google Account above or use Test Mode to send.
+              </p>
             )}
-          </button>
+          </div>
         </div>
       </div>
 
-      {/* CONFIRMATION MODAL: GOOGLE DRIVE UPLOAD */}
+      {/* Google Drive Files History Table */}
+      {token && (
+        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+          <div className="p-3.5 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileJson className="w-4 h-4 text-emerald-600" />
+              <h4 className="text-xs font-bold text-slate-800">Backups Stored in Google Drive</h4>
+              <span className="text-[10px] text-slate-500 font-mono">({driveBackups.length} archives)</span>
+            </div>
+            <button
+              type="button"
+              onClick={loadDriveBackups}
+              disabled={isLoadingDriveFiles}
+              className="p-1 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              title="Refresh Google Drive files"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingDriveFiles ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          <div className="divide-y divide-slate-100 max-h-56 overflow-y-auto">
+            {isLoadingDriveFiles ? (
+              <div className="p-6 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Checking Google Drive files...</span>
+              </div>
+            ) : driveBackups.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-400">
+                No backup files found in this Google Drive yet. Click "Upload Latest Backup" to create one.
+              </div>
+            ) : (
+              driveBackups.map((file) => (
+                <div key={file.id} className="p-3 flex items-center justify-between hover:bg-slate-50/80 transition-colors text-xs">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <FileJson className="w-4 h-4 text-slate-400 shrink-0" />
+                    <div className="truncate">
+                      <div className="font-semibold text-slate-800 truncate">{file.name}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">
+                        {file.createdTime ? new Date(file.createdTime).toLocaleString() : 'Uploaded'} • {file.size ? `${Math.round(Number(file.size) / 1024)} KB` : 'JSON file'}
+                      </div>
+                    </div>
+                  </div>
+                  {file.webViewLink && (
+                    <a
+                      href={file.webViewLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-1 shrink-0 ml-2"
+                    >
+                      <span>View</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal: Upload to Drive */}
       {showDriveConfirm && latestBackup && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center gap-3 text-emerald-600">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
-                <HardDrive className="w-5 h-5 text-emerald-600" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-100 text-emerald-700">
+                <HardDrive className="w-6 h-6" />
               </div>
               <div>
-                <h4 className="font-bold text-slate-800 text-base">Upload Backup to Google Drive?</h4>
-                <p className="text-xs text-slate-500">Confirm file transmission to your personal storage</p>
+                <h4 className="text-base font-bold text-slate-900">Upload to Google Drive?</h4>
+                <p className="text-xs text-slate-500">This will store the database snapshot in your Drive account.</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-600 leading-relaxed">
-              This will upload the latest verified database snapshot (<strong>{latestBackup.fileSizeKb} KB</strong>) with SHA-256 signature <code className="text-slate-800 font-mono text-[11px] bg-slate-100 px-1 py-0.5 rounded">{latestBackup.checksum}</code> to your connected Google Drive account.
-            </p>
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Items:</span>
+                <span className="font-mono font-bold text-slate-800">{latestBackup.itemCount}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Orders:</span>
+                <span className="font-mono font-bold text-slate-800">{latestBackup.orderCount}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Checksum:</span>
+                <span className="font-mono text-[11px] text-slate-600 truncate max-w-[200px]">{latestBackup.checksum}</span>
+              </div>
+            </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setShowDriveConfirm(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleConfirmUploadDrive}
-                className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-xl transition-all shadow-xs cursor-pointer"
               >
-                <Check className="w-3.5 h-3.5" />
-                <span>Confirm Upload</span>
+                Upload Now
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* CONFIRMATION MODAL: GMAIL DISPATCH */}
+      {/* Confirmation Modal: Send Email via Gmail */}
       {showEmailConfirm && latestBackup && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
-                <Mail className="w-5 h-5 text-rose-600" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-blue-100 text-blue-700">
+                <Mail className="w-6 h-6" />
               </div>
               <div>
-                <h4 className="font-bold text-slate-800 text-base">Send Backup via Gmail?</h4>
-                <p className="text-xs text-slate-500">Confirm email dispatch with attached snapshot</p>
+                <h4 className="text-base font-bold text-slate-900">Send Backup via Gmail?</h4>
+                <p className="text-xs text-slate-500">An email with the snapshot attached will be sent.</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-600 leading-relaxed">
-              The backup file (<strong>{latestBackup.fileSizeKb} KB</strong>) containing {latestBackup.itemCount} items and {latestBackup.orderCount} orders will be sent to:
-            </p>
-
-            <div className="p-2.5 bg-slate-100 rounded-xl text-xs font-bold text-slate-800 flex items-center gap-2">
-              <Mail className="w-4 h-4 text-slate-500 shrink-0" />
-              <span className="truncate">{recipientInput.trim()}</span>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-slate-600">Optional Note for Recipient</label>
+            <div className="space-y-2">
+              <div className="text-xs text-slate-600">
+                Recipient: <strong className="text-slate-900">{recipientInput || user?.email}</strong>
+              </div>
+              <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+                Optional Admin Note
+              </label>
               <textarea
                 value={emailNotes}
                 onChange={(e) => setEmailNotes(e.target.value)}
-                placeholder="e.g. Daily end-of-day register backup"
+                placeholder="e.g. End of day store collection archive..."
                 rows={2}
-                className="w-full p-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-rose-500"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-500"
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setShowEmailConfirm(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleConfirmSendEmail}
-                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 rounded-xl transition-all shadow-xs cursor-pointer"
               >
-                <Send className="w-3.5 h-3.5" />
-                <span>Confirm & Send Email</span>
+                Send Email Now
               </button>
             </div>
           </div>

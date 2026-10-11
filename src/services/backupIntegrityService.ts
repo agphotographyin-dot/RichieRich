@@ -137,7 +137,7 @@ export function validateAndSanitizeBackupPayload(rawPayload: any): {
     if (item.storeAllocations && typeof item.storeAllocations === 'object') {
       for (const [storeId, qty] of Object.entries(item.storeAllocations)) {
         if (typeof storeId === 'string' && storeId.trim()) {
-          storeAllocations[storeId.trim()] = Math.max(0, Number.isFinite(Number(qty)) ? Math.floor(Number(qty)) : 0);
+          storeAllocations[storeId.trim()] = Number.isFinite(Number(qty)) ? Math.floor(Number(qty)) : 0;
         }
       }
     }

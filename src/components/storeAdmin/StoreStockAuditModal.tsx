@@ -102,7 +102,8 @@ export const StoreStockAuditModal: React.FC<StoreStockAuditModalProps> = ({
 
     const initialRows: Record<string, AuditRowState> = {};
     inventory.forEach((item) => {
-      const currentAllocated = Math.max(0, Number(item.storeAllocations?.[currentStore.id]) || 0);
+      const rawAlloc = item.storeAllocations?.[currentStore.id];
+      const currentAllocated = Number.isFinite(Number(rawAlloc)) ? Math.floor(Number(rawAlloc)) : 0;
       initialRows[item.id] = {
         itemId: item.id,
         sku: item.sku || `SKU-${item.id}`,

@@ -36,6 +36,7 @@ import {
   Truck,
   ClipboardCheck,
   PanelLeft,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   StoreLocation,
@@ -472,13 +473,30 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
     );
   };
 
-  // Low stock calculation for current store
-  const lowStockItemsCount = useMemo(() => {
-    return storeInventory.filter((item) => {
+  // Low stock and negative stock calculation for current store
+  const { lowStockItemsCount, negativeStockItemsCount } = useMemo(() => {
+    let low = 0;
+    let negative = 0;
+    storeInventory.forEach((item) => {
       const allocatedStock = item.storeAllocations?.[activeStoreId] ?? 0;
-      return allocatedStock <= (item.lowStockThreshold || 10);
-    }).length;
+      if (allocatedStock < 0) {
+        negative++;
+      } else if (allocatedStock <= (item.lowStockThreshold || 10)) {
+        low++;
+      }
+    });
+    return { lowStockItemsCount: low, negativeStockItemsCount: negative };
   }, [storeInventory, activeStoreId]);
+
+  // Toggle Negative Stock Selling for the current store
+  const handleToggleNegativeSelling = () => {
+    const nextState = !currentStore.enableNegativeSelling;
+    storage.updateStore(activeStoreId, {
+      enableNegativeSelling: nextState,
+    });
+    soundEffects.playClick();
+    triggerRefresh();
+  };
 
   return (
     <div className="w-full h-full bg-[#F8FAFC] text-slate-900 flex flex-col overflow-hidden font-sans selection:bg-amber-500 selection:text-slate-950">
@@ -1204,52 +1222,111 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
         {/* ========================================================================= */}
         {activeTab === 'store_inventory' && (
           <div className="space-y-4">
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900">
-              <div className="flex items-center gap-2">
-                <Package className="w-4 h-4 text-amber-700 shrink-0" />
-                <span>
-                  Store outlet inventory is synchronized with Central Warehouse dispatches and real-time POS billings.
-                </span>
+            {/* Negative Selling Control Banner & Store Controls */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                      <SlidersHorizontal className="w-4 h-4 text-amber-600" />
+                      <span>Store Stock Policy & Negative Selling</span>
+                    </h3>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                      currentStore.enableNegativeSelling
+                        ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                        : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    }`}>
+                      {currentStore.enableNegativeSelling ? 'Negative Selling Allowed' : 'Strict Stock Validation'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 max-w-2xl">
+                    Control whether POS counters at <strong>{currentStore.name}</strong> are permitted to complete sales when stock is zero or insufficient. When active, sales are processed continuously and recorded as negative balances in the inventory ledger.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 shrink-0">
+                  {/* Negative Selling Toggle */}
+                  <div className="flex items-center gap-3 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200">
+                    <div className="flex flex-col text-right">
+                      <span className="text-xs font-black text-slate-800">
+                        Enable Negative Selling
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        {currentStore.enableNegativeSelling ? 'POS can sell at 0 stock' : 'Blocks zero-stock checkout'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={Boolean(currentStore.enableNegativeSelling)}
+                      onClick={handleToggleNegativeSelling}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                        currentStore.enableNegativeSelling ? 'bg-amber-600' : 'bg-slate-300'
+                      }`}
+                      title={currentStore.enableNegativeSelling ? 'Click to disable negative selling' : 'Click to enable negative selling'}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                          currentStore.enableNegativeSelling ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuditPreselectedItem(null);
+                      setIsStockAuditOpen(true);
+                    }}
+                    className="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                    title="Physically count and audit store stock (Store Admin Password Required)"
+                  >
+                    <ClipboardCheck className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Audit Store Stock</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDirectPOPreselectedItem(null);
+                      setIsCreateDirectPOOpen(true);
+                    }}
+                    className="px-3 py-2 rounded-xl bg-[#1E293B] hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Direct PO</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIndentPreselectedItem(null);
+                      setIsCreateIndentOpen(true);
+                    }}
+                    className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer border border-slate-200"
+                  >
+                    <Truck className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Order from WH</span>
+                  </button>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuditPreselectedItem(null);
-                    setIsStockAuditOpen(true);
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 active:scale-95 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer border border-amber-500/40"
-                  title="Physically count and audit store stock (Store Admin Password Required)"
-                >
-                  <ClipboardCheck className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Audit Store Stock</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDirectPOPreselectedItem(null);
-                    setIsCreateDirectPOOpen(true);
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-[#1E293B] hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Direct PO</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIndentPreselectedItem(null);
-                    setIsCreateIndentOpen(true);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer border border-slate-200"
-                >
-                  <Truck className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Order from WH</span>
-                </button>
-                <span className="font-bold whitespace-nowrap bg-amber-200/50 px-2 py-1 rounded-lg">
-                  {filteredInventory.length} of {storeInventory.length} Items
-                </span>
-              </div>
+
+              {/* Alert Ribbon if Negative Stock Detected */}
+              {negativeStockItemsCount > 0 && (
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center justify-between gap-3 text-xs text-rose-900">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 animate-pulse" />
+                    <span>
+                      <strong>Negative Stock Alert:</strong> {negativeStockItemsCount} SKU(s) in this outlet currently have negative stock balances resulting from POS sales. Inward stock via Direct PO or Warehouse Indent to offset shortages.
+                    </span>
+                  </div>
+                  <span className="font-black px-2 py-0.5 rounded-md bg-rose-200 text-rose-900 font-mono shrink-0">
+                    {negativeStockItemsCount} Shortage SKUs
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Search & Category Filter for Store Inventory */}
@@ -1325,9 +1402,16 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                             <td className="py-3 px-4 font-mono font-bold text-slate-900">
                               ₹{item.sellingPrice.toFixed(2)}
                             </td>
-                            <td className="py-3 px-4 font-mono font-bold text-slate-900">
+                            <td className="py-3 px-4 font-mono font-bold">
                               <div className="flex flex-col">
-                                <span>{allocatedStock} {item.unit || 'units'}</span>
+                                <span className={allocatedStock < 0 ? 'text-rose-600 font-black' : 'text-slate-900'}>
+                                  {allocatedStock} {item.unit || 'units'}
+                                </span>
+                                {allocatedStock < 0 && (
+                                  <span className="text-[10px] text-rose-600 font-extrabold uppercase tracking-wide">
+                                    Shortage ({Math.abs(allocatedStock)} {item.unit || 'units'})
+                                  </span>
+                                )}
                                 {item.piecesPerBox && item.piecesPerBox > 1 && (
                                   <span className="text-[10px] text-slate-500 font-mono">
                                     ({item.piecesPerBox} units / {item.unit || 'box'})
@@ -1348,14 +1432,22 @@ export const StoreAdminDashboard: React.FC<StoreAdminDashboardProps> = ({
                             <td className="py-3 px-4">
                               <span
                                 className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                  allocatedStock > 20
+                                  allocatedStock < 0
+                                    ? 'bg-rose-100 text-rose-900 border border-rose-300 font-black'
+                                    : allocatedStock > 20
                                     ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                                     : allocatedStock > 5
                                     ? 'bg-amber-100 text-amber-900'
                                     : 'bg-red-100 text-red-800'
                                 }`}
                               >
-                                {allocatedStock > 20 ? 'In Stock' : allocatedStock > 5 ? 'Low Stock' : 'Critical'}
+                                {allocatedStock < 0
+                                  ? 'Negative Stock'
+                                  : allocatedStock > 20
+                                  ? 'In Stock'
+                                  : allocatedStock > 5
+                                  ? 'Low Stock'
+                                  : 'Critical'}
                               </span>
                             </td>
                             <td className="py-3 px-4 text-right">

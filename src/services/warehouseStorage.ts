@@ -1048,7 +1048,8 @@ export const warehouseStorage = {
           }
 
           const isBoxUnit = isBoxDenominatedUnit(item.unit || invItem.unit);
-          const prevStoreStock = Math.max(0, Math.floor(Number(invItem.storeAllocations[params.storeId]) || 0));
+          const rawAlloc = invItem.storeAllocations[params.storeId];
+          const prevStoreStock = Number.isFinite(Number(rawAlloc)) ? Math.floor(Number(rawAlloc)) : 0;
           const newStoreStock = prevStoreStock + item.quantityReceivedNow;
 
           invItem.storeAllocations[params.storeId] = newStoreStock;
@@ -2227,7 +2228,8 @@ export const warehouseStorage = {
             // Confirm batch receipt at destination store
             this.confirmBatchTransfer(item.batchAllocations || [], destStoreKey);
 
-            const previousStoreStock = Math.max(0, Math.floor(Number(invItem.storeAllocations[destStoreKey]) || 0));
+            const rawAlloc = invItem.storeAllocations[destStoreKey];
+            const previousStoreStock = Number.isFinite(Number(rawAlloc)) ? Math.floor(Number(rawAlloc)) : 0;
             const newStoreStock = previousStoreStock + receivedUnits;
             invItem.storeAllocations[destStoreKey] = newStoreStock;
 

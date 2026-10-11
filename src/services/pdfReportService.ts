@@ -867,8 +867,15 @@ export const pdfReportService = {
     );
 
     const storeRows = inventory.map((i) => {
-      const alloc = (i.storeAllocations || {})[store.id] || 0;
+      const rawAlloc = (i.storeAllocations || {})[store.id];
+      const alloc = Number.isFinite(Number(rawAlloc)) ? Math.floor(Number(rawAlloc)) : 0;
       const val = alloc * i.sellingPrice;
+      const statusLabel =
+        alloc < 0
+          ? 'NEGATIVE SHORTAGE ⚠️'
+          : alloc <= 5
+          ? 'LOW STOCK ⚠️'
+          : 'OPTIMAL ✓';
       return [
         i.sku,
         i.name,
@@ -876,7 +883,7 @@ export const pdfReportService = {
         `${alloc} ${i.unit || 'pcs'}`,
         formatCurrency(i.sellingPrice),
         formatCurrency(val),
-        alloc <= 5 ? 'LOW STOCK ⚠️' : 'OPTIMAL ✓',
+        statusLabel,
       ];
     });
 

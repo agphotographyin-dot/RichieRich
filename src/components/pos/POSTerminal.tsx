@@ -184,28 +184,37 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
     timestamp: number;
   } | null>(null);
 
+  // Get active store configuration to check enableNegativeSelling setting in real time
+  const currentStoreConfig = useMemo(() => {
+    if (!posSession?.storeId) return null;
+    return storage.getStoreById(posSession.storeId) || null;
+  }, [posSession?.storeId, orderSyncTrigger]);
+
+  const isNegativeSellingEnabled = Boolean(currentStoreConfig?.enableNegativeSelling);
+
   // Get store specific available stock for this counter's branch (order/stock units)
   const getItemStoreStock = (item: InventoryItem): number => {
-    if (!posSession?.storeId) return Math.max(0, Math.floor(Number(item.stockQuantity) || 0));
+    if (!posSession?.storeId) return Math.floor(Number(item.stockQuantity) || 0);
     const storeId = posSession.storeId;
-    return Math.max(0, Math.floor(Number(item.storeAllocations?.[storeId]) || 0));
+    const rawAlloc = item.storeAllocations?.[storeId];
+    return Number.isFinite(Number(rawAlloc)) ? Math.floor(Number(rawAlloc)) : 0;
   };
 
   // Get detailed pieces and box stock for the store
   const getItemStorePiecesStock = (item: InventoryItem) => {
     const storeId = posSession?.storeId;
     const units = storeId
-      ? Math.max(0, Math.floor(Number(item.storeAllocations?.[storeId]) || 0))
-      : Math.max(0, Math.floor(Number(item.stockQuantity) || 0));
+      ? (Number.isFinite(Number(item.storeAllocations?.[storeId])) ? Math.floor(Number(item.storeAllocations?.[storeId])) : 0)
+      : Math.floor(Number(item.stockQuantity) || 0);
 
     const piecesPerBox = Math.max(1, item.piecesPerBox && item.piecesPerBox > 1 ? item.piecesPerBox : 10);
     const storeBoxAlloc = storeId ? item.storeBoxAllocations?.[storeId] : undefined;
     const loosePieces =
       storeBoxAlloc && storeBoxAlloc.loosePieces !== undefined
-        ? Math.max(0, Number(storeBoxAlloc.loosePieces) || 0)
+        ? Number(storeBoxAlloc.loosePieces) || 0
         : storeId
         ? 0
-        : Math.max(0, Number(item.loosePieceStock) || 0);
+        : Number(item.loosePieceStock) || 0;
 
     const totalPieces = units * piecesPerBox + loosePieces;
     return { units, loosePieces, totalPieces, piecesPerBox };
@@ -222,13 +231,9 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
     const piecesInfo = getItemStorePiecesStock(item);
     const availableStock = isLoose ? piecesInfo.totalPieces : piecesInfo.units;
 
-    if (availableStock <= 0) {
+    if (availableStock <= 0 && !isNegativeSellingEnabled) {
       soundEffects.playWarningChime();
-      alert(
-        isLoose
-          ? `"${item.name}" has 0 pieces in stock at ${posSession?.storeName || 'the store'}!`
-          : `"${item.name}" has 0 full units in stock at ${posSession?.storeName || 'the store'}!`
-      );
+      alert('Insufficient stock. Negative selling is disabled.');
       return;
     }
 
@@ -250,8 +255,8 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
           ci.customization === (customPref || undefined)
       );
       if (existing) {
-        if (existing.quantity >= availableStock) {
-          alert(`Cannot add more than available branch stock (${availableStock} ${isLoose ? 'pieces' : 'units'}).`);
+        if (!isNegativeSellingEnabled && existing.quantity >= availableStock) {
+          alert('Insufficient stock. Negative selling is disabled.');
           return prev;
         }
         return prev.map((ci) =>
@@ -558,8 +563,8 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
       if (newQty <= 0) {
         return prev.filter((_, i) => i !== index);
       }
-      if (newQty > target.stockAvailable) {
-        alert(`Cannot exceed available branch stock of ${target.stockAvailable} ${target.saleType === 'loose' ? 'pieces' : (target.unit || 'units')}.`);
+      if (!isNegativeSellingEnabled && newQty > target.stockAvailable) {
+        alert('Insufficient stock. Negative selling is disabled.');
         return prev;
       }
 
@@ -677,6 +682,23 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
   // Complete checkout
   const handleProcessCheckout = () => {
     if (cart.length === 0 || isProcessingSale) return;
+
+    // Check stock validation before checkout if negative selling is disabled
+    if (!isNegativeSellingEnabled) {
+      for (const item of cart) {
+        const invItem = inventory.find((i) => i.id === item.itemId || i.sku === item.sku);
+        if (invItem) {
+          const piecesInfo = getItemStorePiecesStock(invItem);
+          const available = item.saleType === 'loose' ? piecesInfo.totalPieces : piecesInfo.units;
+          if (available <= 0 || item.quantity > available) {
+            soundEffects.playWarningChime();
+            alert('Insufficient stock. Negative selling is disabled.');
+            return;
+          }
+        }
+      }
+    }
+
     setIsProcessingSale(true);
 
     try {
@@ -1102,7 +1124,9 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
               const piecesInfo = getItemStorePiecesStock(item);
               const { units: storeUnits, loosePieces: storeLoosePieces, totalPieces: storeTotalPieces, piecesPerBox } = piecesInfo;
               const isOut = isLoose ? storeTotalPieces <= 0 : storeUnits <= 0;
+              const canSell = isNegativeSellingEnabled || !isOut;
               const isLow = !isOut && storeUnits <= (item.lowStockThreshold || 5);
+              const isNegative = isLoose ? storeTotalPieces < 0 : storeUnits < 0;
               const loosePrice =
                 item.loosePrice !== undefined && item.loosePrice > 0
                   ? item.loosePrice
@@ -1112,17 +1136,21 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                 <div
                   key={item.id ? `${item.id}-${idx}` : `pos-item-${idx}`}
                   onClick={() => {
-                    if (!isOut) {
+                    if (canSell) {
                       if (selectedCategory === 'loose_products') {
                         addToCart(item, undefined, 'loose');
                       } else {
                         addToCart(item, undefined, 'box');
                       }
+                    } else {
+                      alert('Insufficient stock. Negative selling is disabled.');
                     }
                   }}
                   className={`bg-white border rounded-xl p-2.5 flex flex-col justify-between transition-all group select-none relative ${
-                    isOut
+                    !canSell
                       ? 'opacity-60 border-red-200 bg-red-50/20 cursor-not-allowed'
+                      : isNegative
+                      ? 'border-amber-300 hover:border-amber-500 hover:shadow-md cursor-pointer bg-amber-50/10'
                       : 'border-slate-200 hover:border-amber-400 hover:shadow-md cursor-pointer'
                   }`}
                 >
@@ -1144,15 +1172,23 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                       {/* Store specific stock pill */}
                       <span
                         className={`absolute top-1.5 right-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                          isOut
-                            ? 'bg-red-600 text-white shadow-xs'
+                          isNegative
+                            ? 'bg-rose-600 text-white shadow-xs font-mono'
+                            : isOut
+                            ? isNegativeSellingEnabled
+                              ? 'bg-amber-600 text-white shadow-xs'
+                              : 'bg-red-600 text-white shadow-xs'
                             : isLow
                             ? 'bg-amber-100 text-amber-900 border border-amber-300'
                             : 'bg-slate-900/80 text-white backdrop-blur-xs'
                         }`}
                       >
-                        {isOut
-                          ? 'Out of Stock'
+                        {isNegative
+                          ? `${storeUnits} ${item.unit || 'Units'} (Negative)`
+                          : isOut
+                          ? isNegativeSellingEnabled
+                            ? '0 Stock (Neg. Allowed)'
+                            : 'Out of Stock'
                           : isLoose
                           ? `${storeUnits} Box • ${storeTotalPieces} Pcs`
                           : `${storeUnits} ${item.unit || 'Units'}`}
@@ -1275,13 +1311,17 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                           </div>
                           <button
                             type="button"
-                            disabled={storeTotalPieces <= 0}
+                            disabled={!canSell && storeTotalPieces <= 0}
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (storeTotalPieces > 0) addToCart(item, undefined, 'loose');
+                              if (canSell) {
+                                addToCart(item, undefined, 'loose');
+                              } else {
+                                alert('Insufficient stock. Negative selling is disabled.');
+                              }
                             }}
                             className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer border flex items-center gap-1 shrink-0 ${
-                              storeTotalPieces <= 0
+                              !canSell && storeTotalPieces <= 0
                                 ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                                 : 'bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-600 shadow-2xs'
                             }`}
@@ -1304,13 +1344,17 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                           </div>
                           <button
                             type="button"
-                            disabled={storeUnits <= 0}
+                            disabled={!canSell && storeUnits <= 0}
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (storeUnits > 0) addToCart(item, undefined, 'box');
+                              if (canSell) {
+                                addToCart(item, undefined, 'box');
+                              } else {
+                                alert('Insufficient stock. Negative selling is disabled.');
+                              }
                             }}
                             className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer border flex items-center gap-1 shrink-0 ${
-                              storeUnits <= 0
+                              !canSell && storeUnits <= 0
                                 ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                                 : 'bg-white hover:bg-slate-900 text-slate-700 hover:text-white border-slate-300 shadow-2xs'
                             }`}
@@ -1335,17 +1379,21 @@ const POSActiveTerminal: React.FC<POSActiveTerminalProps> = ({
                         )}
                         <button
                           type="button"
-                          disabled={isOut}
+                          disabled={!canSell}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (!isOut) addToCart(item);
+                            if (canSell) {
+                              addToCart(item);
+                            } else {
+                              alert('Insufficient stock. Negative selling is disabled.');
+                            }
                           }}
                           className={`p-1.5 rounded-lg transition-colors cursor-pointer border ${
-                            isOut
+                            !canSell
                               ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                               : 'bg-slate-100 group-hover:bg-[#1E293B] text-slate-600 group-hover:text-white border-slate-200 group-hover:border-slate-800'
                           }`}
-                          title={isOut ? 'Out of Stock' : `Add to Cart (${CURRENCY}${item.sellingPrice})`}
+                          title={!canSell ? 'Insufficient stock. Negative selling is disabled.' : `Add to Cart (${CURRENCY}${item.sellingPrice})`}
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>
