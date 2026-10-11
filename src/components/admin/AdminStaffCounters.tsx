@@ -1392,6 +1392,85 @@ export const AdminStaffCounters: React.FC<AdminStaffCountersProps> = ({
         </div>
       )}
 
+      {/* Outlet Stock & Negative Selling Policy Controls */}
+      {(activeTab === 'store_admins' || activeTab === 'pos') && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-3">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-900 flex items-center justify-center shrink-0 border border-amber-500/20">
+                <SlidersHorizontal className="w-5 h-5 text-amber-700" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-black text-slate-900">
+                    Store Stock Policy &amp; Negative Selling Controls
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    {stores.filter((s) => s.enableNegativeSelling !== false).length} of {stores.length} Outlets Enabled
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  When enabled, POS cashiers can continue billing even if live physical stock reaches 0 or below, updating store ledger balances with negative units.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 self-start md:self-auto">
+              <button
+                type="button"
+                onClick={() => handleSetAllNegativeSelling(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all cursor-pointer shadow-xs"
+              >
+                Enable All Outlets
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetAllNegativeSelling(false)}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer border border-slate-200"
+              >
+                Disable All Outlets
+              </button>
+            </div>
+          </div>
+
+          {/* Per-store negative selling toggle badges */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+            {filteredStores.map((s) => {
+              const isEnabled = s.enableNegativeSelling !== false;
+              return (
+                <div
+                  key={s.id}
+                  className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white transition-all"
+                >
+                  <div className="min-w-0 pr-2">
+                    <span className="text-xs font-bold text-slate-900 block truncate">
+                      {s.name}
+                    </span>
+                    <span className="text-[11px] text-slate-500 truncate block">
+                      {s.counters.length} Active Counter Station{s.counters.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleToggleStoreNegativeSelling(s.id)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-black cursor-pointer transition-all border shrink-0 flex items-center gap-1.5 ${
+                      isEnabled
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                        : 'bg-red-50 text-red-700 border-red-300 hover:bg-red-100'
+                    }`}
+                    title={isEnabled ? 'Click to disable negative selling for this outlet' : 'Click to enable negative selling for this outlet'}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${isEnabled ? 'bg-emerald-600' : 'bg-red-600'}`} />
+                    <span>{isEnabled ? 'Negative Selling: ON' : 'Strict Stock'}</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ===================================================================== */}
       {/* SECTION 3: STORE ADMIN CREDENTIALS & ACCESS */}
       {/* ===================================================================== */}
